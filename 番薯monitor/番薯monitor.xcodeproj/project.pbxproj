@@ -1,0 +1,742 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		2E0C71992FB19C2E00908371 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2E0C71812FB19C2D00908371 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2E0C71882FB19C2D00908371;
+			remoteInfo = FanshuMonitor;
+		};
+		2E0C71A32FB19C2E00908371 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2E0C71812FB19C2D00908371 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2E0C71882FB19C2D00908371;
+			remoteInfo = FanshuMonitor;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		2E0C71892FB19C2D00908371 /* 番薯Monitor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "番薯Monitor.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2E0C71B52FB1A10000908371 /* 番薯Monitor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "番薯Monitor.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2E0C71982FB19C2E00908371 /* FanshuMonitorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FanshuMonitorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2E0C71A22FB19C2E00908371 /* FanshuMonitorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FanshuMonitorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		2E0C718B2FB19C2D00908371 /* FanshuMonitor */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FanshuMonitor;
+			sourceTree = "<group>";
+		};
+		2E0C71BD2FB1A20000908371 /* FanshuMonitorDisplay */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FanshuMonitorDisplay;
+			sourceTree = "<group>";
+		};
+		2E0C719B2FB19C2E00908371 /* FanshuMonitorTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FanshuMonitorTests;
+			sourceTree = "<group>";
+		};
+		2E0C71A52FB19C2E00908371 /* FanshuMonitorUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FanshuMonitorUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		2E0C71862FB19C2D00908371 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2E0C71B72FB1A10000908371 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2E0C71952FB19C2E00908371 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2E0C719F2FB19C2E00908371 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2E0C71802FB19C2D00908371 = {
+			isa = PBXGroup;
+			children = (
+				2E0C718B2FB19C2D00908371 /* FanshuMonitor */,
+				2E0C71BD2FB1A20000908371 /* FanshuMonitorDisplay */,
+				2E0C719B2FB19C2E00908371 /* FanshuMonitorTests */,
+				2E0C71A52FB19C2E00908371 /* FanshuMonitorUITests */,
+				2E0C718A2FB19C2D00908371 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		2E0C718A2FB19C2D00908371 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2E0C71892FB19C2D00908371 /* 番薯Monitor.app */,
+				2E0C71B52FB1A10000908371 /* 番薯Monitor.app */,
+				2E0C71982FB19C2E00908371 /* FanshuMonitorTests.xctest */,
+				2E0C71A22FB19C2E00908371 /* FanshuMonitorUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2E0C71882FB19C2D00908371 /* FanshuMonitor */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2E0C71AC2FB19C2E00908371 /* Build configuration list for PBXNativeTarget "FanshuMonitor" */;
+			buildPhases = (
+				2E0C71852FB19C2D00908371 /* Sources */,
+				2E0C71862FB19C2D00908371 /* Frameworks */,
+				2E0C71872FB19C2D00908371 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				2E0C718B2FB19C2D00908371 /* FanshuMonitor */,
+			);
+			name = FanshuMonitor;
+			packageProductDependencies = (
+			);
+			productName = FanshuMonitor;
+			productReference = 2E0C71892FB19C2D00908371 /* 番薯Monitor.app */;
+			productType = "com.apple.product-type.application";
+		};
+		2E0C71B92FB1A10000908371 /* FanshuMonitorDirect */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2E0C71BC2FB1A10000908371 /* Build configuration list for PBXNativeTarget "FanshuMonitorDirect" */;
+			buildPhases = (
+				2E0C71B62FB1A10000908371 /* Sources */,
+				2E0C71B72FB1A10000908371 /* Frameworks */,
+				2E0C71B82FB1A10000908371 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				2E0C718B2FB19C2D00908371 /* FanshuMonitor */,
+				2E0C71BD2FB1A20000908371 /* FanshuMonitorDisplay */,
+			);
+			name = FanshuMonitorDirect;
+			packageProductDependencies = (
+			);
+			productName = FanshuMonitor;
+			productReference = 2E0C71B52FB1A10000908371 /* 番薯Monitor.app */;
+			productType = "com.apple.product-type.application";
+		};
+		2E0C71972FB19C2E00908371 /* FanshuMonitorTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2E0C71AF2FB19C2E00908371 /* Build configuration list for PBXNativeTarget "FanshuMonitorTests" */;
+			buildPhases = (
+				2E0C71942FB19C2E00908371 /* Sources */,
+				2E0C71952FB19C2E00908371 /* Frameworks */,
+				2E0C71962FB19C2E00908371 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2E0C719A2FB19C2E00908371 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				2E0C719B2FB19C2E00908371 /* FanshuMonitorTests */,
+			);
+			name = FanshuMonitorTests;
+			packageProductDependencies = (
+			);
+			productName = FanshuMonitorTests;
+			productReference = 2E0C71982FB19C2E00908371 /* FanshuMonitorTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		2E0C71A12FB19C2E00908371 /* FanshuMonitorUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2E0C71B22FB19C2E00908371 /* Build configuration list for PBXNativeTarget "FanshuMonitorUITests" */;
+			buildPhases = (
+				2E0C719E2FB19C2E00908371 /* Sources */,
+				2E0C719F2FB19C2E00908371 /* Frameworks */,
+				2E0C71A02FB19C2E00908371 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2E0C71A42FB19C2E00908371 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				2E0C71A52FB19C2E00908371 /* FanshuMonitorUITests */,
+			);
+			name = FanshuMonitorUITests;
+			packageProductDependencies = (
+			);
+			productName = FanshuMonitorUITests;
+			productReference = 2E0C71A22FB19C2E00908371 /* FanshuMonitorUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		2E0C71812FB19C2D00908371 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2640;
+				LastUpgradeCheck = 2640;
+				TargetAttributes = {
+					2E0C71882FB19C2D00908371 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+					2E0C71B92FB1A10000908371 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+					2E0C71972FB19C2E00908371 = {
+						CreatedOnToolsVersion = 26.4.1;
+						TestTargetID = 2E0C71882FB19C2D00908371;
+					};
+					2E0C71A12FB19C2E00908371 = {
+						CreatedOnToolsVersion = 26.4.1;
+						TestTargetID = 2E0C71882FB19C2D00908371;
+					};
+				};
+			};
+			buildConfigurationList = 2E0C71842FB19C2D00908371 /* Build configuration list for PBXProject "番薯monitor" */;
+			developmentRegion = zh-Hans;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+					zh-Hans,
+			);
+			mainGroup = 2E0C71802FB19C2D00908371;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 2E0C718A2FB19C2D00908371 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				2E0C71882FB19C2D00908371 /* FanshuMonitor */,
+				2E0C71B92FB1A10000908371 /* FanshuMonitorDirect */,
+				2E0C71972FB19C2E00908371 /* FanshuMonitorTests */,
+				2E0C71A12FB19C2E00908371 /* FanshuMonitorUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		2E0C71872FB19C2D00908371 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2E0C71B82FB1A10000908371 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2E0C71962FB19C2E00908371 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2E0C71A02FB19C2E00908371 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2E0C71852FB19C2D00908371 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2E0C71B62FB1A10000908371 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2E0C71942FB19C2E00908371 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2E0C719E2FB19C2E00908371 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		2E0C719A2FB19C2E00908371 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2E0C71882FB19C2D00908371 /* FanshuMonitor */;
+			targetProxy = 2E0C71992FB19C2E00908371 /* PBXContainerItemProxy */;
+		};
+		2E0C71A42FB19C2E00908371 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2E0C71882FB19C2D00908371 /* FanshuMonitor */;
+			targetProxy = 2E0C71A32FB19C2E00908371 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2E0C71AA2FB19C2E00908371 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		2E0C71AB2FB19C2E00908371 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		2E0C71AD2FB19C2E00908371 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = FanshuMonitor/FanshuMonitor.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleShortVersionString = "$(MARKETING_VERSION)";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.18;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitor";
+				PRODUCT_NAME = "番薯Monitor";
+				PRODUCT_MODULE_NAME = FanshuMonitor;
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		2E0C71AE2FB19C2E00908371 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = FanshuMonitor/FanshuMonitor.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleShortVersionString = "$(MARKETING_VERSION)";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.18;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitor";
+				PRODUCT_NAME = "番薯Monitor";
+				PRODUCT_MODULE_NAME = FanshuMonitor;
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		2E0C71BA2FB1A10000908371 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "番薯Monitor";
+				INFOPLIST_KEY_CFBundleShortVersionString = "$(MARKETING_VERSION)";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.18;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitor";
+				PRODUCT_NAME = "番薯Monitor";
+				PRODUCT_MODULE_NAME = FanshuMonitor;
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DIRECT_DISTRIBUTION DISPLAY_CONTROL";
+				SWIFT_OBJC_BRIDGING_HEADER = "FanshuMonitorDisplay/DisplayBridgingHeader.h";
+				FRAMEWORK_SEARCH_PATHS = (
+					"",
+					"/System/Library/PrivateFrameworks",
+				);
+				OTHER_LDFLAGS = (
+					"-framework",
+					CoreDisplay,
+					"-framework",
+					DisplayServices,
+					"-framework",
+					OSD,
+				);
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				};
+				name = Debug;
+			};
+			2E0C71BB2FB1A10000908371 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "番薯Monitor";
+				INFOPLIST_KEY_CFBundleShortVersionString = "$(MARKETING_VERSION)";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.18;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitor";
+				PRODUCT_NAME = "番薯Monitor";
+				PRODUCT_MODULE_NAME = FanshuMonitor;
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DIRECT_DISTRIBUTION DISPLAY_CONTROL";
+				SWIFT_OBJC_BRIDGING_HEADER = "FanshuMonitorDisplay/DisplayBridgingHeader.h";
+				FRAMEWORK_SEARCH_PATHS = (
+					"",
+					"/System/Library/PrivateFrameworks",
+				);
+				OTHER_LDFLAGS = (
+					"-framework",
+					CoreDisplay,
+					"-framework",
+					DisplayServices,
+					"-framework",
+					OSD,
+				);
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		2E0C71B02FB19C2E00908371 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.18;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitorTests";
+				PRODUCT_NAME = FanshuMonitorTests;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/番薯Monitor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/番薯Monitor";
+			};
+			name = Debug;
+		};
+		2E0C71B12FB19C2E00908371 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.18;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitorTests";
+				PRODUCT_NAME = FanshuMonitorTests;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/番薯Monitor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/番薯Monitor";
+			};
+			name = Release;
+		};
+		2E0C71B32FB19C2E00908371 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.18;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitorUITests";
+				PRODUCT_NAME = FanshuMonitorUITests;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = FanshuMonitor;
+			};
+			name = Debug;
+		};
+		2E0C71B42FB19C2E00908371 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.18;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitorUITests";
+				PRODUCT_NAME = FanshuMonitorUITests;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = FanshuMonitor;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2E0C71842FB19C2D00908371 /* Build configuration list for PBXProject "番薯monitor" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2E0C71AA2FB19C2E00908371 /* Debug */,
+				2E0C71AB2FB19C2E00908371 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2E0C71AC2FB19C2E00908371 /* Build configuration list for PBXNativeTarget "FanshuMonitor" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2E0C71AD2FB19C2E00908371 /* Debug */,
+				2E0C71AE2FB19C2E00908371 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2E0C71BC2FB1A10000908371 /* Build configuration list for PBXNativeTarget "FanshuMonitorDirect" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2E0C71BA2FB1A10000908371 /* Debug */,
+				2E0C71BB2FB1A10000908371 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2E0C71AF2FB19C2E00908371 /* Build configuration list for PBXNativeTarget "FanshuMonitorTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2E0C71B02FB19C2E00908371 /* Debug */,
+				2E0C71B12FB19C2E00908371 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2E0C71B22FB19C2E00908371 /* Build configuration list for PBXNativeTarget "FanshuMonitorUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2E0C71B32FB19C2E00908371 /* Debug */,
+				2E0C71B42FB19C2E00908371 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 2E0C71812FB19C2D00908371 /* Project object */;
+}

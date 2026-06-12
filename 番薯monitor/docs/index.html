@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>番薯Monitor</title>
+    <link rel="icon" type="image/png" href="images/icon-128.png" sizes="128x128">
+    <script>
+        (function() {
+            try {
+                const stored = localStorage.getItem("fanshu-lang");
+                if (stored === "zh" || stored === "en") {
+                    location.replace("./" + stored + "/");
+                    return;
+                }
+            } catch (e) {}
+            const lang = navigator.language || navigator.userLanguage;
+            if (lang && lang.toLowerCase().startsWith("zh")) {
+                location.replace("./zh/");
+            } else {
+                location.replace("./en/");
+            }
+        })();
+    </script>
+    <noscript>
+        <p>Please select your language:</p>
+        <p><a href="zh/">中文</a> | <a href="en/">English</a></p>
+    </noscript>
+</head>
+<body>
+</body>
+</html>
