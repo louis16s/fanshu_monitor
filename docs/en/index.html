@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fanshu Monitor - macOS menu bar monitor and external display control</title>
+  <meta name="description" content="Fanshu Monitor is a macOS menu bar system monitor for Apple Silicon with external display brightness control, native OSD, HiDPI management, and low-overhead sampling.">
+  <meta property="og:title" content="Fanshu Monitor">
+  <meta property="og:description" content="Low-overhead system monitoring and external display brightness control for macOS.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="../images/detailed-data.png">
+  <link rel="icon" type="image/png" href="../images/icon-128.png" sizes="128x128">
+  <link rel="stylesheet" href="../assets/site.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Fanshu Monitor",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "macOS 26+",
+    "processorRequirements": "Apple Silicon",
+    "softwareVersion": "0.1.18",
+    "url": "https://louis16s.github.io/fanshu_monitor/",
+    "downloadUrl": "https://github.com/louis16s/fanshu_monitor/releases",
+    "description": "A macOS menu bar system monitor and external display control utility.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav" aria-label="Main navigation">
+      <a class="brand" href="#top" aria-label="Fanshu Monitor home">
+        <img src="../images/icon-128.png" alt="">
+        <span>Fanshu Monitor</span>
+      </a>
+      <button class="menu-button" type="button" data-menu aria-label="Open menu">☰</button>
+      <div class="nav-links" data-nav>
+        <a href="#display">Displays</a>
+        <a href="#monitoring">Monitoring</a>
+        <a href="#performance">Overhead</a>
+        <a href="#download">Download</a>
+        <a href="../zh/" data-lang="zh">中文</a>
+        <button class="theme-toggle" type="button" data-theme-toggle>Theme</button>
+        <a class="github-link" href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-media" aria-hidden="true">
+        <div class="shot-cloud">
+          <img class="shot-a" src="../images/detailed-data.png" alt="">
+          <img class="shot-b" src="../images/balance-light.png" alt="">
+          <img class="shot-c" src="../images/vitality-dark.png" alt="">
+          <img class="shot-d" src="../images/balance-dark.png" alt="">
+        </div>
+      </div>
+      <div class="hero-content">
+        <p class="eyebrow"><span class="status-dot"></span> SYSTEM · LIVE · v0.1.18</p>
+        <h1>Fanshu Monitor</h1>
+        <p class="hero-lead">A precise little instrument in your macOS menu bar: watch CPU, GPU, memory, and battery while using F1/F2 to control the external display under your pointer.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">Download latest</a>
+          <a class="button secondary" href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">View source</a>
+        </div>
+        <div class="hero-facts reveal">
+          <div class="fact"><strong>Apple Silicon</strong><span>Optimized for M-series Macs</span></div>
+          <div class="fact"><strong>macOS 26+</strong><span>Native menu bar and system APIs</span></div>
+          <div class="fact"><strong>DDC / OSD</strong><span>External display brightness and native overlays</span></div>
+          <div class="fact"><strong>Low Overhead</strong><span>Hidden modules stop sampling</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="display">
+      <div class="section-head reveal">
+        <div>
+          <p class="section-kicker">External Display Control</p>
+          <h2>Make external displays feel built in.</h2>
+        </div>
+        <p class="section-copy">When your pointer is on a controllable external display, F1/F2 adjusts that display. Built-in and unsupported displays pass the event back to macOS.</p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature wide reveal">
+          <div class="feature-icon">F1</div>
+          <h3>Brightness target follows the pointer</h3>
+          <p>The app intercepts brightness keys, resolves the screen under the pointer, checks DDC capability, and only consumes events when an external display can actually be controlled.</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">OSD</div>
+          <h3>Native macOS brightness overlay</h3>
+          <p>Brightness changes use the native system overlay and target the display being adjusted whenever possible.</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">DDC</div>
+          <h3>Clear capability state</h3>
+          <p>Each display control reports whether it is available. Unsupported monitors, cables, or system paths are explained instead of pretending to work.</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">Hi</div>
+          <h3>External HiDPI management</h3>
+          <p>HiDPI controls are prepared for external displays only. Built-in Retina displays stay clean and do not show redundant controls.</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">↻</div>
+          <h3>Automatic display refresh</h3>
+          <p>Screen parameter and reconfiguration notifications trigger display rescans after connect or disconnect, no app restart required.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="monitoring">
+      <div class="showcase">
+        <div class="phone-stack reveal" aria-label="Fanshu Monitor screenshots">
+          <img src="../images/balance-light.png" alt="Fanshu Monitor light panel screenshot">
+          <img src="../images/detailed-data.png" alt="Fanshu Monitor detailed metrics screenshot">
+        </div>
+        <div>
+          <p class="section-kicker">System Monitoring</p>
+          <h2>Know whether your Mac is actually busy.</h2>
+          <div class="timeline">
+            <article class="step reveal">
+              <span class="step-number">01</span>
+              <div><h3>Live CPU and GPU state</h3><p>CPU load, temperature, GPU utilization, and memory readings sit where they are easy to scan.</p></div>
+            </article>
+            <article class="step reveal">
+              <span class="step-number">02</span>
+              <div><h3>Memory overhead is visible</h3><p>The panel shows the app's own memory footprint alongside cache and compressed memory.</p></div>
+            </article>
+            <article class="step reveal">
+              <span class="step-number">03</span>
+              <div><h3>Heavy telemetry loads on demand</h3><p>Adapter health, cycle count, battery temperature, SSID, IPv4, and IPv6 are sampled only when useful.</p></div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="performance">
+      <div class="section-head reveal">
+        <div>
+          <p class="section-kicker">Performance Defaults</p>
+          <h2>Rich enough to help. Quiet enough to stay.</h2>
+        </div>
+        <p class="section-copy">Fanshu Monitor avoids pointless sampling by default: hidden modules stop, panel-closed refresh slows down, and expensive display or network data is cached and loaded on demand.</p>
+      </div>
+      <div class="metrics-strip reveal">
+        <div class="metric"><strong>0</strong><span>Reasons for hidden modules to keep sampling</span></div>
+        <div class="metric"><strong>On demand</strong><span>DDC, SSID, battery telemetry</span></div>
+        <div class="metric"><strong>Live</strong><span>CPU, GPU, memory essentials</span></div>
+        <div class="metric"><strong>Visible</strong><span>App memory footprint</span></div>
+      </div>
+    </section>
+
+    <section class="section" id="download">
+      <div class="download-panel reveal">
+        <div class="download-content">
+          <p class="section-kicker">Get Fanshu Monitor</p>
+          <h2>Download, unzip, and put it in your menu bar.</h2>
+          <p class="section-copy">Current builds target Apple Silicon and macOS 26+. If macOS blocks the unsigned app, clear quarantine attributes after placing it in Applications.</p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">Open Releases</a>
+            <a class="button secondary" href="https://github.com/louis16s/fanshu_monitor/issues" target="_blank" rel="noopener">Report an issue</a>
+          </div>
+          <ol class="install-list">
+            <li>1. Download the latest app or archive from Releases.</li>
+            <li>2. Move 番薯Monitor.app to Applications.</li>
+            <li>3. Grant Accessibility permission for F1/F2 takeover.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>© 2026 Fanshu Monitor contributors · MIT</span>
+    <span><a href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">github.com/louis16s/fanshu_monitor</a></span>
+  </footer>
+
+  <script src="../assets/site.js"></script>
+</body>
+</html>

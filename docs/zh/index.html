@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>番薯Monitor - macOS 菜单栏监控与外接屏亮度控制</title>
+  <meta name="description" content="番薯Monitor 是面向 Apple Silicon 的 macOS 菜单栏系统监控与外接显示器控制工具，支持 F1/F2 外接屏亮度控制、系统 OSD、HiDPI 和低开销采样。">
+  <meta property="og:title" content="番薯Monitor">
+  <meta property="og:description" content="低开销系统监控，外接显示器亮度控制，真正常驻菜单栏。">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="../images/detailed-data.png">
+  <link rel="icon" type="image/png" href="../images/icon-128.png" sizes="128x128">
+  <link rel="stylesheet" href="../assets/site.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "番薯Monitor",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "macOS 26+",
+    "processorRequirements": "Apple Silicon",
+    "softwareVersion": "0.1.18",
+    "url": "https://louis16s.github.io/fanshu_monitor/",
+    "downloadUrl": "https://github.com/louis16s/fanshu_monitor/releases",
+    "description": "macOS 菜单栏系统监控与外接显示器控制工具。",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CNY" }
+  }
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav" aria-label="主导航">
+      <a class="brand" href="#top" aria-label="番薯Monitor 首页">
+        <img src="../images/icon-128.png" alt="">
+        <span>番薯Monitor</span>
+      </a>
+      <button class="menu-button" type="button" data-menu aria-label="打开菜单">☰</button>
+      <div class="nav-links" data-nav>
+        <a href="#display">外接屏</a>
+        <a href="#monitoring">监控</a>
+        <a href="#performance">开销</a>
+        <a href="#download">下载</a>
+        <a href="../en/" data-lang="en">EN</a>
+        <button class="theme-toggle" type="button" data-theme-toggle>明暗</button>
+        <a class="github-link" href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-media" aria-hidden="true">
+        <div class="shot-cloud">
+          <img class="shot-a" src="../images/detailed-data.png" alt="">
+          <img class="shot-b" src="../images/balance-light.png" alt="">
+          <img class="shot-c" src="../images/vitality-dark.png" alt="">
+          <img class="shot-d" src="../images/balance-dark.png" alt="">
+        </div>
+      </div>
+      <div class="hero-content">
+        <p class="eyebrow"><span class="status-dot"></span> SYSTEM · LIVE · v0.1.18</p>
+        <h1>番薯Monitor</h1>
+        <p class="hero-lead">一枚常驻菜单栏的精密小仪表：看 CPU、GPU、内存、电池，也用 F1/F2 控制鼠标所在外接屏的亮度。</p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">下载最新版</a>
+          <a class="button secondary" href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">查看源码</a>
+        </div>
+        <div class="hero-facts reveal">
+          <div class="fact"><strong>Apple Silicon</strong><span>面向 M 系列 Mac 优化</span></div>
+          <div class="fact"><strong>macOS 26+</strong><span>菜单栏窗口与原生系统能力</span></div>
+          <div class="fact"><strong>DDC / OSD</strong><span>外接显示器亮度与系统浮层</span></div>
+          <div class="fact"><strong>Low Overhead</strong><span>隐藏模块停止采样</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="display">
+      <div class="section-head reveal">
+        <div>
+          <p class="section-kicker">External Display Control</p>
+          <h2>让外接屏像内建屏一样顺手。</h2>
+        </div>
+        <p class="section-copy">鼠标在哪块可控外接屏上，F1/F2 就调哪块屏。不可控屏和内建屏会交回 macOS，保留系统原生行为。</p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature wide reveal">
+          <div class="feature-icon">F1</div>
+          <h3>按鼠标位置分配亮度目标</h3>
+          <p>应用拦截系统亮度键后，会根据当前鼠标所在屏幕匹配显示器能力；只有在可 DDC 控制的外接屏上才消费事件。</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">OSD</div>
+          <h3>系统原生亮度浮层</h3>
+          <p>调整亮度时使用 macOS 原生 OSD，并尽量显示在被调整的那块显示器上。</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">DDC</div>
+          <h3>能力与原因透明</h3>
+          <p>每个控制项都会显示可用状态；如果显示器、线缆或系统路径不支持，会给出不可控原因。</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">Hi</div>
+          <h3>外接屏 HiDPI 管理</h3>
+          <p>为外接显示器准备 HiDPI 控制入口，内建视网膜屏不显示无意义开关。</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon">↻</div>
+          <h3>插拔自动刷新</h3>
+          <p>监听屏幕参数和显示器重配置事件，外接屏插拔后自动重扫，不需要重启应用。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="monitoring">
+      <div class="showcase">
+        <div class="phone-stack reveal" aria-label="番薯Monitor 面板截图">
+          <img src="../images/balance-light.png" alt="番薯Monitor 浅色面板截图">
+          <img src="../images/detailed-data.png" alt="番薯Monitor 详细指标截图">
+        </div>
+        <div>
+          <p class="section-kicker">System Monitoring</p>
+          <h2>一眼看出机器现在忙不忙。</h2>
+          <div class="timeline">
+            <article class="step reveal">
+              <span class="step-number">01</span>
+              <div><h3>CPU / GPU 实时状态</h3><p>CPU 占用、温度、GPU 利用率和显存数据都放在可快速扫读的位置。</p></div>
+            </article>
+            <article class="step reveal">
+              <span class="step-number">02</span>
+              <div><h3>内存开销可观察</h3><p>显示 App 自身内存占用、缓存和压缩内存，方便判断常驻成本。</p></div>
+            </article>
+            <article class="step reveal">
+              <span class="step-number">03</span>
+              <div><h3>电池与网络按需加载</h3><p>适配器、健康度、循环数、温度、SSID、IPv4/IPv6 等较重数据只在需要时采样。</p></div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="performance">
+      <div class="section-head reveal">
+        <div>
+          <p class="section-kicker">Performance Defaults</p>
+          <h2>常驻可以丰富，但不能吵。</h2>
+        </div>
+        <p class="section-copy">番薯Monitor 的默认策略是少做无意义采样：隐藏模块停止采样，面板关闭时降低刷新频率，重数据缓存并按需刷新。</p>
+      </div>
+      <div class="metrics-strip reveal">
+        <div class="metric"><strong>0</strong><span>隐藏模块继续采样的理由</span></div>
+        <div class="metric"><strong>按需</strong><span>DDC、SSID、电池遥测</span></div>
+        <div class="metric"><strong>实时</strong><span>CPU、GPU、内存核心指标</span></div>
+        <div class="metric"><strong>透明</strong><span>App 自身内存占用</span></div>
+      </div>
+    </section>
+
+    <section class="section" id="download">
+      <div class="download-panel reveal">
+        <div class="download-content">
+          <p class="section-kicker">Get 番薯Monitor</p>
+          <h2>下载，解压，放进你的菜单栏。</h2>
+          <p class="section-copy">当前版本面向 Apple Silicon 和 macOS 26+。如果 macOS 拦截未公证应用，可在终端清除隔离属性后打开。</p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">前往 Releases</a>
+            <a class="button secondary" href="https://github.com/louis16s/fanshu_monitor/issues" target="_blank" rel="noopener">反馈问题</a>
+          </div>
+          <ol class="install-list">
+            <li>1. 下载 Release 附件里的压缩包或应用。</li>
+            <li>2. 将 番薯Monitor.app 放入 Applications。</li>
+            <li>3. 授予辅助功能权限，用于接管 F1/F2。</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>© 2026 番薯Monitor contributors · MIT</span>
+    <span><a href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">github.com/louis16s/fanshu_monitor</a></span>
+  </footer>
+
+  <script src="../assets/site.js"></script>
+</body>
+</html>

@@ -1,129 +1,81 @@
 # 番薯Monitor
 
-> [English](README.en.md)
+> 面向 Apple Silicon 的 macOS 菜单栏系统监控与外接显示器控制工具。
 
 <p align="center">
-  <img src="docs/images/icon.png" width="132" alt="番薯Monitor icon">
+  <img src="docs/images/icon-128.png" width="112" alt="番薯Monitor logo">
 </p>
 
 <p align="center">
-  <strong>macOS 菜单栏系统监控工具</strong>
+  <a href="https://louis16s.github.io/fanshu_monitor/">官网</a> ·
+  <a href="https://github.com/louis16s/fanshu_monitor/releases">下载</a> ·
+  <a href="README.en.md">English</a>
 </p>
 
-<p align="center">
-  Swift 原生开发，常驻内存约 30 MB。用一枚动态圆环和一块紧凑面板，把核心系统状态讲清楚。
-</p>
+## 简介
 
-<p align="center">
-  <a href="#安装">安装</a> ·
-  <a href="#功能亮点">功能亮点</a> ·
-  <a href="#截图">截图</a> ·
-  <a href="#系统要求">系统要求</a>
-</p>
+番薯Monitor 是一个轻量的 macOS 菜单栏应用，用来观察 CPU、GPU、内存、电池、网络和显示器状态。直发版本加入了外接显示器控制能力，可以根据鼠标所在屏幕接管 F1/F2 亮度键，并在可控外接屏上显示系统原生亮度浮层。
 
-## Star History
+当前版本仍在快速迭代，目标是：功能足够丰富，但长期常驻时保持低开销。
 
-<p align="center">
-  <a href="https://star-history.com/#louis16s/fanshu_monitor&Date">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=louis16s/fanshu_monitor&type=Date&theme=dark" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=louis16s/fanshu_monitor&type=Date" />
-      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=louis16s/fanshu_monitor&type=Date" width="720" />
-    </picture>
-  </a>
-</p>
+## 功能
 
-<p align="center">
-  如果这个项目对你有帮助，欢迎点一个 ⭐ 支持持续维护。
-</p>
+- 菜单栏实时监控 CPU、GPU、内存、电池、存储和网络。
+- CPU 温度、GPU 利用率、内存压力、App 自身内存占用等核心指标。
+- 外接显示器亮度控制，支持按鼠标所在屏幕选择控制目标。
+- 可用时显示 macOS 原生亮度 OSD。
+- 显示每台屏幕的控制能力和不可控原因。
+- 外接屏 HiDPI 控制入口。
+- 监控模块可隐藏；隐藏后停止对应采样。
+- 面板关闭时降低采样频率，减少常驻开销。
+- 自动检查更新开关、手动检查更新、设置重置等实用操作。
 
 ## 截图
 
-### 多主题配色
-
-番薯Monitor 内置语义化配色系统，所有模块色、玻璃背景、分隔线、进度轨道、状态色和显示器控制区域都由统一的 Palette 解析。当前提供「平衡」与「活力」两套风格，并完整适配浅色 / 深色模式。
-
-| 平衡 · 深色 | 平衡 · 浅色 |
-| --- | --- |
-| ![平衡深色主题](docs/images/balance-dark.png) | ![平衡浅色主题](docs/images/balance-light.png) |
-
-| 活力 · 深色 | 活力 · 浅色 |
-| --- | --- |
-| ![活力深色主题](docs/images/vitality-dark.png) | ![活力浅色主题](docs/images/vitality-light.png) |
-
-后续会继续增加更多预设配色，并开放自定义色彩方案配置，让你可以按自己的桌面风格调整监控面板。
-
-### 展开后的丰富数据
-
-默认状态保持紧凑，展开后可以查看 CPU、GPU、内存、存储等模块的更完整细节，既能快速扫一眼，也能在需要时深入确认。
+如果 GitHub 图片缓存暂时不可用，可以直接访问 [官网](https://louis16s.github.io/fanshu_monitor/) 查看完整展示。
 
 <p align="center">
-  <img src="docs/images/detailed-data.png" width="430" alt="番薯Monitor expanded rich metrics">
+  <img src="docs/images/balance-light.png" width="360" alt="番薯Monitor 浅色面板截图">
 </p>
-
-## 功能亮点
-
-### 一目了然的核心系统数据
-
-番薯Monitor 聚焦最核心、最有效的系统指标：CPU、GPU、内存、存储、网络和电池。面板避免堆砌无意义字段，把真正影响当前机器状态的数据放在最容易扫读的位置。
-
-### 动态圆环显示综合负载
-
-菜单栏图标不是静态装饰。番薯Monitor 会综合 CPU 与 GPU 负载，平滑计算当前系统压力，并通过动态圆环直观展示整体状态：轻载、忙碌、接近高压，一眼就能判断。
-
-### Swift 原生，轻量常驻
-
-应用使用 Swift / SwiftUI 原生开发，面向 Apple Silicon 优化。日常常驻内存约 30 MB，适合作为长期挂在菜单栏里的系统状态面板。
-
-### 统一配色系统
-
-配色不是简单换一组颜色，而是由统一 Palette 管理：
-
-- 模块强调色：CPU、GPU、内存、存储、网络、电池和显示器各自拥有清晰识别度。
-- 玻璃质感：行背景、分隔线和进度轨道会随主题协调变化。
-- 状态表达：正常、警告、高压状态使用独立语义色，避免和模块色混淆。
-- 浅深色适配：每套配色都同时覆盖浅色和深色模式。
-
-### 显示器控制
-
-番薯Monitor 支持在菜单栏面板内控制显示器亮度、音量和对比度，让外接显示器也能融入同一个工作流。
-
-需要注意：显示器控制依赖显示器、线材、连接方式和系统环境支持，外接显示器通常需要支持 DDC/CI 协议；不支持的控制项不会强行展示为可用功能。
 
 ## 安装
 
-1. 从 [Releases](https://github.com/louis16s/fanshu_monitor/releases) 下载最新版 `.dmg`
-2. 打开 DMG，将 番薯Monitor 拖入 Applications 文件夹
+1. 打开 [Releases](https://github.com/louis16s/fanshu_monitor/releases)。
+2. 下载最新版本的 `番薯Monitor.zip` 或应用附件。
+3. 解压后将 `番薯Monitor.app` 移到 `Applications`。
+4. 首次启动后授予辅助功能权限，用于接管 F1/F2 亮度键。
 
-## 未公证应用放行
-
-番薯Monitor 目前未经过 Apple 公证，macOS 会阻止打开。安装后在终端执行：
+如果 macOS 因未公证而阻止打开，可以执行：
 
 ```bash
 sudo xattr -cr /Applications/番薯Monitor.app
 ```
 
-之后即可正常启动。
-
 ## 系统要求
 
-- macOS 26 及以上
-- Apple Silicon (M 系列芯片)
-
-## 当前监控范围
-
-- CPU：整体占用、系统 / 用户 / 空闲、运行时间
-- GPU：图形负载、渲染 / 分块、显存信息
-- 内存：使用率、内存压力、交换内存
-- 存储：系统磁盘和外置卷容量状态
-- 网络：上传 / 下载速率
-- 电池：电量、供电状态、功耗、健康度等可用信息
-- 显示器：亮度、音量、对比度控制，取决于设备 DDC/CI 支持情况
+- Apple Silicon Mac
+- macOS 26 或更高版本
 
 ## 构建
 
 ```bash
 xcodebuild -project 番薯monitor.xcodeproj -scheme 番薯Monitor -configuration Debug build
+```
+
+Release 构建：
+
+```bash
+xcodebuild -project 番薯monitor.xcodeproj -scheme 番薯Monitor -configuration Release build
+```
+
+## 官网部署
+
+官网文件位于 `docs/`。在 GitHub 仓库中进入 `Settings` → `Pages`，选择 `Deploy from a branch`，分支选 `main`，目录选 `/docs`。
+
+部署后地址：
+
+```text
+https://louis16s.github.io/fanshu_monitor/
 ```
 
 ## 许可证
