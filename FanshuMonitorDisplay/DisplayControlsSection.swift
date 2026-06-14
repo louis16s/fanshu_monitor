@@ -191,16 +191,6 @@ private struct DisplayControlGroup: View {
                             tint: tint
                         )
 
-                        if !display.isBuiltIn {
-                            HiDPIButton(
-                                display: display,
-                                showReason: settings.displayAvailabilityHintsEnabled,
-                                palette: palette,
-                                tint: tint
-                            ) {
-                                controller.toggleHiDPI(displayID: display.id)
-                            }
-                        }
                     }
 
                     if settings.displayVolumeControlEnabled {
@@ -239,52 +229,6 @@ private struct DisplayControlGroup: View {
             get: { controller.value(for: control, displayID: display.id) },
             set: { controller.setValueAsync($0, for: control, displayID: display.id) }
         )
-    }
-}
-
-private struct HiDPIButton: View {
-    let display: ControlledDisplay
-    let showReason: Bool
-    let palette: MonitorPalette
-    let tint: Color
-    let action: () -> Void
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Button(action: action) {
-                Image(systemName: display.hidpiEnabled ? "textformat.size.larger" : "textformat.size")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(display.supportsHiDPI ? tint : palette.captionText)
-                    .frame(width: 18, height: 18)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!display.supportsHiDPI)
-            .help(display.supportsHiDPI ? "开启或关闭 HiDPI" : (display.hidpiUnavailableReason ?? "HiDPI 不可用"))
-
-            Text("HiDPI")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(display.supportsHiDPI ? palette.secondaryText : palette.captionText)
-
-            if showReason, !display.supportsHiDPI, let reason = display.hidpiUnavailableReason {
-                Text(reason)
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(palette.captionText)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-
-            if display.supportsHiDPI, let detail = display.hidpiModeDescription {
-                Text(detail)
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(palette.captionText)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .opacity(display.supportsHiDPI ? 1 : 0.62)
     }
 }
 
@@ -376,7 +320,6 @@ final class DisplayControlController: ObservableObject {
     @Published private var pendingValues: [CGDirectDisplayID: [DisplayControlKind: Double]] = [:]
 
     private let service = DisplayControlService()
-    private let modeService = DisplayModeService()
     private let worker = DisplayControlWorker()
     private var fallbackValues: [CGDirectDisplayID: [DisplayControlKind: Double]] = [:]
     private var screenChangeObserver: NSObjectProtocol?
@@ -617,19 +560,6 @@ final class DisplayControlController: ObservableObject {
         }
     }
 
-    func toggleHiDPI(displayID: CGDirectDisplayID) {
-        guard let display = displays.first(where: { $0.id == displayID }), display.supportsHiDPI else {
-            return
-        }
-
-        let targetEnabled = !display.hidpiEnabled
-        if modeService.setHiDPIEnabled(targetEnabled, for: displayID) {
-            refreshNow()
-        } else {
-            AppLogger.ui.error("Failed to set HiDPI \(targetEnabled, privacy: .public) for display \(displayID, privacy: .public)")
-        }
-    }
-
     private func seedFallbackValues(for display: ControlledDisplay) {
         fallbackValues[display.id] = [
             .brightness: display.brightness,
@@ -732,16 +662,12 @@ struct ControlledDisplay: Identifiable {
     var supportsBrightness: Bool
     var supportsVolume: Bool
     var supportsContrast: Bool
-    var supportsHiDPI: Bool
     var brightness: Double
     var volume: Double
     var contrast: Double
-    var hidpiEnabled: Bool
-    var hidpiModeDescription: String?
     var brightnessUnavailableReason: String?
     var volumeUnavailableReason: String?
     var contrastUnavailableReason: String?
-    var hidpiUnavailableReason: String?
 
     func supports(_ control: DisplayControlKind) -> Bool {
         switch control {
@@ -832,7 +758,6 @@ private nonisolated struct ControlKey: Hashable {
 final class DisplayControlService {
     private let displayServices = DisplayServicesBridge()
     private let ddc = DisplayDDCBridge()
-    private let modeService = DisplayModeService()
     private let defaults = UserDefaults.standard
 
     func displays() -> [ControlledDisplay] {
@@ -856,9 +781,6 @@ final class DisplayControlService {
             let ddcBrightness = isBuiltIn ? nil : ddc.read(.brightness, displayID: id)
             let ddcVolume = isBuiltIn ? nil : ddc.read(.volume, displayID: id)
             let ddcContrast = isBuiltIn ? nil : ddc.read(.contrast, displayID: id)
-            let hidpiState = isBuiltIn
-                ? DisplayHiDPIState(isSupported: false, isEnabled: false, modeDescription: nil, unavailableReason: "内建屏无需设置")
-                : modeService.hidpiState(displayID: id)
             let storedBrightness = storedValue(for: .brightness, displayStorageID: storageID)
             let storedVolume = storedValue(for: .volume, displayStorageID: storageID)
             let storedContrast = storedValue(for: .contrast, displayStorageID: storageID)
@@ -871,7 +793,6 @@ final class DisplayControlService {
                 supportsBrightness: isBuiltIn ? appleBrightness != nil : (ddcBrightness != nil || storedBrightness != nil || hasDDCService),
                 supportsVolume: !isBuiltIn && (ddcVolume != nil || storedVolume != nil),
                 supportsContrast: !isBuiltIn && (ddcContrast != nil || storedContrast != nil),
-                supportsHiDPI: hidpiState.isSupported,
                 brightness: appleBrightness.map { Double($0 * 100) }
                     ?? ddcBrightness
                     ?? storedBrightness
@@ -882,12 +803,9 @@ final class DisplayControlService {
                 contrast: ddcContrast
                     ?? storedContrast
                     ?? DisplayControlKind.contrast.defaultValue,
-                hidpiEnabled: hidpiState.isEnabled,
-                hidpiModeDescription: hidpiState.modeDescription,
                 brightnessUnavailableReason: isBuiltIn ? "系统亮度服务不可用" : (hasDDCService ? nil : "未匹配到 DDC/CI 服务"),
                 volumeUnavailableReason: isBuiltIn ? "内建屏不支持 DDC 音量" : (ddcVolume != nil || storedVolume != nil ? nil : "显示器未响应音量 VCP"),
-                contrastUnavailableReason: isBuiltIn ? "内建屏不支持 DDC 对比度" : (ddcContrast != nil || storedContrast != nil ? nil : "显示器未响应对比度 VCP"),
-                hidpiUnavailableReason: hidpiState.unavailableReason
+                contrastUnavailableReason: isBuiltIn ? "内建屏不支持 DDC 对比度" : (ddcContrast != nil || storedContrast != nil ? nil : "显示器未响应对比度 VCP")
             )
         }
     }
@@ -960,247 +878,6 @@ final class DisplayControlService {
     private func storedValueKey(for control: DisplayControlKind, displayStorageID: String) -> String {
         "displayControl.value.\(displayStorageID).\(control.storageKey)"
     }
-}
-
-private final class DisplayModeService {
-    private let overrideRoot = "/Library/Displays/Contents/Resources/Overrides"
-
-    func hidpiState(displayID: CGDirectDisplayID) -> DisplayHiDPIState {
-        guard displayID != 0 else {
-            return DisplayHiDPIState(
-                isSupported: false,
-                isEnabled: false,
-                modeDescription: nil,
-                unavailableReason: "无法识别显示器"
-            )
-        }
-
-        guard vendorID(displayID) > 0, productID(displayID) > 0 else {
-            return DisplayHiDPIState(
-                isSupported: false,
-                isEnabled: false,
-                modeDescription: nil,
-                unavailableReason: "无法读取厂商/产品 ID"
-            )
-        }
-
-        let isInstalled = FileManager.default.fileExists(atPath: overrideFilePath(displayID: displayID))
-        return DisplayHiDPIState(
-            isSupported: true,
-            isEnabled: isInstalled,
-            modeDescription: isInstalled ? "已安装配置" : "安装配置",
-            unavailableReason: nil
-        )
-    }
-
-    func setHiDPIEnabled(_ enabled: Bool, for displayID: CGDirectDisplayID) -> Bool {
-        guard vendorID(displayID) > 0, productID(displayID) > 0 else {
-            return false
-        }
-
-        let script = enabled ? installScript(displayID: displayID) : removeScript(displayID: displayID)
-        return runAdministratorScript(script)
-    }
-
-    private func vendorID(_ displayID: CGDirectDisplayID) -> UInt32 {
-        CGDisplayVendorNumber(displayID)
-    }
-
-    private func productID(_ displayID: CGDirectDisplayID) -> UInt32 {
-        CGDisplayModelNumber(displayID)
-    }
-
-    private func vendorHex(_ displayID: CGDirectDisplayID) -> String {
-        String(format: "%x", vendorID(displayID))
-    }
-
-    private func productHex(_ displayID: CGDirectDisplayID) -> String {
-        String(format: "%x", productID(displayID))
-    }
-
-    private func overrideDirectory(displayID: CGDirectDisplayID) -> String {
-        "\(overrideRoot)/DisplayVendorID-\(vendorHex(displayID))"
-    }
-
-    private func overrideFilePath(displayID: CGDirectDisplayID) -> String {
-        "\(overrideDirectory(displayID: displayID))/DisplayProductID-\(productHex(displayID))"
-    }
-
-    private func installScript(displayID: CGDirectDisplayID) -> String {
-        let vendor = vendorID(displayID)
-        let product = productID(displayID)
-        let directory = shellQuote(overrideDirectory(displayID: displayID))
-        let file = shellQuote(overrideFilePath(displayID: displayID))
-        let resolutionList = hidpiResolutions(displayID: displayID)
-            .map { "\($0.width)x\($0.height)" }
-            .joined(separator: " ")
-
-        return """
-        set -e
-        mkdir -p \(directory)
-        tmpfile="$(mktemp /tmp/fanshu-hidpi.XXXXXX)"
-        cat > "$tmpfile" <<'PLIST_HEAD'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>DisplayProductID</key>
-            <integer>\(product)</integer>
-            <key>DisplayVendorID</key>
-            <integer>\(vendor)</integer>
-            <key>scale-resolutions</key>
-            <array>
-        PLIST_HEAD
-        for res in \(resolutionList); do
-            width="${res%x*}"
-            height="${res#*x}"
-            hidpi="$(printf '%08x %08x' "$((width * 2))" "$((height * 2))" | xxd -r -p | base64)"
-            prefix="${hidpi:0:11}"
-            printf '        <data>%sA</data>\\n' "$prefix" >> "$tmpfile"
-            printf '        <data>%sAAAAB</data>\\n' "$prefix" >> "$tmpfile"
-            printf '        <data>%sAAAABACAAAA==</data>\\n' "$prefix" >> "$tmpfile"
-            printf '        <data>%sAAAAJAKAAAA==</data>\\n' "$prefix" >> "$tmpfile"
-        done
-        cat >> "$tmpfile" <<'PLIST_TAIL'
-            </array>
-            <key>target-default-ppmm</key>
-            <real>10.0699301</real>
-        </dict>
-        </plist>
-        PLIST_TAIL
-        plutil -lint "$tmpfile" >/dev/null
-        install -o root -g wheel -m 0644 "$tmpfile" \(file)
-        rm -f "$tmpfile"
-        defaults write /Library/Preferences/com.apple.windowserver DisplayResolutionEnabled -bool YES
-        """
-    }
-
-    private func removeScript(displayID: CGDirectDisplayID) -> String {
-        let file = shellQuote(overrideFilePath(displayID: displayID))
-        return """
-        set -e
-        rm -f \(file)
-        defaults write /Library/Preferences/com.apple.windowserver DisplayResolutionEnabled -bool YES
-        """
-    }
-
-    private func runAdministratorScript(_ script: String) -> Bool {
-        let scriptURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("fanshu-hidpi-\(UUID().uuidString).sh")
-
-        do {
-            try script.write(to: scriptURL, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
-        } catch {
-            AppLogger.ui.error("Failed to prepare HiDPI script: \(error.localizedDescription, privacy: .public)")
-            return false
-        }
-        defer {
-            try? FileManager.default.removeItem(at: scriptURL)
-        }
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = [
-            "-e",
-            "do shell script \"/bin/bash \" & quoted form of \(appleScriptString(scriptURL.path)) with administrator privileges"
-        ]
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
-        } catch {
-            AppLogger.ui.error("HiDPI administrator script failed: \(error.localizedDescription, privacy: .public)")
-            return false
-        }
-    }
-
-    private func hidpiResolutions(displayID: CGDirectDisplayID) -> [(width: Int, height: Int)] {
-        let width = Int(CGDisplayPixelsWide(displayID))
-        let height = Int(CGDisplayPixelsHigh(displayID))
-        let aspect = Double(width) / Double(max(height, 1))
-
-        let presets: [(Int, Int)]
-        if abs(aspect - (16.0 / 9.0)) < 0.04 {
-            presets = [
-                (width, height),
-                scaled(width, height, 0.8),
-                scaled(width, height, 0.75),
-                scaled(width, height, 2.0 / 3.0),
-                scaled(width, height, 0.5),
-                (1920, 1080),
-                (1680, 945),
-                (1440, 810),
-                (1280, 720)
-            ]
-        } else if abs(aspect - (21.0 / 9.0)) < 0.18 {
-            presets = [
-                (width, height),
-                scaled(width, height, 0.8),
-                scaled(width, height, 0.75),
-                scaled(width, height, 2.0 / 3.0),
-                scaled(width, height, 0.5),
-                (2752, 1152),
-                (2580, 1080),
-                (2365, 990),
-                (1720, 720)
-            ]
-        } else if abs(aspect - (16.0 / 10.0)) < 0.06 {
-            presets = [
-                (width, height),
-                scaled(width, height, 0.8),
-                scaled(width, height, 0.75),
-                scaled(width, height, 2.0 / 3.0),
-                scaled(width, height, 0.5),
-                (1680, 1050),
-                (1440, 900),
-                (1280, 800)
-            ]
-        } else {
-            presets = [
-                (width, height),
-                scaled(width, height, 0.8),
-                scaled(width, height, 0.75),
-                scaled(width, height, 2.0 / 3.0),
-                scaled(width, height, 0.5)
-            ]
-        }
-
-        var seen = Set<String>()
-        return presets.filter { item in
-            guard item.0 >= 320, item.1 >= 180 else { return false }
-            let ratio = Double(item.0) / Double(max(item.1, 1))
-            guard abs(ratio - aspect) < 0.08 else { return false }
-            let key = "\(item.0)x\(item.1)"
-            guard !seen.contains(key) else { return false }
-            seen.insert(key)
-            return true
-        }
-    }
-
-    private func scaled(_ width: Int, _ height: Int, _ factor: Double) -> (Int, Int) {
-        (Int((Double(width) * factor).rounded()), Int((Double(height) * factor).rounded()))
-    }
-
-    private func shellQuote(_ value: String) -> String {
-        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
-    }
-
-    private func appleScriptString(_ value: String) -> String {
-        let escaped = value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n")
-        return "\"\(escaped)\""
-    }
-}
-
-private struct DisplayHiDPIState {
-    let isSupported: Bool
-    let isEnabled: Bool
-    let modeDescription: String?
-    let unavailableReason: String?
 }
 
 private final class DisplayServicesBridge {

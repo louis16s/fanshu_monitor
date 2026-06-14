@@ -91,6 +91,22 @@ struct FanshuMonitorTests {
         #expect(networkAddressSummary([]) == "--")
     }
 
+    @Test func ddcRangeMapsHardwareMinimumToZeroPercent() {
+        let range = DDCValueRange(min: 10, max: 100)
+
+        #expect(range.percentage(from: 10) == 0)
+        #expect(range.percentage(from: 100) == 100)
+        #expect(range.rawValue(for: 0) == 10)
+        #expect(range.rawValue(for: 100) == 100)
+    }
+
+    @Test func ddcRangeMapsMidpointInsideEffectiveRange() {
+        let range = DDCValueRange(min: 10, max: 100)
+
+        #expect(range.rawValue(for: 50) == 55)
+        #expect(range.percentage(from: 55) == 50)
+    }
+
     @Test func monitorColorSchemeDefaultsToBalanced() {
         let defaults = UserDefaults(suiteName: "FanshuMonitorTests.colorScheme.default")!
         defaults.removePersistentDomain(forName: "FanshuMonitorTests.colorScheme.default")

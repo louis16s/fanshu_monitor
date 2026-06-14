@@ -104,7 +104,7 @@ final class MemorySampler: MonitorSampler {
     }
 
     private func swapUsedText(_ swap: SwapUsage?) -> String {
-        guard let used = swap?.used, used > 0 else {
+        guard let used = swap?.used else {
             return "--"
         }
         return memoryBytes(used)

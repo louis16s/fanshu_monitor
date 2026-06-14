@@ -11,12 +11,14 @@ private let displayDDCLog = Logger(subsystem: "com.fanshu.monitor.direct", categ
 
 final class DisplayDDCBridge {
     private var servicesByDisplayID: [CGDirectDisplayID: DDCService] = [:]
-    private var maxValues: [ControlKey: UInt16] = [:]
+    private var valueRanges: [ControlKey: DDCValueRange] = [:]
     private var controlCodes: [ControlKey: DDCVCPCode] = [:]
     private let maxDetectLimit: UInt16 = 100
 
     func refresh(displayIDs: [CGDirectDisplayID]) {
         servicesByDisplayID = Arm64DDCMatcher().matchedServices(for: displayIDs)
+        valueRanges = valueRanges.filter { displayIDs.contains($0.key.displayID) }
+        controlCodes = controlCodes.filter { displayIDs.contains($0.key.displayID) }
     }
 
     func hasService(for displayID: CGDirectDisplayID) -> Bool {
@@ -37,15 +39,16 @@ final class DisplayDDCBridge {
                 continue
             }
 
-            let effectiveMax = min(values.max, maxDetectLimit)
-            let effectiveCurrent = min(values.current, effectiveMax)
-            maxValues[key] = effectiveMax
+            let detectedMax = min(values.max, maxDetectLimit)
+            var range = valueRanges[key] ?? DDCValueRange(min: 0, max: detectedMax)
+            range.max = max(range.min + 1, detectedMax)
+            valueRanges[key] = range
             controlCodes[key] = vcp
 
-            let percentage = Double(effectiveCurrent) / Double(effectiveMax) * 100
+            let percentage = range.percentage(from: values.current)
 
             displayDDCLog.notice(
-                "Read DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public) code \(vcp.rawValue, privacy: .public) raw \(values.current, privacy: .public)/\(values.max, privacy: .public) effective \(effectiveCurrent, privacy: .public)/\(effectiveMax, privacy: .public)"
+                "Read DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public) code \(vcp.rawValue, privacy: .public) raw \(values.current, privacy: .public)/\(values.max, privacy: .public) range \(range.min, privacy: .public)-\(range.max, privacy: .public) mapped \(percentage, privacy: .public)"
             )
             return min(100, max(0, percentage))
         }
@@ -61,8 +64,9 @@ final class DisplayDDCBridge {
         }
 
         let key = ControlKey(displayID: displayID, control: control)
-        let maxValue = maxValues[key] ?? maxDetectLimit
-        var ddcValue = UInt16((min(100, max(0, value)) / 100 * Double(maxValue)).rounded())
+        let range = valueRanges[key] ?? DDCValueRange(min: 0, max: maxDetectLimit)
+        let clampedPercentage = min(100, max(0, value))
+        var ddcValue = range.rawValue(for: clampedPercentage)
         if control == .volume, value > 0 {
             ddcValue = max(1, ddcValue)
         }
@@ -83,10 +87,18 @@ final class DisplayDDCBridge {
         for vcp in orderedCandidates(for: key) {
             let success = DDCTransport.write(service: service.service, vcpCode: vcp.rawValue, value: ddcValue)
             displayDDCLog.notice(
-                "Write DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public) code \(vcp.rawValue, privacy: .public) value \(ddcValue, privacy: .public) success \(success, privacy: .public)"
+                "Write DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public) code \(vcp.rawValue, privacy: .public) value \(ddcValue, privacy: .public) range \(range.min, privacy: .public)-\(range.max, privacy: .public) success \(success, privacy: .public)"
             )
             if success {
                 controlCodes[key] = vcp
+                calibrateMinimumIfNeeded(
+                    requestedPercentage: clampedPercentage,
+                    requestedRawValue: ddcValue,
+                    control: control,
+                    key: key,
+                    service: service.service,
+                    vcp: vcp
+                )
                 return true
             }
         }
@@ -100,6 +112,53 @@ final class DisplayDDCBridge {
             return candidates
         }
         return [preferred] + candidates.filter { $0 != preferred }
+    }
+
+    private func calibrateMinimumIfNeeded(
+        requestedPercentage: Double,
+        requestedRawValue: UInt16,
+        control: DisplayControlKind,
+        key: ControlKey,
+        service: IOAVService,
+        vcp: DDCVCPCode
+    ) {
+        guard control == .brightness, requestedPercentage <= 0 else { return }
+        guard let values = DDCTransport.read(service: service, vcpCode: vcp.rawValue),
+              values.max > 0
+        else { return }
+
+        let detectedMax = min(values.max, maxDetectLimit)
+        let returnedCurrent = min(values.current, detectedMax)
+        guard returnedCurrent > requestedRawValue,
+              returnedCurrent < detectedMax
+        else { return }
+
+        let learnedRange = DDCValueRange(min: returnedCurrent, max: detectedMax)
+        valueRanges[key] = learnedRange
+        displayDDCLog.notice(
+            "Learned DDC minimum for display \(key.displayID, privacy: .public) brightness: \(returnedCurrent, privacy: .public), max \(detectedMax, privacy: .public)"
+        )
+    }
+}
+
+struct DDCValueRange: Equatable {
+    var min: UInt16
+    var max: UInt16
+
+    init(min: UInt16, max: UInt16) {
+        self.min = min
+        self.max = max > min ? max : min + 1
+    }
+
+    func percentage(from rawValue: UInt16) -> Double {
+        let clamped = Swift.min(Swift.max(rawValue, min), max)
+        return Double(clamped - min) / Double(max - min) * 100
+    }
+
+    func rawValue(for percentage: Double) -> UInt16 {
+        let clampedPercentage = Swift.min(100, Swift.max(0, percentage))
+        let raw = Double(max - min) * (clampedPercentage / 100) + Double(min)
+        return UInt16(Swift.min(Double(max), Swift.max(Double(min), raw.rounded())))
     }
 }
 
