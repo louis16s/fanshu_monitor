@@ -107,23 +107,23 @@ struct FanshuMonitorTests {
         #expect(range.percentage(from: 55) == 50)
     }
 
-    @Test func monitorColorSchemeDefaultsToBalanced() {
+    @Test func monitorColorSchemeDefaultsToSystemBlue() {
         let defaults = UserDefaults(suiteName: "FanshuMonitorTests.colorScheme.default")!
         defaults.removePersistentDomain(forName: "FanshuMonitorTests.colorScheme.default")
 
         let settings = MonitorSettings(defaults: defaults)
 
-        #expect(settings.colorSchemePreference == .balanced)
+        #expect(settings.colorSchemePreference == .systemBlue)
     }
 
     @Test func monitorColorSchemeLoadsPersistedValue() {
         let defaults = UserDefaults(suiteName: "FanshuMonitorTests.colorScheme.persisted")!
         defaults.removePersistentDomain(forName: "FanshuMonitorTests.colorScheme.persisted")
-        defaults.set(MonitorColorSchemePreference.vibrant.rawValue, forKey: "settings.colorSchemePreference")
+        defaults.set(MonitorColorSchemePreference.rose.rawValue, forKey: "settings.colorSchemePreference")
 
         let settings = MonitorSettings(defaults: defaults)
 
-        #expect(settings.colorSchemePreference == .vibrant)
+        #expect(settings.colorSchemePreference == .rose)
     }
 
     @Test func monitorColorSchemeFallsBackForUnknownValue() {
@@ -133,6 +133,26 @@ struct FanshuMonitorTests {
 
         let settings = MonitorSettings(defaults: defaults)
 
-        #expect(settings.colorSchemePreference == .balanced)
+        #expect(settings.colorSchemePreference == .systemBlue)
+    }
+
+    @Test func codexUsagePayloadBuildsQuotaModule() throws {
+        let json = """
+        {
+          "plan_type": "pro",
+          "rate_limit": {
+            "primary_window": { "used_percent": 25, "reset_at": 1779385358 },
+            "secondary_window": { "used_percent": 40, "reset_at": 1779868997 }
+          }
+        }
+        """
+
+        let report = try CodexUsageClient.parseUsage(Data(json.utf8))
+        let module = CodexQuotaSampler.module(from: report)
+
+        #expect(module.kind == .codex)
+        #expect(module.value == 40)
+        #expect(module.metrics.first { $0.name == "five-hour" }?.value == "75%")
+        #expect(module.metrics.first { $0.name == "weekly" }?.value == "60%")
     }
 }

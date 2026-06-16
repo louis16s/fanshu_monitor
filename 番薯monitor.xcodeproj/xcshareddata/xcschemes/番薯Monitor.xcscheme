@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2E0C71B92FB1A10000908371"
-               BuildableName = "番薯Monitor.app"
+               BuildableName = "&#x756a;&#x85af;Monitor.app"
                BlueprintName = "FanshuMonitorDirect"
-               ReferencedContainer = "container:番薯monitor.xcodeproj">
+               ReferencedContainer = "container:&#x756a;&#x85af;monitor.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -38,7 +38,7 @@
                BlueprintIdentifier = "2E0C71972FB19C2E00908371"
                BuildableName = "FanshuMonitorTests.xctest"
                BlueprintName = "FanshuMonitorTests"
-               ReferencedContainer = "container:番薯monitor.xcodeproj">
+               ReferencedContainer = "container:&#x756a;&#x85af;monitor.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -58,9 +58,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2E0C71B92FB1A10000908371"
-            BuildableName = "番薯Monitor.app"
+            BuildableName = "&#x756a;&#x85af;Monitor.app"
             BlueprintName = "FanshuMonitorDirect"
-            ReferencedContainer = "container:番薯monitor.xcodeproj">
+            ReferencedContainer = "container:&#x756a;&#x85af;monitor.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -75,9 +75,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2E0C71B92FB1A10000908371"
-            BuildableName = "番薯Monitor.app"
+            BuildableName = "&#x756a;&#x85af;Monitor.app"
             BlueprintName = "FanshuMonitorDirect"
-            ReferencedContainer = "container:番薯monitor.xcodeproj">
+            ReferencedContainer = "container:&#x756a;&#x85af;monitor.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

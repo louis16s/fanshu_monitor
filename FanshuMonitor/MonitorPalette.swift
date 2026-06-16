@@ -34,35 +34,27 @@ struct MonitorPalette {
 
     var displayTint: Color {
         switch preference {
-        case .balanced:
+        case .systemBlue:
             Color(hex: 0x4E7FD9)
-        case .vibrant:
-            Color(hex: 0xFF7EB6)
         case .graphite:
             Color(hex: 0x64748B)
-        case .aurora:
+        case .teal:
             Color(hex: 0x14B8A6)
-        case .sunrise:
-            Color(hex: 0xEA580C)
-        case .mono:
-            isDark ? Color(hex: 0xD1D5DB) : Color(hex: 0x374151)
+        case .rose:
+            Color(hex: 0xD7547F)
         }
     }
 
     func moduleTint(for kind: MonitorKind) -> Color {
         switch preference {
-        case .balanced:
-            balancedModuleTint(for: kind)
-        case .vibrant:
-            vibrantModuleTint(for: kind)
+        case .systemBlue:
+            systemBlueModuleTint(for: kind)
         case .graphite:
             graphiteModuleTint(for: kind)
-        case .aurora:
-            auroraModuleTint(for: kind)
-        case .sunrise:
-            sunriseModuleTint(for: kind)
-        case .mono:
-            monoModuleTint(for: kind)
+        case .teal:
+            tealModuleTint(for: kind)
+        case .rose:
+            roseModuleTint(for: kind)
         }
     }
 
@@ -79,54 +71,54 @@ struct MonitorPalette {
 
     func rowGlassTint(for kind: MonitorKind) -> Color {
         switch preference {
-        case .balanced, .graphite, .mono:
+        case .systemBlue, .graphite:
             neutralGlassTint
-        case .vibrant, .aurora, .sunrise:
+        case .teal, .rose:
             moduleTint(for: kind).opacity(isDark ? 0.16 : 0.08)
         }
     }
 
     func rowSeparator(for kind: MonitorKind) -> Color {
         switch preference {
-        case .balanced, .graphite, .mono:
+        case .systemBlue, .graphite:
             neutralSeparator
-        case .vibrant, .aurora, .sunrise:
+        case .teal, .rose:
             moduleTint(for: kind).opacity(isDark ? 0.28 : 0.18)
         }
     }
 
     var displayGlassTint: Color {
         switch preference {
-        case .balanced, .graphite, .mono:
+        case .systemBlue, .graphite:
             neutralGlassTint
-        case .vibrant, .aurora, .sunrise:
+        case .teal, .rose:
             displayTint.opacity(isDark ? 0.16 : 0.08)
         }
     }
 
     var displaySeparator: Color {
         switch preference {
-        case .balanced, .graphite, .mono:
+        case .systemBlue, .graphite:
             neutralSeparator
-        case .vibrant, .aurora, .sunrise:
+        case .teal, .rose:
             displayTint.opacity(isDark ? 0.28 : 0.18)
         }
     }
 
     var displayBadgeFill: Color {
         switch preference {
-        case .balanced, .graphite, .mono:
+        case .systemBlue, .graphite:
             Color(hex: 0x7A91B4).opacity(isDark ? 0.16 : 0.10)
-        case .vibrant, .aurora, .sunrise:
+        case .teal, .rose:
             displayTint.opacity(isDark ? 0.18 : 0.10)
         }
     }
 
     func badgeFill(for kind: MonitorKind) -> Color {
         switch preference {
-        case .balanced, .graphite, .mono:
+        case .systemBlue, .graphite:
             moduleTint(for: kind).opacity(isDark ? 0.18 : 0.10)
-        case .vibrant, .aurora, .sunrise:
+        case .teal, .rose:
             moduleTint(for: kind).opacity(isDark ? 0.20 : 0.12)
         }
     }
@@ -139,7 +131,7 @@ struct MonitorPalette {
         Color(hex: 0x7A91B4).opacity(isDark ? 0.22 : 0.14)
     }
 
-    private func balancedModuleTint(for kind: MonitorKind) -> Color {
+    private func systemBlueModuleTint(for kind: MonitorKind) -> Color {
         switch kind {
         case .cpu:
             Color(hex: 0xD27A4A)
@@ -153,23 +145,8 @@ struct MonitorPalette {
             Color(hex: 0x43A6A0)
         case .battery:
             Color(hex: 0x65AF52)
-        }
-    }
-
-    private func vibrantModuleTint(for kind: MonitorKind) -> Color {
-        switch kind {
-        case .cpu:
-            Color(hex: 0xFA4D56)
-        case .gpu:
-            Color(hex: 0xA855F7)
-        case .memory:
-            Color(hex: 0x1192E8)
-        case .storage:
-            Color(hex: 0xB28600)
-        case .network:
-            Color(hex: 0x009D9A)
-        case .battery:
-            Color(hex: 0x198038)
+        case .codex:
+            Color(hex: 0x0A84FF)
         }
     }
 
@@ -187,27 +164,31 @@ struct MonitorPalette {
             Color(hex: 0x0369A1)
         case .battery:
             Color(hex: 0x4D7C0F)
+        case .codex:
+            Color(hex: 0x7C3AED)
         }
     }
 
-    private func auroraModuleTint(for kind: MonitorKind) -> Color {
+    private func tealModuleTint(for kind: MonitorKind) -> Color {
         switch kind {
         case .cpu:
-            Color(hex: 0xF97316)
+            Color(hex: 0xEA580C)
         case .gpu:
-            Color(hex: 0x14B8A6)
+            Color(hex: 0x0EA5E9)
         case .memory:
-            Color(hex: 0x22C55E)
+            Color(hex: 0x10B981)
         case .storage:
-            Color(hex: 0xEAB308)
+            Color(hex: 0xD97706)
         case .network:
-            Color(hex: 0x06B6D4)
+            Color(hex: 0x6366F1)
         case .battery:
-            Color(hex: 0x84CC16)
+            Color(hex: 0x65A30D)
+        case .codex:
+            Color(hex: 0x06B6D4)
         }
     }
 
-    private func sunriseModuleTint(for kind: MonitorKind) -> Color {
+    private func roseModuleTint(for kind: MonitorKind) -> Color {
         switch kind {
         case .cpu:
             Color(hex: 0xE11D48)
@@ -216,28 +197,13 @@ struct MonitorPalette {
         case .memory:
             Color(hex: 0x0891B2)
         case .storage:
-            Color(hex: 0xEA580C)
+            Color(hex: 0xD97706)
         case .network:
             Color(hex: 0x2563EB)
         case .battery:
             Color(hex: 0x16A34A)
-        }
-    }
-
-    private func monoModuleTint(for kind: MonitorKind) -> Color {
-        switch kind {
-        case .cpu:
-            Color(hex: 0x64748B)
-        case .gpu:
-            Color(hex: 0x334155)
-        case .memory:
-            Color(hex: 0x475569)
-        case .storage:
-            Color(hex: 0x71717A)
-        case .network:
-            Color(hex: 0x52525B)
-        case .battery:
-            Color(hex: 0x3F3F46)
+        case .codex:
+            Color(hex: 0xDB2777)
         }
     }
 }

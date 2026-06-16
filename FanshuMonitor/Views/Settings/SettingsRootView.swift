@@ -8,7 +8,7 @@ struct SettingsRootView: View {
     var body: some View {
         HStack(spacing: 0) {
             SettingsSidebar(selection: $selection, settings: settings)
-                .frame(width: 164)
+                .frame(width: 176)
                 .background(.bar)
 
             Divider()
@@ -18,10 +18,10 @@ struct SettingsRootView: View {
                 .background(Color(nsColor: .windowBackgroundColor))
         }
         .frame(
-            minWidth: 560,
-            idealWidth: 640,
-            minHeight: 480,
-            idealHeight: 560
+            minWidth: 640,
+            idealWidth: 700,
+            minHeight: 560,
+            idealHeight: 620
         )
         .background(SettingsWindowTracker(selection: $selection))
     }

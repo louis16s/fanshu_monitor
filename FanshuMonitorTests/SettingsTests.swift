@@ -13,6 +13,31 @@ struct SettingsTests {
         #expect(settings.themePreference == .system)
     }
 
+    @Test func defaultLanguagePreference() {
+        let settings = MonitorSettings()
+        #expect(settings.languagePreference == .system)
+    }
+
+    @Test func defaultCodexRefreshInterval() {
+        let defaults = UserDefaults(suiteName: "defaultCodexRefreshInterval")!
+        defaults.removePersistentDomain(forName: "defaultCodexRefreshInterval")
+
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(settings.codexRefreshIntervalMinutes == 5)
+    }
+
+    @Test func codexRefreshIntervalLoadsPersistedValue() {
+        let suite = "codexRefreshIntervalLoadsPersistedValue"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(10.0, forKey: "settings.codexRefreshIntervalMinutes")
+
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(settings.codexRefreshIntervalMinutes == 10)
+    }
+
     @Test func displayModuleIsVisibleByDefault() {
         let defaults = UserDefaults(suiteName: "displayModuleIsVisibleByDefault")!
         defaults.removePersistentDomain(forName: "displayModuleIsVisibleByDefault")
@@ -20,6 +45,17 @@ struct SettingsTests {
         let settings = MonitorSettings(defaults: defaults)
 
         #expect(settings.displayModuleVisible)
+    }
+
+    @Test func codexModuleAppearsForExistingVisibleModuleSettings() {
+        let suite = "codexModuleAppearsForExistingVisibleModuleSettings"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(["cpu", "gpu", "memory", "battery"], forKey: "settings.visibleKinds")
+
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(settings.isVisible(.codex))
     }
 
     @Test func visibilityToggle() {
@@ -49,5 +85,13 @@ struct SettingsTests {
         #expect(settings.isMetricEnabled("temperature-status", for: .cpu))
         #expect(!settings.isMetricEnabled("missing", for: .cpu))
         #expect(!settings.canEnableMetric("missing", for: .cpu))
+    }
+
+    @Test func memoryDefaultsShowCompressed() {
+        let defaults = UserDefaults(suiteName: "memoryDefaultsShowCompressed")!
+        defaults.removePersistentDomain(forName: "memoryDefaultsShowCompressed")
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(settings.isMetricEnabled("compressed", for: .memory))
     }
 }

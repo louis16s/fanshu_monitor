@@ -56,6 +56,12 @@
         "en": { "stringUnit": { "state": "translated", "value": "Power" } }
       }
     },
+    "kind.codex": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Codex Usage" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Codex Usage" } }
+      }
+    },
     "metric.current": {
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前" } },
@@ -146,16 +152,22 @@
         "en": { "stringUnit": { "state": "translated", "value": "Dark" } }
       }
     },
-    "color-scheme.balanced": {
+    "language.system": {
       "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "平衡" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Balanced" } }
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "跟随系统" } },
+        "en": { "stringUnit": { "state": "translated", "value": "System" } }
       }
     },
-    "color-scheme.vibrant": {
+    "language.english": {
       "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "活力" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Vibrant" } }
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "英语" } },
+        "en": { "stringUnit": { "state": "translated", "value": "English" } }
+      }
+    },
+    "color-scheme.system-blue": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "默认" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Default" } }
       }
     },
     "color-scheme.graphite": {
@@ -164,22 +176,16 @@
         "en": { "stringUnit": { "state": "translated", "value": "Graphite" } }
       }
     },
-    "color-scheme.aurora": {
+    "color-scheme.teal": {
       "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "极光" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Aurora" } }
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "海盐" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Sea Salt" } }
       }
     },
-    "color-scheme.sunrise": {
+    "color-scheme.rose": {
       "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "晨光" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Sunrise" } }
-      }
-    },
-    "color-scheme.mono": {
-      "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "墨白" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Mono" } }
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "莓果" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Berry" } }
       }
     },
     "metric.cpu.system": {
@@ -198,12 +204,6 @@
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "闲置" } },
         "en": { "stringUnit": { "state": "translated", "value": "Idle" } }
-      }
-    },
-    "metric.cpu.uptime": {
-      "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启动时间" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Uptime" } }
       }
     },
     "metric.cpu.temperature": {
@@ -252,12 +252,6 @@
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "压力" } },
         "en": { "stringUnit": { "state": "translated", "value": "Pressure" } }
-      }
-    },
-    "metric.memory.swap-used": {
-      "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "交换已用" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Swap Used" } }
       }
     },
     "metric.memory.total": {
@@ -434,6 +428,12 @@
         "en": { "stringUnit": { "state": "translated", "value": "Theme" } }
       }
     },
+    "settings.language": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "语言" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Language" } }
+      }
+    },
     "settings.color-scheme": {
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "配色" } },
@@ -448,8 +448,44 @@
     },
     "settings.halo-ring": {
       "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "负载环" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Halo Ring" } }
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "菜单栏圆环内容" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Menu Bar Ring Content" } }
+      }
+    },
+    "settings.utilities": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "实用功能" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Utilities" } }
+      }
+    },
+    "settings.check-updates": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "检查更新" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Check for Updates" } }
+      }
+    },
+    "settings.check-updates.subtitle": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "允许后台检查新版本，手动检查始终可用。" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Allow background update checks. Manual checks are always available." } }
+      }
+    },
+    "settings.codex-refresh-interval": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Codex 刷新间隔" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Codex Refresh Interval" } }
+      }
+    },
+    "settings.codex-refresh-interval.subtitle": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开面板会立即刷新一次，之后按间隔更新。" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Opening the panel refreshes once immediately, then updates on this interval." } }
+      }
+    },
+    "settings.minutes-format": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%d 分钟" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%d min" } }
       }
     },
     "settings.show-in-panel": {
@@ -480,6 +516,30 @@
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "重置默认值" } },
         "en": { "stringUnit": { "state": "translated", "value": "Reset Defaults" } }
+      }
+    },
+    "settings.reset-settings": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重置设置" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Reset Settings" } }
+      }
+    },
+    "settings.reset-settings.subtitle": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "恢复主题、模块、显示器和刷新间隔的默认值。" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Restore default theme, modules, display controls, and refresh intervals." } }
+      }
+    },
+    "settings.advanced": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "高级" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Advanced" } }
+      }
+    },
+    "settings.reset": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重置" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Reset" } }
       }
     },
     "settings.include-built-in": {

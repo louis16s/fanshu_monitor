@@ -39,10 +39,10 @@ struct MonitorPanelView: View {
         .containerBackground(.clear, for: .window)
         .background(TransparentWindowBackground(colorSchemeOverride: store.settings.themePreference.colorScheme))
         .onAppear {
-            store.isPanelVisible = true
+            store.panelDidAppear()
         }
         .onDisappear {
-            store.isPanelVisible = false
+            store.panelDidDisappear()
         }
     }
 
@@ -61,7 +61,7 @@ struct MonitorPanelView: View {
                     .symbolEffect(.pulse, options: .repeating.speed(0.8))
                     .animation(.easeInOut(duration: 0.6), value: store.haloRingLoadLevel)
 
-                Text("系统 · 实时 · v\(appVersion)")
+                Text("番薯monitor · v\(appVersion)")
                     .panelLabelFont(size: 9, tracking: 1.1)
                     .foregroundStyle(theme.captionText)
             }
@@ -163,6 +163,16 @@ struct MonitorPanelView: View {
             ) {
                 toggleExpansion(for: module.kind)
             }
+        case .codex:
+            MetricGlassRow(
+                module: module,
+                theme: theme,
+                detail: module.summary,
+                details: enabledMetrics(for: module),
+                isExpanded: expandedKinds.contains(module.kind)
+            ) {
+                toggleExpansion(for: module.kind)
+            }
         }
     }
 
@@ -226,16 +236,19 @@ private struct MetricGlassRow: View {
                     .foregroundStyle(tint)
                     .frame(width: 18)
 
-                // 标签 + 数值紧随其后（用户反馈：CPU: 37%）
-                Text("\(module.kind.title):")
+                Text(titleText)
                     .panelMetricLabelFont()
                     .foregroundStyle(theme.primaryText)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.82)
 
-                Text(detail)
-                    .panelMonoFont(size: 12, weight: .semibold)
-                    .foregroundStyle(theme.valueText)
-                    .lineLimit(1)
+                if module.kind != .codex {
+                    Text(detail)
+                        .panelTitleValueFont()
+                        .foregroundStyle(theme.valueText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                }
 
                 Spacer(minLength: 8)
 
@@ -265,6 +278,10 @@ private struct MetricGlassRow: View {
         .glassEffect(.regular.tint(theme.rowGlassTint(for: module.kind)), in: .rect(cornerRadius: MonitorConstants.rowCornerRadius, style: .continuous))
     }
 
+    private var titleText: String {
+        module.kind == .codex ? module.kind.title : "\(module.kind.title):"
+    }
+
     @ViewBuilder
     private func trailingView(theme: MonitorPanelTheme) -> some View {
         switch module.kind {
@@ -278,6 +295,9 @@ private struct MetricGlassRow: View {
                 .frame(width: 56, height: 3)
         case .network, .battery:
             EmptyView()
+        case .codex:
+            ProgressMeter(value: module.value, tint: tint, theme: theme)
+                .frame(width: 56, height: 3)
         }
     }
 
@@ -374,7 +394,7 @@ private func chineseMetricName(kind: MonitorKind, id: String) -> String? {
     switch (kind, id) {
     case (.memory, "app-memory"): return "应用占用"
     case (.memory, "cached"): return "缓存"
-    case (.memory, "compressed"): return "压缩"
+    case (.memory, "compressed"): return "已压缩"
     case (.network, "ssid"): return "无线名称"
     case (.network, "ipv4"): return "IPv4 地址"
     case (.network, "ipv6"): return "IPv6 地址"
@@ -382,6 +402,10 @@ private func chineseMetricName(kind: MonitorKind, id: String) -> String? {
     case (.network, "download"): return "下载"
     case (.battery, "charging-power"): return "充电功率"
     case (.battery, "adapter"): return "适配器"
+    case (.codex, "five-hour"): return "5H"
+    case (.codex, "weekly"): return "一周"
+    case (.codex, "next-reset"): return "下次刷新"
+    case (.codex, "status"): return "状态"
     default: return nil
     }
 }
@@ -554,7 +578,7 @@ private struct NetworkGlassRow: View {
                             .fixedSize(horizontal: true, vertical: false)
 
                         Text(module.summary)
-                            .panelMonoFont(size: 12, weight: .semibold)
+                            .panelTitleValueFont()
                             .foregroundStyle(theme.valueText)
                             .lineLimit(1)
                             .minimumScaleFactor(0.82)
@@ -633,7 +657,7 @@ private struct BatteryGlassRow: View {
                     .layoutPriority(2)
 
                 Text(summaryText)
-                    .panelMonoFont(size: 12, weight: .semibold)
+                    .panelTitleValueFont()
                     .foregroundStyle(theme.valueText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
@@ -836,21 +860,21 @@ private func parseExternalVolumes(_ context: String?) -> [StorageVolumeInfo] {
         return []
     }
 
-    if let payload = try? JSONDecoder().decode([ExternalVolumePayload].self, from: data) {
-        return payload.enumerated().map { index, volume in
-            StorageVolumeInfo(
-                id: "external-\(index)-\(volume.name)",
-                name: volume.name,
-                used: volume.used,
-                free: volume.free,
-                total: volume.total,
-                percentage: volume.percentage,
-                isExternal: true
-            )
-        }
+    guard let payload = try? JSONDecoder().decode([ExternalVolumePayload].self, from: data) else {
+        return []
     }
 
-    return parseLegacyExternalVolumes(context)
+    return payload.enumerated().map { index, volume in
+        StorageVolumeInfo(
+            id: "external-\(index)-\(volume.name)",
+            name: volume.name,
+            used: volume.used,
+            free: volume.free,
+            total: volume.total,
+            percentage: volume.percentage,
+            isExternal: true
+        )
+    }
 }
 
 private struct ExternalVolumePayload: Decodable {
@@ -859,25 +883,6 @@ private struct ExternalVolumePayload: Decodable {
     let free: String
     let total: String
     let percentage: Int
-}
-
-private func parseLegacyExternalVolumes(_ context: String) -> [StorageVolumeInfo] {
-    context.split(separator: ";").enumerated().compactMap { index, item in
-        let parts = item.split(separator: "|", omittingEmptySubsequences: false)
-        guard parts.count == 5 else {
-            return nil
-        }
-
-        return StorageVolumeInfo(
-            id: "external-\(index)-\(parts[0])",
-            name: String(parts[0]),
-            used: String(parts[1]),
-            free: String(parts[2]),
-            total: String(parts[3]),
-            percentage: Int(parts[4]) ?? 0,
-            isExternal: true
-        )
-    }
 }
 
 private struct MetricPill: View {
@@ -951,6 +956,12 @@ private extension Text {
         self
             .font(.system(size: 12, weight: .medium))
             .kerning(0.15)
+    }
+
+    func panelTitleValueFont() -> some View {
+        self
+            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+            .monospacedDigit()
     }
 
     func panelCaptionFont(size: CGFloat, weight: Font.Weight = .medium) -> some View {

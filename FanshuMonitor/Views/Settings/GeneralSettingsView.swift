@@ -27,6 +27,19 @@ struct GeneralSettingsView: View {
 
                 SettingsDivider()
 
+                SettingsRow(title: String(localized: "settings.language")) {
+                    Picker(String(localized: "settings.language"), selection: $settings.languagePreference) {
+                        ForEach(AppLanguagePreference.allCases) { language in
+                            Text(language.title).tag(language)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                }
+
+                SettingsDivider()
+
                 SettingsRow(title: String(localized: "settings.color-scheme")) {
                     Picker(String(localized: "settings.color-scheme"), selection: $settings.colorSchemePreference) {
                         ForEach(MonitorColorSchemePreference.allCases) { colorScheme in
@@ -52,11 +65,21 @@ struct GeneralSettingsView: View {
                 }
             }
 
-            SettingsGroup("实用功能") {
-                SettingsRow(title: "检查更新", subtitle: "允许后台检查新版本，手动检查始终可用。") {
+            SettingsGroup(String(localized: "settings.utilities")) {
+                SettingsRow(title: String(localized: "settings.check-updates"), subtitle: String(localized: "settings.check-updates.subtitle")) {
                     Toggle("", isOn: $settings.updateChecksEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
+                }
+
+                SettingsDivider()
+
+                SettingsRow(title: String(localized: "settings.codex-refresh-interval"), subtitle: String(localized: "settings.codex-refresh-interval.subtitle")) {
+                    Stepper(value: $settings.codexRefreshIntervalMinutes, in: 1...60, step: 1) {
+                        Text(codexRefreshIntervalText)
+                            .monospacedDigit()
+                    }
+                    .fixedSize()
                 }
 
             }
@@ -64,16 +87,27 @@ struct GeneralSettingsView: View {
             HStack {
                 Spacer()
                 if #available(macOS 26, *) {
-                    Button("重置设置") {
+                    Button(String(localized: "settings.reset-settings")) {
                         settings.resetAll()
                     }
+                    .controlSize(.small)
                     .buttonStyle(.glass)
                 } else {
-                    Button("重置设置") {
+                    Button(String(localized: "settings.reset-settings")) {
                         settings.resetAll()
                     }
+                    .controlSize(.small)
                 }
             }
+            .padding(.top, -2)
+            .padding(.trailing, 2)
         }
+    }
+
+    private var codexRefreshIntervalText: String {
+        String(
+            format: String(localized: "settings.minutes-format"),
+            Int(settings.codexRefreshIntervalMinutes)
+        )
     }
 }

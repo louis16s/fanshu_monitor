@@ -57,8 +57,7 @@ struct AboutSettingsView: View {
         SettingsIconHeader(
             title: "番薯Monitor",
             subtitle: String(localized: "about.version") + " \(appVersion)",
-            footnote: String(localized: "about.footnote"),
-            imageName: "AboutIcon"
+            footnote: String(localized: "about.footnote")
         ) {
             updateAccessory
         }

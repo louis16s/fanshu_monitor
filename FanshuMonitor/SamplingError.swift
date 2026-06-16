@@ -7,6 +7,7 @@ enum SamplingError: Error, CustomStringConvertible {
     case storageUnavailable
     case networkUnavailable
     case batteryUnavailable
+    case codexUnavailable
     case ioKitError(underlying: Error)
 
     var description: String {
@@ -17,6 +18,7 @@ enum SamplingError: Error, CustomStringConvertible {
         case .storageUnavailable: return "Storage sampling unavailable"
         case .networkUnavailable: return "Network sampling unavailable"
         case .batteryUnavailable: return "Battery sampling unavailable"
+        case .codexUnavailable: return "Codex quota sampling unavailable"
         case .ioKitError(let error): return "IOKit error: \(error.localizedDescription)"
         }
     }

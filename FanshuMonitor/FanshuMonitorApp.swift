@@ -22,6 +22,7 @@ struct FanshuMonitorApp: App {
         MenuBarExtra {
             MonitorPanelView(store: monitorStore)
                 .preferredColorScheme(effectiveColorScheme)
+                .environment(\.locale, effectiveLocale)
         } label: {
             Image(nsImage: MenuBarComputeRingIcon.image(
                 load: monitorStore.displayedComputeLoad,
@@ -38,12 +39,14 @@ struct FanshuMonitorApp: App {
         WindowGroup("番薯Monitor Preview") {
             ContentView(store: monitorStore)
                 .preferredColorScheme(effectiveColorScheme)
+                .environment(\.locale, effectiveLocale)
         }
         .windowResizability(.contentSize)
         .commands { AppMenuCommands() }
 
         Settings {
             SettingsRootView(settings: monitorStore.settings)
+                .environment(\.locale, effectiveLocale)
                 // 设置窗口始终跟随系统外观
         }
         .windowResizability(.contentSize)
@@ -51,6 +54,10 @@ struct FanshuMonitorApp: App {
 
     private var effectiveColorScheme: ColorScheme? {
         monitorStore.settings.themePreference.colorScheme
+    }
+
+    private var effectiveLocale: Locale {
+        monitorStore.settings.languagePreference.locale ?? .current
     }
 }
 

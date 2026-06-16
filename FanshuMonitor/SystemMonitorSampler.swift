@@ -6,14 +6,20 @@ struct SystemMonitorSnapshot {
 }
 
 final class SystemMonitorSampler {
-    private let samplers: [MonitorKind: MonitorSampler] = [
-        .cpu: CPUSampler(),
-        .gpu: GPUSampler(),
-        .memory: MemorySampler(),
-        .storage: StorageSampler(),
-        .network: NetworkSampler(),
-        .battery: BatterySampler()
-    ]
+    private let codexSampler = CodexQuotaSampler()
+    private let samplers: [MonitorKind: MonitorSampler]
+
+    init() {
+        samplers = [
+            .cpu: CPUSampler(),
+            .gpu: GPUSampler(),
+            .memory: MemorySampler(),
+            .storage: StorageSampler(),
+            .network: NetworkSampler(),
+            .battery: BatterySampler(),
+            .codex: codexSampler
+        ]
+    }
 
     func sample(previousModules: [MonitorModule]) -> Result<SystemMonitorSnapshot, SamplingError> {
         sample(kinds: MonitorKind.allCases, previousModules: previousModules)
@@ -58,6 +64,22 @@ final class SystemMonitorSampler {
         }
     }
 
+    func setCodexRefreshInterval(_ interval: TimeInterval) {
+        codexSampler.setRefreshInterval(interval)
+    }
+
+    func refreshCodex(previousModules: [MonitorModule], completion: @escaping (SystemMonitorSnapshot) -> Void) {
+        let previous = previousModules.first { $0.kind == .codex }
+        codexSampler.forceRefresh(previous: previous) { module in
+            var modulesByKind = Dictionary(uniqueKeysWithValues: previousModules.map { ($0.kind, $0) })
+            modulesByKind[.codex] = module
+            let modules = MonitorKind.allCases.map { kind in
+                modulesByKind[kind] ?? MonitorModule.placeholder(kind: kind)
+            }
+            completion(SystemMonitorSnapshot(modules: modules))
+        }
+    }
+
     private func samplingError(for kind: MonitorKind) -> SamplingError {
         switch kind {
         case .cpu: return .cpuUnavailable
@@ -66,6 +88,7 @@ final class SystemMonitorSampler {
         case .storage: return .storageUnavailable
         case .network: return .networkUnavailable
         case .battery: return .batteryUnavailable
+        case .codex: return .codexUnavailable
         }
     }
 }

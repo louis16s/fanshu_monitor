@@ -8,6 +8,10 @@ enum HaloRingSource: String, CaseIterable, Identifiable {
     case cpu
     case gpu
     case memory
+    case storage
+    case network
+    case battery
+    case codex
 
     var id: String { rawValue }
 
@@ -17,6 +21,10 @@ enum HaloRingSource: String, CaseIterable, Identifiable {
         case .cpu: "CPU"
         case .gpu: "GPU"
         case .memory: String(localized: "ring-source.memory")
+        case .storage: String(localized: "kind.storage")
+        case .network: String(localized: "kind.network")
+        case .battery: String(localized: "kind.battery")
+        case .codex: "Codex Usage"
         }
     }
 }
@@ -52,6 +60,7 @@ enum MonitorKind: String, CaseIterable, Identifiable {
     case storage
     case network
     case battery
+    case codex
 
     var id: String { rawValue }
 
@@ -69,6 +78,8 @@ enum MonitorKind: String, CaseIterable, Identifiable {
             String(localized: "kind.network")
         case .battery:
             String(localized: "kind.battery")
+        case .codex:
+            "Codex Usage"
         }
     }
 
@@ -86,6 +97,8 @@ enum MonitorKind: String, CaseIterable, Identifiable {
             "network"
         case .battery:
             "powerplug"
+        case .codex:
+            "terminal"
         }
     }
 
@@ -109,10 +122,9 @@ enum MonitorKind: String, CaseIterable, Identifiable {
             return [
                 MetricSwitch(id: "used", title: String(localized: "metric.memory.used"), isDefault: true),
                 MetricSwitch(id: "pressure", title: String(localized: "metric.memory.pressure"), isDefault: true),
-                MetricSwitch(id: "swap-used", title: String(localized: "metric.memory.swap-used"), isDefault: true),
+                MetricSwitch(id: "compressed", title: "已压缩", isDefault: true),
                 MetricSwitch(id: "app-memory", title: "应用占用", isDefault: true),
                 MetricSwitch(id: "cached", title: "缓存", isDefault: false),
-                MetricSwitch(id: "compressed", title: "压缩", isDefault: false),
                 MetricSwitch(id: "total", title: String(localized: "metric.memory.total"), isDefault: false),
             ]
         case .storage:
@@ -136,6 +148,13 @@ enum MonitorKind: String, CaseIterable, Identifiable {
                 MetricSwitch(id: "health", title: String(localized: "metric.battery.health"), isDefault: true),
                 MetricSwitch(id: "cycle-count", title: String(localized: "metric.battery.cycle-count"), isDefault: true),
                 MetricSwitch(id: "temperature", title: String(localized: "metric.battery.temperature"), isDefault: false),
+            ]
+        case .codex:
+            return [
+                MetricSwitch(id: "five-hour", title: "5H", isDefault: true),
+                MetricSwitch(id: "weekly", title: "一周", isDefault: true),
+                MetricSwitch(id: "next-reset", title: "下次刷新", isDefault: true),
+                MetricSwitch(id: "status", title: "状态", isDefault: true),
             ]
         }
     }
@@ -173,6 +192,10 @@ struct MonitorModule: Identifiable {
             return .calm
         case .network:
             if value >= MonitorConstants.networkWarningThreshold { return .warning }
+            return .calm
+        case .codex:
+            if value >= MonitorConstants.criticalThreshold { return .critical }
+            if value >= MonitorConstants.warningThreshold { return .warning }
             return .calm
         case .battery:
             if metrics.first(where: { $0.name == "type" })?.value == "ac-power" {
@@ -228,6 +251,7 @@ final class MonitorStore: ObservableObject {
         self.settings = settings
         allModules = initialModules
         modules = initialModules.filter { settings.isVisible($0.kind) }
+        sampler.setCodexRefreshInterval(settings.codexRefreshIntervalMinutes * 60)
         advance(kinds: settings.visibleKinds)
         refreshSchedule.markRefreshed(settings.visibleKinds, at: Date())
         #if DISPLAY_CONTROL
@@ -243,6 +267,13 @@ final class MonitorStore: ObservableObject {
                 guard let self else { return }
                 self.modules = self.visibleModules(from: self.allModules)
                 self.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        settings.$codexRefreshIntervalMinutes
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] minutes in
+                self?.sampler.setCodexRefreshInterval(minutes * 60)
             }
             .store(in: &cancellables)
         timerCancellable = Timer.publish(every: refreshSchedule.tickInterval, on: .main, in: .common)
@@ -288,12 +319,20 @@ final class MonitorStore: ObservableObject {
             return allModules.first { $0.kind == .gpu }?.value ?? 0
         case .memory:
             return allModules.first { $0.kind == .memory }?.value ?? 0
+        case .storage:
+            return allModules.first { $0.kind == .storage }?.value ?? 0
+        case .network:
+            return allModules.first { $0.kind == .network }?.value ?? 0
+        case .battery:
+            return allModules.first { $0.kind == .battery }?.value ?? 0
+        case .codex:
+            return allModules.first { $0.kind == .codex }?.value ?? 0
         }
     }
 
     var haloRingLoadLevel: MenuBarComputeLoadLevel {
         switch settings.ringSource {
-        case .combined, .cpu, .gpu:
+        case .combined, .cpu, .gpu, .storage, .network, .battery, .codex:
             return ComputeLoadModel.loadLevel(for: combinedComputeLoad)
         case .memory:
             let pressure = allModules.first { $0.kind == .memory }?.pressure ?? .unknown
@@ -374,6 +413,25 @@ final class MonitorStore: ObservableObject {
 
     private func visibleModules(from modules: [MonitorModule]) -> [MonitorModule] {
         modules.filter { settings.isVisible($0.kind) }
+    }
+
+    func panelDidAppear() {
+        isPanelVisible = true
+        refreshCodexUsageNow()
+    }
+
+    func panelDidDisappear() {
+        isPanelVisible = false
+    }
+
+    func refreshCodexUsageNow() {
+        guard settings.isVisible(.codex) else { return }
+        refreshSchedule.markRefreshed([MonitorKind.codex], at: Date())
+        sampler.refreshCodex(previousModules: allModules) { [weak self] snapshot in
+            guard let self else { return }
+            self.allModules = snapshot.modules
+            self.modules = self.visibleModules(from: self.allModules)
+        }
     }
 
     func refreshNow() {
@@ -462,7 +520,7 @@ final class MonitorRefreshSchedule {
         tickInterval: TimeInterval = 1,
         intervals: [MonitorKind: TimeInterval] = [
             .cpu: 1, .gpu: 2, .memory: 3,
-            .storage: 10, .network: 1, .battery: 5
+            .storage: 10, .network: 1, .battery: 5, .codex: 5
         ]
     ) {
         self.tickInterval = tickInterval
@@ -502,6 +560,8 @@ final class MonitorRefreshSchedule {
             return max(base, 5)
         case .gpu, .network, .battery:
             return max(base, 15)
+        case .codex:
+            return max(base, 300)
         case .storage:
             return max(base, 60)
         }

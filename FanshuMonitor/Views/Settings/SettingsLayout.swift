@@ -25,12 +25,12 @@ struct SettingsPage<Content: View>: View {
     }
 
     private var pageContent: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 18) {
             content
         }
-        .padding(.top, 22)
-        .padding(.horizontal, 36)
-        .padding(.bottom, 28)
+        .padding(.top, 26)
+        .padding(.horizontal, 34)
+        .padding(.bottom, 30)
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
@@ -45,17 +45,22 @@ struct SettingsGroup<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
             if let title {
                 Text(title)
-                    .font(.headline.weight(.semibold))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, 2)
             }
 
             VStack(spacing: 0) {
                 content
             }
-            .background(.quaternary.opacity(0.42), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .background(.quaternary.opacity(0.48), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(.separator.opacity(0.22), lineWidth: 1)
+            }
         }
     }
 }
@@ -87,10 +92,11 @@ struct SettingsRow<Accessory: View>: View {
             Spacer(minLength: 16)
 
             accessory
+                .frame(minWidth: 112, alignment: .trailing)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, subtitle == nil ? 10 : 11)
-        .frame(minHeight: subtitle == nil ? 44 : 58)
+        .padding(.vertical, subtitle == nil ? 11 : 12)
+        .frame(minHeight: subtitle == nil ? 46 : 62)
     }
 }
 
@@ -107,26 +113,23 @@ struct SettingsIconHeader<Accessory: View>: View {
     let title: String
     let subtitle: String
     let footnote: String
-    let imageName: String
     let accessory: Accessory
 
     init(
         title: String,
         subtitle: String,
         footnote: String,
-        imageName: String,
         @ViewBuilder accessory: () -> Accessory = { EmptyView() }
     ) {
         self.title = title
         self.subtitle = subtitle
         self.footnote = footnote
-        self.imageName = imageName
         self.accessory = accessory()
     }
 
     var body: some View {
         let header = HStack(spacing: 12) {
-            Image(imageName)
+            Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 46, height: 46)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))

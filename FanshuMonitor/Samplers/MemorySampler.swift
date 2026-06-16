@@ -33,7 +33,6 @@ final class MemorySampler: MonitorSampler {
         let used = max(0, active + inactive + speculative + wired + compressed - purgeable - external)
         let total = totalMemorySize
         let percentage = total > 0 ? (used / total) * 100 : 0
-        let swap = swapUsage()
         let pressure = memoryPressure()
         let appMemory = currentResidentMemory()
 
@@ -44,10 +43,9 @@ final class MemorySampler: MonitorSampler {
             metrics: [
                 MonitorMetric(name: "used", value: memoryBytes(used)),
                 MonitorMetric(name: "pressure", value: pressure.title),
-                MonitorMetric(name: "swap-used", value: swapUsedText(swap)),
+                MonitorMetric(name: "compressed", value: memoryBytes(compressed)),
                 MonitorMetric(name: "app-memory", value: appMemory.map(memoryBytes) ?? "--"),
                 MonitorMetric(name: "cached", value: memoryBytes(cached)),
-                MonitorMetric(name: "compressed", value: memoryBytes(compressed)),
                 MonitorMetric(name: "total", value: memoryBytes(total))
             ],
             samples: seedSamples(percentage),
@@ -87,27 +85,6 @@ final class MemorySampler: MonitorSampler {
         default:
             return .normal
         }
-    }
-
-    private func swapUsage() -> SwapUsage? {
-        var usage = xsw_usage()
-        var size = MemoryLayout<xsw_usage>.stride
-        let result = sysctlbyname("vm.swapusage", &usage, &size, nil, 0)
-        guard result == 0 else {
-            return nil
-        }
-        return SwapUsage(
-            used: Double(usage.xsu_used),
-            total: Double(usage.xsu_total),
-            available: Double(usage.xsu_avail)
-        )
-    }
-
-    private func swapUsedText(_ swap: SwapUsage?) -> String {
-        guard let used = swap?.used else {
-            return "--"
-        }
-        return memoryBytes(used)
     }
 
     private func currentResidentMemory() -> Double? {
@@ -152,10 +129,4 @@ private enum MemoryPressureState {
         case .unknown: .unknown
         }
     }
-}
-
-private struct SwapUsage {
-    let used: Double
-    let total: Double
-    let available: Double
 }
