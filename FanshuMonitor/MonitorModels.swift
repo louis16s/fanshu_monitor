@@ -153,8 +153,8 @@ enum MonitorKind: String, CaseIterable, Identifiable {
             return [
                 MetricSwitch(id: "five-hour", title: "5H", isDefault: true),
                 MetricSwitch(id: "weekly", title: "一周", isDefault: true),
-                MetricSwitch(id: "next-reset", title: "下次刷新", isDefault: true),
-                MetricSwitch(id: "status", title: "状态", isDefault: true),
+                MetricSwitch(id: "five-hour-reset", title: "5H刷新", isDefault: true),
+                MetricSwitch(id: "weekly-reset", title: "周刷新", isDefault: true),
             ]
         }
     }

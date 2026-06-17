@@ -38,7 +38,7 @@ enum SettingsWindowPresenter {
         AppLogger.settings.info("Registering settings window")
         settingsWindow = window
         window.title = ""
-        normalize(window)
+        window.minSize = NSSize(width: 700, height: 620)
 
         if pendingFocus {
             pendingFocus = false
@@ -69,21 +69,5 @@ enum SettingsWindowPresenter {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
-    }
-
-    @MainActor
-    private static func normalize(_ window: NSWindow) {
-        let targetSize = NSSize(width: 600, height: 382)
-        window.minSize = NSSize(width: 560, height: 360)
-
-        guard window.frame.width > 740 || window.frame.height > 520 else {
-            return
-        }
-
-        var frame = window.frame
-        frame.origin.x += (frame.width - targetSize.width) / 2
-        frame.origin.y += (frame.height - targetSize.height) / 2
-        frame.size = targetSize
-        window.setFrame(frame, display: true)
     }
 }

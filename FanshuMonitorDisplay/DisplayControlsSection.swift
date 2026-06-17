@@ -250,7 +250,7 @@ private struct ControlAvailabilityGrid: View {
             Image(systemName: supported ? "checkmark.circle.fill" : "xmark.circle")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(supported ? .green : palette.captionText)
-            Text(supported ? "\(name) 可用" : "\(name) 不可用：\(reason ?? "--")")
+            Text(supported ? "\(name) 可用" : "\(name) 不可用: \(reason ?? "--")")
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(palette.captionText)
                 .lineLimit(1)

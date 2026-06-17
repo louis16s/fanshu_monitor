@@ -218,7 +218,16 @@ final class MonitorSettings: ObservableObject {
             case .battery:
                 return ["充电功率": "charging-power", "健康度": "health", "循环数": "cycle-count", "温度": "temperature", "适配器": "adapter", "功耗": "power"]
             case .codex:
-                return ["5H": "five-hour", "一周": "weekly", "下次刷新": "next-reset", "状态": "status"]
+                return [
+                    "5H": "five-hour",
+                    "一周": "weekly",
+                    "下次刷新": "five-hour-reset",
+                    "状态": "weekly-reset",
+                    "5H刷新": "five-hour-reset",
+                    "周刷新": "weekly-reset",
+                    "next-reset": "five-hour-reset",
+                    "status": "weekly-reset"
+                ]
             }
         }()
 

@@ -242,13 +242,11 @@ private struct MetricGlassRow: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
 
-                if module.kind != .codex {
-                    Text(detail)
-                        .panelTitleValueFont()
-                        .foregroundStyle(theme.valueText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
-                }
+                Text(detail)
+                    .panelTitleValueFont()
+                    .foregroundStyle(theme.valueText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
 
                 Spacer(minLength: 8)
 
@@ -279,7 +277,7 @@ private struct MetricGlassRow: View {
     }
 
     private var titleText: String {
-        module.kind == .codex ? module.kind.title : "\(module.kind.title):"
+        "\(module.kind.title):"
     }
 
     @ViewBuilder
@@ -297,7 +295,7 @@ private struct MetricGlassRow: View {
             EmptyView()
         case .codex:
             ProgressMeter(value: module.value, tint: tint, theme: theme)
-                .frame(width: 56, height: 3)
+                .frame(width: 72, height: 3)
         }
     }
 
@@ -404,6 +402,8 @@ private func chineseMetricName(kind: MonitorKind, id: String) -> String? {
     case (.battery, "adapter"): return "适配器"
     case (.codex, "five-hour"): return "5H"
     case (.codex, "weekly"): return "一周"
+    case (.codex, "five-hour-reset"): return "5H刷新"
+    case (.codex, "weekly-reset"): return "周刷新"
     case (.codex, "next-reset"): return "下次刷新"
     case (.codex, "status"): return "状态"
     default: return nil

@@ -29,8 +29,8 @@ final class CodexQuotaSampler: MonitorSampler {
             metrics: [
                 MonitorMetric(name: "five-hour", value: "--"),
                 MonitorMetric(name: "weekly", value: "--"),
-                MonitorMetric(name: "next-reset", value: "--"),
-                MonitorMetric(name: "status", value: "刷新中")
+                MonitorMetric(name: "five-hour-reset", value: "--"),
+                MonitorMetric(name: "weekly-reset", value: "--")
             ],
             samples: seedSamples(0)
         )
@@ -89,7 +89,8 @@ final class CodexQuotaSampler: MonitorSampler {
                 metrics: [
                     MonitorMetric(name: "five-hour", value: cachedMetric("five-hour")),
                     MonitorMetric(name: "weekly", value: cachedMetric("weekly")),
-                    MonitorMetric(name: "next-reset", value: cachedMetric("next-reset")),
+                    MonitorMetric(name: "five-hour-reset", value: cachedMetric("five-hour-reset")),
+                    MonitorMetric(name: "weekly-reset", value: cachedMetric("weekly-reset")),
                     MonitorMetric(name: "status", value: error.localizedDescription)
                 ],
                 samples: cachedModule?.samples ?? seedSamples(0)
@@ -106,21 +107,24 @@ final class CodexQuotaSampler: MonitorSampler {
         let weekly = report.periods.first { $0.id == "week" }
         let fiveHourUsed = fiveHour?.usedPercent ?? usedPercent(from: fiveHour)
         let weeklyUsed = weekly?.usedPercent ?? usedPercent(from: weekly)
-        let maxUsed = [fiveHourUsed, weeklyUsed].compactMap { $0 }.max() ?? 0
-        let nextReset = [fiveHour?.resetAt, weekly?.resetAt].compactMap { $0 }.min()
-        let nextResetText = nextReset.map { quotaDateFormatter.string(from: $0) } ?? "--"
+        let fiveHourRemainingValue = (fiveHour?.remainingRatio).map { $0 * 100 } ?? 0
+        let fiveHourRemaining = percentText(fiveHour?.remainingRatio)
+        let weeklyRemaining = percentText(weekly?.remainingRatio)
+        let fiveHourResetText = resetText(fiveHour?.resetAt)
+        let weeklyResetText = resetText(weekly?.resetAt)
+        let planName = normalizedPlanName(report.planType)
 
         return MonitorModule(
             kind: .codex,
-            value: maxUsed,
-            summary: nextReset.map { "下次 " + quotaDateFormatter.string(from: $0) } ?? "--",
+            value: fiveHourRemainingValue,
+            summary: planName,
             metrics: [
-                MonitorMetric(name: "five-hour", value: percentText(fiveHour?.remainingRatio)),
-                MonitorMetric(name: "weekly", value: percentText(weekly?.remainingRatio)),
-                MonitorMetric(name: "next-reset", value: nextResetText),
-                MonitorMetric(name: "status", value: report.message ?? "正常")
+                MonitorMetric(name: "five-hour", value: fiveHourRemaining),
+                MonitorMetric(name: "weekly", value: weeklyRemaining),
+                MonitorMetric(name: "five-hour-reset", value: fiveHourResetText),
+                MonitorMetric(name: "weekly-reset", value: weeklyResetText)
             ],
-            samples: seedSamples(maxUsed)
+            samples: seedSamples(fiveHourRemainingValue)
         )
     }
 
@@ -132,6 +136,24 @@ final class CodexQuotaSampler: MonitorSampler {
     private static func percentText(_ ratio: Double?) -> String {
         guard let ratio else { return "--" }
         return "\(Int((ratio * 100).rounded()))%"
+    }
+
+    private static func resetText(_ date: Date?) -> String {
+        date.map { quotaDateFormatter.string(from: $0) } ?? "--"
+    }
+
+    private static func normalizedPlanName(_ planType: String?) -> String {
+        guard let planType else { return "Free" }
+        switch planType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "free":
+            return "Free"
+        case "plus", "pro":
+            return "Plus"
+        case "team", "teams", "business":
+            return "Team"
+        default:
+            return planType.prefix(1).uppercased() + planType.dropFirst().lowercased()
+        }
     }
 }
 
@@ -211,7 +233,7 @@ struct CodexUsageClient: Sendable {
         request.httpMethod = "GET"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("番薯Monitor/0.2.2", forHTTPHeaderField: "User-Agent")
+        request.setValue("番薯Monitor/0.2.3", forHTTPHeaderField: "User-Agent")
 
         let data: Data
         let response: HTTPURLResponse
@@ -244,7 +266,7 @@ struct CodexUsageClient: Sendable {
             }
 
             return CodexQuotaReport(
-                message: response.planType.map { "套餐 \($0)" },
+                planType: response.planType,
                 periods: periods
             )
         } catch {
@@ -273,7 +295,7 @@ struct CodexUsageClient: Sendable {
 }
 
 struct CodexQuotaReport: Equatable, Sendable {
-    var message: String?
+    var planType: String?
     var periods: [CodexQuotaSnapshot]
 }
 

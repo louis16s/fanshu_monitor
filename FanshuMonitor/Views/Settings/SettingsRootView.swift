@@ -1,6 +1,12 @@
 import AppKit
 import SwiftUI
 
+private enum SettingsWindowMetrics {
+    static let width: CGFloat = 700
+    static let height: CGFloat = 620
+    static let sidebarWidth: CGFloat = 176
+}
+
 struct SettingsRootView: View {
     @ObservedObject var settings: MonitorSettings
     @State private var selection: SettingsRoute = .general
@@ -8,21 +14,20 @@ struct SettingsRootView: View {
     var body: some View {
         HStack(spacing: 0) {
             SettingsSidebar(selection: $selection, settings: settings)
-                .frame(width: 176)
+                .frame(width: SettingsWindowMetrics.sidebarWidth)
                 .background(.bar)
 
             Divider()
 
             detailView
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(
+                    width: SettingsWindowMetrics.width - SettingsWindowMetrics.sidebarWidth - 1,
+                    height: SettingsWindowMetrics.height
+                )
                 .background(Color(nsColor: .windowBackgroundColor))
         }
-        .frame(
-            minWidth: 640,
-            idealWidth: 700,
-            minHeight: 560,
-            idealHeight: 620
-        )
+        .frame(width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height)
+        .fixedSize()
         .background(SettingsWindowTracker(selection: $selection))
     }
 
@@ -59,6 +64,7 @@ struct SettingsWindowTracker: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {
         guard let window = nsView.window else { return }
         Task { @MainActor in
+            window.setStableSettingsSize()
             SettingsWindowPresenter.register(window)
         }
 
@@ -112,8 +118,22 @@ private final class SettingsWindowTrackingView: NSView {
         }
 
         Task { @MainActor in
+            window.setStableSettingsSize()
             SettingsWindowPresenter.register(window)
         }
+    }
+}
+
+private extension NSWindow {
+    func setStableSettingsSize() {
+        let size = NSSize(width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height)
+        contentMinSize = size
+        contentMaxSize = size
+        guard abs(contentView?.frame.width ?? 0 - size.width) > 0.5 ||
+              abs(contentView?.frame.height ?? 0 - size.height) > 0.5 else {
+            return
+        }
+        setContentSize(size)
     }
 }
 

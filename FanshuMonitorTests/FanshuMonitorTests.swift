@@ -151,8 +151,11 @@ struct FanshuMonitorTests {
         let module = CodexQuotaSampler.module(from: report)
 
         #expect(module.kind == .codex)
-        #expect(module.value == 40)
+        #expect(module.value == 75)
+        #expect(module.summary == "Plus")
         #expect(module.metrics.first { $0.name == "five-hour" }?.value == "75%")
         #expect(module.metrics.first { $0.name == "weekly" }?.value == "60%")
+        #expect(module.metrics.first { $0.name == "five-hour-reset" }?.value != nil)
+        #expect(module.metrics.first { $0.name == "weekly-reset" }?.value != nil)
     }
 }
