@@ -35,7 +35,7 @@
 如果 GitHub 图片缓存暂时不可用，可以直接访问 [官网](https://louis16s.github.io/fanshu_monitor/) 查看完整展示。
 
 <p align="center">
-  <img src="docs/images/balance-light.png" width="360" alt="番薯Monitor 浅色面板截图">
+  <img src="docs/images/current-panel.png" width="360" alt="番薯Monitor 面板截图">
 </p>
 
 ## 安装

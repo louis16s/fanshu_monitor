@@ -35,7 +35,7 @@ The project is still moving quickly. The goal is simple: useful monitoring and d
 If GitHub image caching is temporarily unavailable, open the [website](https://louis16s.github.io/fanshu_monitor/) for the full showcase.
 
 <p align="center">
-  <img src="docs/images/balance-light.png" width="360" alt="Fanshu Monitor light panel screenshot">
+  <img src="docs/images/current-panel.png" width="360" alt="Fanshu Monitor panel screenshot">
 </p>
 
 ## Installation
