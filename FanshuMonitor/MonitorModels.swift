@@ -255,6 +255,7 @@ final class MonitorStore: ObservableObject {
         advance(kinds: settings.visibleKinds)
         refreshSchedule.markRefreshed(settings.visibleKinds, at: Date())
         #if DISPLAY_CONTROL
+        displayController.settings = settings
         displayController.startAutomaticRefresh()
         displayController.refreshSynchronously()
         brightnessKeyEventTap = BrightnessKeyEventTap(settings: settings, displayController: displayController)
@@ -269,6 +270,16 @@ final class MonitorStore: ObservableObject {
                 self.objectWillChange.send()
             }
             .store(in: &cancellables)
+        #if DISPLAY_CONTROL
+        settings.$displaySoftwareDimmingEnabled
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.displayController.settings = self.settings
+            }
+            .store(in: &cancellables)
+        #endif
         settings.$codexRefreshIntervalMinutes
             .dropFirst()
             .receive(on: DispatchQueue.main)

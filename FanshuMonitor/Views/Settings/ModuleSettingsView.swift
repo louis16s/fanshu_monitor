@@ -98,6 +98,14 @@ struct DisplayModuleSettingsView: View {
 
                 SettingsDivider()
 
+                SettingsRow(title: "低亮度软件调光", subtitle: "DDC 到达最低亮度后，用屏幕遮罩继续变暗。") {
+                    Toggle("", isOn: $settings.displaySoftwareDimmingEnabled)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+
+                SettingsDivider()
+
                 SettingsRow(title: "音量", subtitle: "不需要显示器音量控制时可以关闭。") {
                     Toggle("", isOn: $settings.displayVolumeControlEnabled)
                         .toggleStyle(.switch)

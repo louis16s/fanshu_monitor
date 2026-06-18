@@ -188,7 +188,8 @@ private struct DisplayControlGroup: View {
                             value: binding(for: .brightness),
                             isEnabled: display.supports(.brightness),
                             palette: palette,
-                            tint: tint
+                            tint: tint,
+                            marker: hardwareDDCZeroMarker
                         )
 
                     }
@@ -200,7 +201,8 @@ private struct DisplayControlGroup: View {
                             value: binding(for: .volume),
                             isEnabled: display.supports(.volume),
                             palette: palette,
-                            tint: tint
+                            tint: tint,
+                            marker: nil
                         )
                     }
 
@@ -211,7 +213,8 @@ private struct DisplayControlGroup: View {
                             value: binding(for: .contrast),
                             isEnabled: display.supports(.contrast),
                             palette: palette,
-                            tint: tint
+                            tint: tint,
+                            marker: nil
                         )
                     }
                 }
@@ -228,6 +231,16 @@ private struct DisplayControlGroup: View {
         Binding(
             get: { controller.value(for: control, displayID: display.id) },
             set: { controller.setValueAsync($0, for: control, displayID: display.id) }
+        )
+    }
+
+    private var hardwareDDCZeroMarker: DisplaySliderMarker? {
+        guard !display.isBuiltIn, settings.displaySoftwareDimmingEnabled else {
+            return nil
+        }
+        return DisplaySliderMarker(
+            position: DisplayDimmingCalibration.hardwareZeroUserBrightness,
+            label: "DDC 0"
         )
     }
 }
@@ -265,6 +278,7 @@ private struct DisplayControlSlider: View {
     let isEnabled: Bool
     let palette: MonitorPalette
     let tint: Color
+    let marker: DisplaySliderMarker?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -279,10 +293,22 @@ private struct DisplayControlSlider: View {
                 .foregroundStyle(isEnabled ? palette.secondaryText : palette.captionText)
                 .frame(width: 34, alignment: .leading)
 
-            Slider(value: $value, in: 0...100, step: 1)
-                .tint(tint)
-                .controlSize(.small)
-                .disabled(!isEnabled)
+            ZStack(alignment: .leading) {
+                Slider(value: $value, in: 0...100, step: 1)
+                    .tint(tint)
+                    .controlSize(.small)
+                    .disabled(!isEnabled)
+
+                if let marker {
+                    DisplaySliderMarkerView(
+                        marker: marker,
+                        palette: palette,
+                        tint: tint,
+                        isEnabled: isEnabled
+                    )
+                }
+            }
+            .frame(height: marker == nil ? 16 : 29)
 
             Text("\(Int(value.rounded()))%")
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
@@ -291,6 +317,45 @@ private struct DisplayControlSlider: View {
                 .frame(width: 34, alignment: .trailing)
         }
         .opacity(isEnabled ? 1 : 0.48)
+    }
+}
+
+private struct DisplaySliderMarker {
+    let position: Double
+    let label: String
+}
+
+private struct DisplaySliderMarkerView: View {
+    let marker: DisplaySliderMarker
+    let palette: MonitorPalette
+    let tint: Color
+    let isEnabled: Bool
+
+    private let labelWidth: CGFloat = 42
+
+    var body: some View {
+        GeometryReader { proxy in
+            let fraction = min(1, max(0, marker.position / 100))
+            let x = proxy.size.width * fraction
+            let clampedX = min(max(0, x - labelWidth / 2), max(0, proxy.size.width - labelWidth))
+
+            VStack(spacing: 1) {
+                Capsule()
+                    .fill((isEnabled ? tint : palette.captionText).opacity(0.8))
+                    .frame(width: 2, height: 7)
+
+                Text(marker.label)
+                    .font(.system(size: 6.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(palette.captionText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(width: labelWidth)
+            }
+            .frame(width: labelWidth)
+            .offset(x: clampedX, y: 18)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -325,6 +390,16 @@ final class DisplayControlController: ObservableObject {
     private var screenChangeObserver: NSObjectProtocol?
     private var refreshWorkItem: DispatchWorkItem?
     private var displayCallbackRegistered = false
+    weak var settings: MonitorSettings? {
+        didSet {
+            service.softwareDimmingEnabled = settings?.displaySoftwareDimmingEnabled ?? true
+            if service.softwareDimmingEnabled {
+                syncSoftwareDimming()
+            } else {
+                service.clearSoftwareDimming()
+            }
+        }
+    }
 
     deinit {
         if let screenChangeObserver {
@@ -333,6 +408,7 @@ final class DisplayControlController: ObservableObject {
         if displayCallbackRegistered {
             CGDisplayRemoveReconfigurationCallback(displayReconfigurationCallback, Unmanaged.passUnretained(self).toOpaque())
         }
+        service.clearSoftwareDimming()
     }
 
     func refreshAsync() {
@@ -343,6 +419,7 @@ final class DisplayControlController: ObservableObject {
                 for display in detectedDisplays {
                     self.seedFallbackValues(for: display)
                 }
+                self.syncSoftwareDimming()
             }
         }
     }
@@ -360,6 +437,7 @@ final class DisplayControlController: ObservableObject {
         for display in detectedDisplays {
             seedFallbackValues(for: display)
         }
+        syncSoftwareDimming()
     }
 
     func startAutomaticRefresh() {
@@ -542,6 +620,7 @@ final class DisplayControlController: ObservableObject {
         markUnsupportedOnFailure: Bool
     ) {
         let clampedValue = min(100, max(0, value))
+        service.softwareDimmingEnabled = settings?.displaySoftwareDimmingEnabled ?? true
         guard let display = displays.first(where: { $0.id == displayID }) else {
             AppLogger.ui.error("Display not found for setValue: \(displayID)")
             return
@@ -599,6 +678,15 @@ final class DisplayControlController: ObservableObject {
         if pendingValues[result.key.displayID]?.isEmpty == true {
             pendingValues[result.key.displayID] = nil
         }
+    }
+
+    private func syncSoftwareDimming() {
+        service.softwareDimmingEnabled = settings?.displaySoftwareDimmingEnabled ?? true
+        guard service.softwareDimmingEnabled else {
+            service.clearSoftwareDimming()
+            return
+        }
+        service.syncSoftwareDimming(for: displays)
     }
 
     private func markControlUnsupported(_ control: DisplayControlKind, displayID: CGDirectDisplayID) {
@@ -759,6 +847,8 @@ final class DisplayControlService {
     private let displayServices = DisplayServicesBridge()
     private let ddc = DisplayDDCBridge()
     private let defaults = UserDefaults.standard
+    private let softwareDimming = DisplaySoftwareDimmingService()
+    var softwareDimmingEnabled = true
 
     func displays() -> [ControlledDisplay] {
         var ids = [CGDirectDisplayID](repeating: 0, count: 16)
@@ -794,7 +884,7 @@ final class DisplayControlService {
                 supportsVolume: !isBuiltIn && (ddcVolume != nil || storedVolume != nil),
                 supportsContrast: !isBuiltIn && (ddcContrast != nil || storedContrast != nil),
                 brightness: appleBrightness.map { Double($0 * 100) }
-                    ?? ddcBrightness
+                    ?? softwareDimming.userBrightness(for: id, storedUserBrightness: storedBrightness, hardwareBrightness: ddcBrightness)
                     ?? storedBrightness
                     ?? DisplayControlKind.brightness.defaultValue,
                 volume: ddcVolume
@@ -824,11 +914,31 @@ final class DisplayControlService {
             }
         }
 
-        let success = ddc.write(value, for: control, displayID: display.id)
+        var writeValue = value
+        if control == .brightness {
+            if softwareDimmingEnabled {
+                writeValue = softwareDimming.hardwareBrightness(forUserBrightness: value)
+            } else {
+                softwareDimming.clear(displayID: display.id)
+            }
+        }
+
+        let success = ddc.write(writeValue, for: control, displayID: display.id)
         if success {
+            if control == .brightness, softwareDimmingEnabled {
+                softwareDimming.setUserBrightness(value, for: display.id)
+            }
             saveStoredValue(value, for: control, displayStorageID: display.storageID)
         }
         return success
+    }
+
+    func syncSoftwareDimming(for displays: [ControlledDisplay]) {
+        softwareDimming.sync(with: displays)
+    }
+
+    func clearSoftwareDimming() {
+        softwareDimming.clearAll()
     }
 
     private func displayName(for id: CGDirectDisplayID, isBuiltIn: Bool) -> String {
@@ -877,6 +987,181 @@ final class DisplayControlService {
 
     private func storedValueKey(for control: DisplayControlKind, displayStorageID: String) -> String {
         "displayControl.value.\(displayStorageID).\(control.storageKey)"
+    }
+}
+
+private enum DisplayDimmingCalibration {
+    static let hardwareZeroUserBrightness: Double = 15
+    static let maximumOverlayOpacity: Double = 0.65
+}
+
+private final class DisplaySoftwareDimmingService {
+    private let dimmingThreshold: Double = DisplayDimmingCalibration.hardwareZeroUserBrightness
+    private let maximumOverlayOpacity: Double = DisplayDimmingCalibration.maximumOverlayOpacity
+    private let lock = NSLock()
+    private var requestedBrightness: [CGDirectDisplayID: Double] = [:]
+    @MainActor private var overlayWindows: [CGDirectDisplayID: NSWindow] = [:]
+
+    func userBrightness(
+        for displayID: CGDirectDisplayID,
+        storedUserBrightness: Double?,
+        hardwareBrightness: Double?
+    ) -> Double? {
+        if let cached = cachedBrightness(for: displayID) {
+            return cached
+        }
+
+        if let storedUserBrightness, storedUserBrightness < dimmingThreshold {
+            setUserBrightness(storedUserBrightness, for: displayID)
+            return storedUserBrightness
+        }
+
+        guard let hardwareBrightness else { return nil }
+        return min(100, max(0, dimmingThreshold + (hardwareBrightness / 100) * (100 - dimmingThreshold)))
+    }
+
+    func hardwareBrightness(forUserBrightness userBrightness: Double) -> Double {
+        let clamped = min(100, max(0, userBrightness))
+        guard clamped > dimmingThreshold else { return 0 }
+        return min(100, max(0, (clamped - dimmingThreshold) / (100 - dimmingThreshold) * 100))
+    }
+
+    func setUserBrightness(_ userBrightness: Double, for displayID: CGDirectDisplayID) {
+        let clamped = min(100, max(0, userBrightness))
+        lock.lock()
+        requestedBrightness[displayID] = clamped
+        lock.unlock()
+
+        Task { @MainActor [weak self] in
+            self?.apply(userBrightness: clamped, for: displayID)
+        }
+    }
+
+    func sync(with displays: [ControlledDisplay]) {
+        let displayIDs = Set(displays.map(\.id))
+        let brightnessByID = Dictionary(uniqueKeysWithValues: displays.map { ($0.id, $0.brightness) })
+
+        lock.lock()
+        requestedBrightness = requestedBrightness.filter { displayIDs.contains($0.key) }
+        for (displayID, brightness) in brightnessByID where CGDisplayIsBuiltin(displayID) == 0 {
+            requestedBrightness[displayID] = brightness
+        }
+        let values = requestedBrightness
+        lock.unlock()
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            for (displayID, brightness) in values {
+                self.apply(userBrightness: brightness, for: displayID)
+            }
+            self.removeMissingWindows(keeping: displayIDs)
+        }
+    }
+
+    func clear(displayID: CGDirectDisplayID) {
+        lock.lock()
+        requestedBrightness[displayID] = nil
+        lock.unlock()
+
+        Task { @MainActor [weak self] in
+            self?.removeWindow(for: displayID)
+        }
+    }
+
+    func clearAll() {
+        lock.lock()
+        requestedBrightness.removeAll()
+        lock.unlock()
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            for displayID in Array(self.overlayWindows.keys) {
+                self.removeWindow(for: displayID)
+            }
+        }
+    }
+
+    private func cachedBrightness(for displayID: CGDirectDisplayID) -> Double? {
+        lock.lock()
+        defer { lock.unlock() }
+        return requestedBrightness[displayID]
+    }
+
+    @MainActor
+    private func apply(userBrightness: Double, for displayID: CGDirectDisplayID) {
+        guard CGDisplayIsBuiltin(displayID) == 0 else {
+            removeWindow(for: displayID)
+            return
+        }
+
+        let opacity = overlayOpacity(for: userBrightness)
+        guard opacity > 0.001 else {
+            removeWindow(for: displayID)
+            return
+        }
+
+        guard let screen = screen(for: displayID) else {
+            removeWindow(for: displayID)
+            return
+        }
+
+        let window = overlayWindows[displayID] ?? makeWindow(for: screen)
+        overlayWindows[displayID] = window
+        if window.frame != screen.frame {
+            window.setFrame(screen.frame, display: true)
+        }
+        window.alphaValue = opacity
+        window.orderFrontRegardless()
+    }
+
+    private func overlayOpacity(for userBrightness: Double) -> Double {
+        let clamped = min(dimmingThreshold, max(0, userBrightness))
+        return (1 - clamped / dimmingThreshold) * maximumOverlayOpacity
+    }
+
+    @MainActor
+    private func makeWindow(for screen: NSScreen) -> NSWindow {
+        let window = NSWindow(
+            contentRect: screen.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false,
+            screen: screen
+        )
+        window.backgroundColor = .black
+        window.isOpaque = false
+        window.hasShadow = false
+        window.ignoresMouseEvents = true
+        window.level = .screenSaver
+        window.animationBehavior = .none
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        window.contentView = NSView(frame: screen.frame)
+        return window
+    }
+
+    @MainActor
+    private func removeMissingWindows(keeping displayIDs: Set<CGDirectDisplayID>) {
+        for displayID in Array(overlayWindows.keys) where !displayIDs.contains(displayID) {
+            removeWindow(for: displayID)
+        }
+    }
+
+    @MainActor
+    private func removeWindow(for displayID: CGDirectDisplayID) {
+        guard let window = overlayWindows[displayID] else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            window.alphaValue = 0
+            window.orderOut(nil)
+        }
+    }
+
+    @MainActor
+    private func screen(for displayID: CGDirectDisplayID) -> NSScreen? {
+        NSScreen.screens.first {
+            ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) == displayID
+        }
     }
 }
 

@@ -93,6 +93,7 @@ final class MonitorSettings: ObservableObject {
     @Published var displayContrastControlEnabled: Bool = false
     @Published var displayAvailabilityHintsEnabled: Bool = true
     @Published var displayNativeOSDEnabled: Bool = true
+    @Published var displaySoftwareDimmingEnabled: Bool = true
     @Published var brightnessKeyStepPercent: Double = 6.25
     @Published var codexRefreshIntervalMinutes: Double = 5
     @Published var updateChecksEnabled: Bool = true
@@ -128,6 +129,7 @@ final class MonitorSettings: ObservableObject {
         displayContrastControlEnabled = defaults.object(forKey: Keys.displayContrastControlEnabled) as? Bool ?? false
         displayAvailabilityHintsEnabled = defaults.object(forKey: Keys.displayAvailabilityHintsEnabled) as? Bool ?? true
         displayNativeOSDEnabled = defaults.object(forKey: Keys.displayNativeOSDEnabled) as? Bool ?? true
+        displaySoftwareDimmingEnabled = defaults.object(forKey: Keys.displaySoftwareDimmingEnabled) as? Bool ?? true
         brightnessKeyStepPercent = defaults.object(forKey: Keys.brightnessKeyStepPercent) as? Double ?? 6.25
         codexRefreshIntervalMinutes = defaults.object(forKey: Keys.codexRefreshIntervalMinutes) as? Double ?? 5
         updateChecksEnabled = defaults.object(forKey: Keys.updateChecksEnabled) as? Bool ?? true
@@ -339,6 +341,13 @@ final class MonitorSettings: ObservableObject {
             }
             .store(in: &cancellables)
 
+        $displaySoftwareDimmingEnabled
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(newValue, forKey: Keys.displaySoftwareDimmingEnabled)
+            }
+            .store(in: &cancellables)
+
         $brightnessKeyStepPercent
             .dropFirst()
             .sink { [weak self] newValue in
@@ -424,6 +433,7 @@ final class MonitorSettings: ObservableObject {
         displayContrastControlEnabled = false
         displayAvailabilityHintsEnabled = true
         displayNativeOSDEnabled = true
+        displaySoftwareDimmingEnabled = true
         brightnessKeyStepPercent = 6.25
         codexRefreshIntervalMinutes = 5
         updateChecksEnabled = true
@@ -445,6 +455,7 @@ private enum Keys {
     static let displayContrastControlEnabled = "settings.display.contrastControlEnabled"
     static let displayAvailabilityHintsEnabled = "settings.display.availabilityHintsEnabled"
     static let displayNativeOSDEnabled = "settings.display.nativeOSDEnabled"
+    static let displaySoftwareDimmingEnabled = "settings.display.softwareDimmingEnabled"
     static let brightnessKeyStepPercent = "settings.display.brightnessKeyStepPercent"
     static let codexRefreshIntervalMinutes = "settings.codexRefreshIntervalMinutes"
     static let updateChecksEnabled = "settings.updateChecksEnabled"
