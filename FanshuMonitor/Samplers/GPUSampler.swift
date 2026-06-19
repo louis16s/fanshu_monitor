@@ -23,7 +23,9 @@ final class GPUSampler: MonitorSampler {
             metrics.append(MonitorMetric(name: "render", value: percent(renderUtilization)))
         }
 
-        metrics.append(MonitorMetric(name: "temperature", value: gpuTemperatureText()))
+        if let temperature = gpuTemperatureText() {
+            metrics.append(MonitorMetric(name: "temperature", value: temperature))
+        }
 
         if let tilerUtilization = reading.tilerUtilization {
             metrics.append(MonitorMetric(name: "tiler", value: percent(tilerUtilization)))
@@ -103,8 +105,8 @@ final class GPUSampler: MonitorSampler {
         return services
     }
 
-    private func gpuTemperatureText() -> String {
-        smcReader?.gpuTemperature().map { "\(String(format: "%.0f", $0))°C" } ?? "--"
+    private func gpuTemperatureText() -> String? {
+        smcReader?.gpuTemperature().map { "\(String(format: "%.0f", $0))°C" }
     }
 }
 

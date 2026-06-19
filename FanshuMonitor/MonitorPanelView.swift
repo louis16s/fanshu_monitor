@@ -18,7 +18,7 @@ struct MonitorPanelView: View {
         )
 
         GlassEffectContainer(spacing: 8) {
-            VStack(spacing: 6) {
+            VStack(spacing: 5) {
                 // Header: Live 脉冲点 + 时间
                 header(theme: theme)
 
@@ -32,7 +32,9 @@ struct MonitorPanelView: View {
                     .glassEffectID("display-controls", in: glassNamespace)
                 #endif
             }
-            .padding(10)
+            .padding(.top, 6)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
             .frame(width: MonitorConstants.panelWidth)
             .background(panelBackgroundColor)
         }
@@ -73,7 +75,7 @@ struct MonitorPanelView: View {
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 24, height: 24)
+                    .frame(width: 20, height: 20)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -85,7 +87,7 @@ struct MonitorPanelView: View {
             } label: {
                 Image(systemName: "power")
                     .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 24, height: 24)
+                    .frame(width: 20, height: 20)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -97,7 +99,7 @@ struct MonitorPanelView: View {
                 .foregroundStyle(theme.captionText)
         }
         .padding(.horizontal, 4)
-        .padding(.bottom, 1)
+        .frame(height: 20)
     }
 
     @ViewBuilder

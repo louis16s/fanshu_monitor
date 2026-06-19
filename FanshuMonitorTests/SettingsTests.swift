@@ -95,6 +95,15 @@ struct SettingsTests {
         #expect(settings.isMetricEnabled("compressed", for: .memory))
     }
 
+    @Test func gpuTemperatureIsOptionalByDefault() {
+        let defaults = UserDefaults(suiteName: "gpuTemperatureIsOptionalByDefault")!
+        defaults.removePersistentDomain(forName: "gpuTemperatureIsOptionalByDefault")
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(!settings.isMetricEnabled("temperature", for: .gpu))
+        #expect(settings.canEnableMetric("temperature", for: .gpu))
+    }
+
     @Test func codexPlanIsOptionalByDefault() {
         let defaults = UserDefaults(suiteName: "codexPlanIsOptionalByDefault")!
         defaults.removePersistentDomain(forName: "codexPlanIsOptionalByDefault")

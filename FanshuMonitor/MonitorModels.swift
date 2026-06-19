@@ -118,7 +118,7 @@ enum MonitorKind: String, CaseIterable, Identifiable {
                 MetricSwitch(id: "gpu-memory", title: String(localized: "metric.gpu.gpu-memory"), isDefault: true),
                 MetricSwitch(id: "allocated", title: String(localized: "metric.gpu.allocated"), isDefault: true),
                 MetricSwitch(id: "render", title: String(localized: "metric.gpu.render"), isDefault: true),
-                MetricSwitch(id: "temperature", title: String(localized: "metric.gpu.temperature"), isDefault: true),
+                MetricSwitch(id: "temperature", title: String(localized: "metric.gpu.temperature"), isDefault: false),
                 MetricSwitch(id: "tiler", title: String(localized: "metric.gpu.tiler"), isDefault: false),
             ]
         case .memory:
