@@ -119,6 +119,13 @@ final class MouseControlController: ObservableObject {
             }
             .store(in: &cancellables)
 
+        settings.$mouseGestureAction
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] action in
+                self?.syncGestureListener(enabled: settings.mouseControlEnabled, action: action)
+            }
+            .store(in: &cancellables)
+
         settings.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
@@ -142,6 +149,10 @@ final class MouseControlController: ObservableObject {
     }
 
     func refresh() {
+        refresh(readDPI: true)
+    }
+
+    private func refresh(readDPI: Bool) {
         guard settings?.mouseControlEnabled == true else {
             device = nil
             statusText = "未启用"
@@ -151,7 +162,7 @@ final class MouseControlController: ObservableObject {
         statusText = "正在检测鼠标"
         Task { [weak self, hidService] in
             let result = await Task.detached(priority: .utility) {
-                hidService.detectDevice(readDPI: true)
+                hidService.detectDevice(readDPI: readDPI)
             }.value
             guard let self else { return }
             self.device = result
@@ -194,14 +205,22 @@ final class MouseControlController: ObservableObject {
             } else {
                 buttonStatusText = "等待辅助功能授权"
             }
-            hidButtonListener?.start()
-            refresh()
+            syncGestureListener(enabled: true, action: settings?.mouseGestureAction ?? .passThrough)
+            refresh(readDPI: !(settings?.mouseDPIOnDemandEnabled ?? true))
         } else {
             eventTap?.stop()
             hidButtonListener?.stop()
             device = nil
             statusText = "未启用"
             buttonStatusText = "未启用"
+        }
+    }
+
+    private func syncGestureListener(enabled: Bool, action: MouseButtonAction) {
+        if enabled && action != .passThrough {
+            hidButtonListener?.start()
+        } else {
+            hidButtonListener?.stop()
         }
     }
 }

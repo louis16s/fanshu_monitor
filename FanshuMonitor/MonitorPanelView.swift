@@ -28,8 +28,10 @@ struct MonitorPanelView: View {
                 }
 
                 #if DISPLAY_CONTROL
-                DisplayControlsSection(settings: store.settings, controller: store.displayController)
-                    .glassEffectID("display-controls", in: glassNamespace)
+                if store.settings.displayModuleVisible {
+                    DisplayControlsSection(settings: store.settings, controller: store.displayController)
+                        .glassEffectID("display-controls", in: glassNamespace)
+                }
                 #endif
             }
             .padding(.top, 6)
@@ -60,8 +62,6 @@ struct MonitorPanelView: View {
                 Circle()
                     .fill(theme.liveDot(for: store.haloRingLoadLevel))
                     .frame(width: 5, height: 5)
-                    .symbolEffect(.pulse, options: .repeating.speed(0.8))
-                    .animation(.easeInOut(duration: 0.6), value: store.haloRingLoadLevel)
 
                 Text("番薯monitor · v\(appVersion)")
                     .panelLabelFont(size: 9, tracking: 1.1)

@@ -68,8 +68,8 @@ struct DisplayControlsSection: View {
                     palette: palette,
                     tint: tint
                 )
-                .padding(.horizontal, 10)
-                .padding(.bottom, 9)
+                .padding(.horizontal, 9)
+                .padding(.bottom, 8)
                 .transition(.detailDisclosure)
             }
         }
@@ -93,18 +93,18 @@ struct DisplayControlsSection: View {
         } else if visibleDisplays.isEmpty {
             DisplayEmptyState(text: settings.showBuiltInDisplays ? "未发现显示器" : "未发现外接显示器", palette: palette)
         } else {
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 Rectangle()
                     .fill(palette.displaySeparator)
                     .frame(height: 1)
-                    .padding(.leading, 28)
+                    .padding(.leading, 24)
 
                 ForEach(Array(visibleDisplays.enumerated()), id: \.element.id) { index, display in
                     if index > 0 {
                         Rectangle()
                             .fill(palette.displaySeparator.opacity(0.72))
                             .frame(height: 1)
-                            .padding(.leading, 28)
+                            .padding(.leading, 24)
                     }
 
                     DisplayControlGroup(
@@ -149,16 +149,16 @@ private struct DisplayControlGroup: View {
     let tint: Color
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: 7) {
             Image(systemName: display.isBuiltIn ? "laptopcomputer" : "display")
                 .font(.system(size: 11, weight: .semibold))
                 .symbolRenderingMode(.monochrome)
                 .foregroundStyle(tint)
-                .frame(width: 14)
+                .frame(width: 13)
                 .padding(.top, 2)
 
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 7) {
                     Text(display.name)
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(palette.primaryText)
@@ -172,21 +172,24 @@ private struct DisplayControlGroup: View {
                         .font(.system(size: 9, weight: .semibold, design: .rounded))
                         .foregroundStyle(palette.secondaryText)
                         .lineLimit(1)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
                         .background {
                             Capsule()
                                 .fill(palette.displayBadgeFill)
                         }
                 }
 
-                VStack(spacing: 7) {
+                VStack(spacing: 5) {
                     if settings.displayBrightnessControlEnabled {
                         DisplayControlSlider(
                             label: "亮度",
                             systemImage: "sun.max",
                             value: binding(for: .brightness),
                             isEnabled: display.supports(.brightness),
+                            hardwareZeroPercent: display.isBuiltIn || !settings.displaySoftwareDimmingEnabled
+                                ? nil
+                                : DisplayDimmingCalibration.hardwareZeroUserBrightness,
                             palette: palette,
                             tint: tint
                         )
@@ -199,6 +202,7 @@ private struct DisplayControlGroup: View {
                             systemImage: "speaker.wave.2",
                             value: binding(for: .volume),
                             isEnabled: display.supports(.volume),
+                            hardwareZeroPercent: nil,
                             palette: palette,
                             tint: tint
                         )
@@ -210,6 +214,7 @@ private struct DisplayControlGroup: View {
                             systemImage: "circle.lefthalf.filled",
                             value: binding(for: .contrast),
                             isEnabled: display.supports(.contrast),
+                            hardwareZeroPercent: nil,
                             palette: palette,
                             tint: tint
                         )
@@ -221,7 +226,7 @@ private struct DisplayControlGroup: View {
                 }
             }
         }
-        .padding(.leading, 28)
+        .padding(.leading, 24)
     }
 
     private func binding(for control: DisplayControlKind) -> Binding<Double> {
@@ -264,35 +269,127 @@ private struct DisplayControlSlider: View {
     let systemImage: String
     @Binding var value: Double
     let isEnabled: Bool
+    let hardwareZeroPercent: Double?
     let palette: MonitorPalette
     let tint: Color
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             Image(systemName: systemImage)
                 .font(.system(size: 10, weight: .semibold))
                 .symbolRenderingMode(.monochrome)
                 .foregroundStyle(isEnabled ? tint : palette.captionText)
-                .frame(width: 14)
+                .frame(width: 13)
 
             Text(label)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(isEnabled ? palette.secondaryText : palette.captionText)
-                .frame(width: 34, alignment: .leading)
+                .frame(width: 30, alignment: .leading)
 
-            Slider(value: $value, in: 0...100, step: 1)
-                .tint(tint)
-                .controlSize(.small)
-                .disabled(!isEnabled)
-                .frame(height: 16)
+            DisplayTrackSlider(
+                value: $value,
+                isEnabled: isEnabled,
+                hardwareZeroPercent: hardwareZeroPercent,
+                palette: palette,
+                tint: tint
+            )
+            .frame(height: hardwareZeroPercent == nil ? 18 : 28)
 
             Text("\(Int(value.rounded()))%")
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(isEnabled ? palette.secondaryText : palette.captionText)
-                .frame(width: 34, alignment: .trailing)
+                .frame(width: 32, alignment: .trailing)
         }
         .opacity(isEnabled ? 1 : 0.48)
+    }
+}
+
+private struct DisplayTrackSlider: View {
+    @Binding var value: Double
+    let isEnabled: Bool
+    let hardwareZeroPercent: Double?
+    let palette: MonitorPalette
+    let tint: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            let trackHeight: CGFloat = 5
+            let thumbSize: CGFloat = 16
+            let width = max(thumbSize, proxy.size.width)
+            let clampedValue = min(100, max(0, value))
+            let fillWidth = width * clampedValue / 100
+            let thumbX = width * clampedValue / 100
+
+            ZStack(alignment: .topLeading) {
+                Capsule()
+                    .fill(inactiveTrackFill)
+                    .frame(height: trackHeight)
+                    .overlay {
+                        Capsule()
+                            .stroke(palette.captionText.opacity(0.12), lineWidth: 0.7)
+                    }
+                    .offset(y: 7)
+
+                Capsule()
+                    .fill(isEnabled ? tint : palette.captionText)
+                    .frame(width: fillWidth, height: trackHeight)
+                    .offset(y: 7)
+
+                if let hardwareZeroPercent {
+                    hardwareZeroMark(
+                        percent: hardwareZeroPercent,
+                        width: width,
+                        trackHeight: trackHeight
+                    )
+                }
+
+                Circle()
+                    .fill(isEnabled ? Color(nsColor: .controlBackgroundColor) : palette.captionText.opacity(0.9))
+                    .frame(width: thumbSize, height: thumbSize)
+                    .shadow(color: .black.opacity(0.22), radius: 2.5, x: 0, y: 1)
+                    .overlay {
+                        Circle()
+                            .stroke(.white.opacity(0.45), lineWidth: 0.6)
+                    }
+                    .offset(x: min(max(0, thumbX - thumbSize / 2), width - thumbSize), y: 1.5)
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        guard isEnabled else { return }
+                        let percentage = min(100, max(0, gesture.location.x / width * 100))
+                        value = percentage.rounded()
+                    }
+            )
+        }
+        .frame(minWidth: 80)
+    }
+
+    private func hardwareZeroMark(percent: Double, width: CGFloat, trackHeight: CGFloat) -> some View {
+        let clamped = min(100, max(0, percent))
+        let x = width * clamped / 100
+        let label = "DDC 0 · \(Int(clamped.rounded()))%"
+
+        return VStack(spacing: 1) {
+            Rectangle()
+                .fill(palette.captionText.opacity(0.74))
+                .frame(width: 1, height: 8)
+
+            Text(label)
+                .font(.system(size: 7, weight: .semibold, design: .rounded))
+                .foregroundStyle(palette.captionText.opacity(0.92))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .frame(width: 54)
+        .offset(x: min(max(0, x - 27), max(0, width - 54)), y: 12)
+        .allowsHitTesting(false)
+    }
+
+    private var inactiveTrackFill: Color {
+        palette.captionText.opacity(isEnabled ? 0.18 : 0.12)
     }
 }
 
@@ -397,6 +494,19 @@ final class DisplayControlController: ObservableObject {
         let pointer = Unmanaged.passUnretained(self).toOpaque()
         if CGDisplayRegisterReconfigurationCallback(displayReconfigurationCallback, pointer) == .success {
             displayCallbackRegistered = true
+        }
+    }
+
+    func stopAutomaticRefresh() {
+        refreshWorkItem?.cancel()
+        refreshWorkItem = nil
+        if let screenChangeObserver {
+            NotificationCenter.default.removeObserver(screenChangeObserver)
+            self.screenChangeObserver = nil
+        }
+        if displayCallbackRegistered {
+            CGDisplayRemoveReconfigurationCallback(displayReconfigurationCallback, Unmanaged.passUnretained(self).toOpaque())
+            displayCallbackRegistered = false
         }
     }
 

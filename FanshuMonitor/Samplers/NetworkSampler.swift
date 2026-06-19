@@ -112,9 +112,7 @@ final class NetworkSampler: MonitorSampler {
             (partial.input + next.input, partial.output + next.output)
         }
 
-        AppLogger.sampler.info("Network interfaces detected: \(totalsByInterface.keys.joined(separator: ", "), privacy: .public), active: \(active?.key ?? "none", privacy: .public)")
-
-        AppLogger.sampler.info("Network active interface: \(active?.key ?? "none", privacy: .public)")
+        AppLogger.sampler.debug("Network interfaces detected: \(totalsByInterface.keys.joined(separator: ", "), privacy: .public), active: \(active?.key ?? "none", privacy: .public)")
 
         return NetworkInterfaceSnapshot(
             input: total.input,

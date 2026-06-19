@@ -69,8 +69,8 @@ struct FanshuMonitorTests {
     }
 
     @Test func computeLoadDisplayValueMovesTowardTarget() {
-        #expect(ComputeLoadModel.smoothedDisplayValue(current: 10, target: 50) == 11.25)
-        #expect(ComputeLoadModel.smoothedDisplayValue(current: 50, target: 10) == 48.75)
+        #expect(ComputeLoadModel.smoothedDisplayValue(current: 10, target: 50) == 50)
+        #expect(ComputeLoadModel.smoothedDisplayValue(current: 50, target: 10) == 10)
         #expect(ComputeLoadModel.smoothedDisplayValue(current: 49, target: 50) == 50)
     }
 

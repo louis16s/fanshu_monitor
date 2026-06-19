@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import Combine
@@ -234,6 +235,12 @@ final class MonitorStore: ObservableObject {
     @Published var selectedKind: MonitorKind = .cpu
     @Published private(set) var menuBarFrame = 0
     @Published private(set) var displayedComputeLoad = 0.0
+    @Published private(set) var menuBarIconImage = MenuBarComputeRingIcon.image(
+        load: 0,
+        frame: 0,
+        darkMode: false,
+        loadLevel: .idle
+    )
     @Published var isPanelVisible = false
     #if DISPLAY_CONTROL
     let displayController = DisplayControlController()
@@ -249,6 +256,8 @@ final class MonitorStore: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private var menuBarTargetComputeLoad = 0.0
     private var framesSinceLastMenuBarTargetUpdate = MonitorConstants.menuBarLoadUpdateFrameInterval
+    private var animationTickCounter = 0
+    private var lastMenuBarIconKey = ""
 
     init() {
         let settings = MonitorSettings()
@@ -258,13 +267,13 @@ final class MonitorStore: ObservableObject {
         modules = initialModules.filter { settings.isVisible($0.kind) }
         sampler.setCodexRefreshInterval(settings.codexRefreshIntervalMinutes * 60)
         advance(kinds: settings.visibleKinds)
+        updateMenuBarTargetComputeLoadIfNeeded(force: true)
+        updateMenuBarIcon(force: true)
         refreshSchedule.markRefreshed(settings.visibleKinds, at: Date())
         #if DISPLAY_CONTROL
         displayController.settings = settings
-        displayController.startAutomaticRefresh()
-        displayController.refreshSynchronously()
         brightnessKeyEventTap = BrightnessKeyEventTap(settings: settings, displayController: displayController)
-        brightnessKeyEventTap?.start()
+        configureDisplayControlServices()
         #endif
         mouseController.configure(settings: settings)
         settings.objectWillChange
@@ -272,6 +281,11 @@ final class MonitorStore: ObservableObject {
             .sink { [weak self] _ in
                 guard let self else { return }
                 self.modules = self.visibleModules(from: self.allModules)
+                #if DISPLAY_CONTROL
+                DispatchQueue.main.async { [weak self] in
+                    self?.configureDisplayControlServices()
+                }
+                #endif
                 self.objectWillChange.send()
             }
             .store(in: &cancellables)
@@ -403,16 +417,17 @@ final class MonitorStore: ObservableObject {
     }
 
     private func advanceAnimation() {
-        guard isPanelVisible || menuBarFrame % 4 == 0 else {
-            menuBarFrame = (menuBarFrame + 1) % 48
-            return
-        }
+        animationTickCounter += 1
         menuBarFrame = (menuBarFrame + 1) % 48
-        updateMenuBarTargetComputeLoadIfNeeded()
-        displayedComputeLoad = ComputeLoadModel.smoothedDisplayValue(
+        updateMenuBarTargetComputeLoadIfNeeded(force: true)
+        let nextDisplayedComputeLoad = ComputeLoadModel.smoothedDisplayValue(
             current: displayedComputeLoad,
             target: menuBarTargetComputeLoad
         )
+        if abs(nextDisplayedComputeLoad - displayedComputeLoad) >= 0.01 {
+            displayedComputeLoad = nextDisplayedComputeLoad
+        }
+        updateMenuBarIcon()
     }
 
     private func retryBrightnessKeyTapIfNeeded() {
@@ -425,9 +440,42 @@ final class MonitorStore: ObservableObject {
         #endif
     }
 
-    private func updateMenuBarTargetComputeLoadIfNeeded() {
+    #if DISPLAY_CONTROL
+    private func configureDisplayControlServices() {
+        displayController.settings = settings
+
+        if needsDisplayController {
+            displayController.startAutomaticRefresh()
+            if displayController.displays.isEmpty {
+                displayController.refreshAsync()
+            }
+        } else {
+            displayController.stopAutomaticRefresh()
+        }
+
+        if settings.brightnessKeyInterceptionEnabled {
+            brightnessKeyEventTap?.start()
+        } else {
+            brightnessKeyEventTap?.stop()
+        }
+    }
+
+    private var needsDisplayController: Bool {
+        settings.brightnessKeyInterceptionEnabled
+            || (
+                settings.displayModuleVisible
+                && (
+                    settings.displayBrightnessControlEnabled
+                    || settings.displayVolumeControlEnabled
+                    || settings.displayContrastControlEnabled
+                )
+            )
+    }
+    #endif
+
+    private func updateMenuBarTargetComputeLoadIfNeeded(force: Bool = false) {
         framesSinceLastMenuBarTargetUpdate += 1
-        guard framesSinceLastMenuBarTargetUpdate >= MonitorConstants.menuBarLoadUpdateFrameInterval else {
+        guard force || framesSinceLastMenuBarTargetUpdate >= MonitorConstants.menuBarLoadUpdateFrameInterval else {
             return
         }
 
@@ -441,6 +489,23 @@ final class MonitorStore: ObservableObject {
         }
 
         menuBarTargetComputeLoad = currentLoad
+    }
+
+    private func updateMenuBarIcon(force: Bool = false) {
+        let darkMode = NSApp.effectiveAppearance.isDark
+        let loadBucket = Int(displayedComputeLoad.rounded())
+        let level = haloRingLoadLevel
+        let key = "\(loadBucket)-\(menuBarFrame)-\(darkMode)-\(level)"
+        guard force || key != lastMenuBarIconKey else {
+            return
+        }
+        lastMenuBarIconKey = key
+        menuBarIconImage = MenuBarComputeRingIcon.image(
+            load: displayedComputeLoad,
+            frame: menuBarFrame,
+            darkMode: darkMode,
+            loadLevel: level
+        )
     }
 
     private func visibleModules(from modules: [MonitorModule]) -> [MonitorModule] {

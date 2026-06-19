@@ -24,12 +24,7 @@ struct FanshuMonitorApp: App {
                 .preferredColorScheme(effectiveColorScheme)
                 .environment(\.locale, effectiveLocale)
         } label: {
-            Image(nsImage: MenuBarComputeRingIcon.image(
-                load: monitorStore.displayedComputeLoad,
-                frame: monitorStore.menuBarFrame,
-                darkMode: NSApp.effectiveAppearance.isDark,
-                loadLevel: monitorStore.haloRingLoadLevel
-            ))
+            Image(nsImage: monitorStore.menuBarIconImage)
             .resizable()
             .frame(width: 18, height: 18)
             .help("番薯Monitor")

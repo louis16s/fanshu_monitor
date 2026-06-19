@@ -43,8 +43,8 @@ struct MouseSettingsView: View {
                         dpi: $settings.mouseDPI,
                         isEnabled: settings.mouseControlEnabled,
                         isApplying: controller.isApplyingDPI
-                    ) {
-                        controller.applyDPI(Int(settings.mouseDPI.rounded()))
+                    ) { dpi in
+                        controller.applyDPI(dpi)
                     }
                 }
             }
@@ -73,26 +73,112 @@ private struct MouseDPIControl: View {
     @Binding var dpi: Double
     let isEnabled: Bool
     let isApplying: Bool
-    let apply: () -> Void
+    let apply: (Int) -> Void
+
+    private let range: ClosedRange<Double> = 200...8000
+    private let presets = [800, 1600, 2400, 4000, 8000]
 
     var body: some View {
-        HStack(spacing: 8) {
-            Slider(value: $dpi, in: 200...8000, step: 50)
-                .frame(width: 190)
+        VStack(alignment: .trailing, spacing: 7) {
+            HStack(spacing: 10) {
+                MouseDPITrackSlider(
+                    value: $dpi,
+                    range: range,
+                    step: 50,
+                    isEnabled: isEnabled && !isApplying
+                )
+                .frame(width: 190, height: 18)
+
+                Text("\(Int(dpi.rounded()))")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .frame(width: 48, alignment: .trailing)
+
+                Button(isApplying ? "应用中" : "应用") {
+                    apply(Int(dpi.rounded()))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.mini)
                 .disabled(!isEnabled || isApplying)
-
-            Text("\(Int(dpi.rounded()))")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .frame(width: 48, alignment: .trailing)
-
-            Button(isApplying ? "应用中" : "应用") {
-                apply()
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.mini)
-            .disabled(!isEnabled || isApplying)
+
+            HStack(spacing: 5) {
+                ForEach(presets, id: \.self) { preset in
+                    Button {
+                        dpi = Double(preset)
+                    } label: {
+                        Text(presetText(preset))
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .frame(minWidth: 36)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .disabled(!isEnabled || isApplying)
+                }
+            }
         }
+    }
+
+    private func presetText(_ value: Int) -> String {
+        value >= 1000 ? "\(value / 1000)k" : "\(value)"
+    }
+}
+
+private struct MouseDPITrackSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    let isEnabled: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let trackHeight: CGFloat = 5
+            let thumbSize: CGFloat = 16
+            let width = max(thumbSize, proxy.size.width)
+            let clamped = min(range.upperBound, max(range.lowerBound, value))
+            let progress = (clamped - range.lowerBound) / (range.upperBound - range.lowerBound)
+            let fillWidth = width * progress
+            let thumbX = width * progress
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.secondary.opacity(isEnabled ? 0.18 : 0.12))
+                    .frame(height: trackHeight)
+                    .overlay {
+                        Capsule()
+                            .stroke(Color.secondary.opacity(0.12), lineWidth: 0.7)
+                    }
+
+                Capsule()
+                    .fill(isEnabled ? Color.accentColor : Color.secondary.opacity(0.72))
+                    .frame(width: fillWidth, height: trackHeight)
+
+                Circle()
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .frame(width: thumbSize, height: thumbSize)
+                    .shadow(color: .black.opacity(0.20), radius: 2.5, x: 0, y: 1)
+                    .overlay {
+                        Circle()
+                            .stroke(.white.opacity(0.46), lineWidth: 0.6)
+                    }
+                    .offset(x: min(max(0, thumbX - thumbSize / 2), width - thumbSize))
+            }
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        guard isEnabled else { return }
+                        let progress = min(1, max(0, gesture.location.x / width))
+                        let rawValue = range.lowerBound + progress * (range.upperBound - range.lowerBound)
+                        value = (rawValue / step).rounded() * step
+                    }
+            )
+        }
+        .frame(minWidth: 80)
+        .opacity(isEnabled ? 1 : 0.52)
     }
 }
 
