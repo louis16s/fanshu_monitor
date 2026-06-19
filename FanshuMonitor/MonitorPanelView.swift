@@ -277,7 +277,26 @@ private struct MetricGlassRow: View {
     }
 
     private var titleText: String {
-        "\(module.kind.title):"
+        "\(panelTitle(for: module.kind)):"
+    }
+
+    private func panelTitle(for kind: MonitorKind) -> String {
+        switch kind {
+        case .cpu:
+            "CPU"
+        case .gpu:
+            "GPU"
+        case .memory:
+            "Memory"
+        case .storage:
+            "Storage"
+        case .network:
+            "Network"
+        case .battery:
+            "Power"
+        case .codex:
+            "Codex Usage"
+        }
     }
 
     @ViewBuilder
@@ -400,6 +419,8 @@ private func chineseMetricName(kind: MonitorKind, id: String) -> String? {
     case (.network, "download"): return "下载"
     case (.battery, "charging-power"): return "充电功率"
     case (.battery, "adapter"): return "适配器"
+    case (.gpu, "temperature"): return "温度"
+    case (.codex, "plan"): return "套餐"
     case (.codex, "five-hour"): return "5H"
     case (.codex, "weekly"): return "一周"
     case (.codex, "five-hour-reset"): return "5H刷新"
@@ -571,7 +592,7 @@ private struct NetworkGlassRow: View {
 
                 HStack(spacing: 6) {
                     HStack(spacing: 6) {
-                        Text(String(localized: "kind.network") + ":")
+                        Text("Network:")
                             .panelMetricLabelFont()
                             .foregroundStyle(theme.primaryText)
                             .lineLimit(1)
@@ -649,7 +670,7 @@ private struct BatteryGlassRow: View {
                     .frame(width: 18)
                     .symbolEffect(.variableColor.iterative, isActive: isCharging)
 
-                Text(String(localized: "kind.battery") + ":")
+                Text("Power:")
                     .panelMetricLabelFont()
                     .foregroundStyle(theme.primaryText)
                     .lineLimit(1)

@@ -45,7 +45,7 @@ struct FanshuMonitorApp: App {
         .commands { AppMenuCommands() }
 
         Settings {
-            SettingsRootView(settings: monitorStore.settings)
+            SettingsRootView(settings: monitorStore.settings, mouseController: monitorStore.mouseController)
                 .environment(\.locale, effectiveLocale)
                 // 设置窗口始终跟随系统外观
         }

@@ -1,11 +1,15 @@
+import ApplicationServices
+import Combine
 import SwiftUI
 
 struct GeneralSettingsView: View {
     @ObservedObject var settings: MonitorSettings
+    @State private var accessibilityTrusted = AXIsProcessTrusted()
+    @State private var inputMonitoringTrusted = CGPreflightListenEventAccess()
 
     var body: some View {
-        SettingsPage(scrolls: false) {
-            SettingsGroup {
+        SettingsPage {
+            SettingsGroup(String(localized: "settings.general")) {
                 SettingsRow(title: String(localized: "settings.launch-at-login"), subtitle: String(localized: "settings.launch-at-login.subtitle")) {
                     Toggle("", isOn: $settings.launchAtLogin)
                         .toggleStyle(.switch)
@@ -65,6 +69,29 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            SettingsGroup("权限") {
+                SettingsRow(title: "辅助功能", subtitle: "用于接管 F1/F2 和鼠标可编程按键") {
+                    Button(accessibilityTrusted ? "已授权" : "授权") {
+                        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+                        _ = AXIsProcessTrustedWithOptions(options)
+                        accessibilityTrusted = AXIsProcessTrusted()
+                    }
+                    .fixedSize()
+                    .disabled(accessibilityTrusted)
+                }
+
+                SettingsDivider()
+
+                SettingsRow(title: "输入监听", subtitle: "用于识别系统亮度键") {
+                    Button(inputMonitoringTrusted ? "已授权" : "授权") {
+                        _ = CGRequestListenEventAccess()
+                        inputMonitoringTrusted = CGPreflightListenEventAccess()
+                    }
+                    .fixedSize()
+                    .disabled(inputMonitoringTrusted)
+                }
+            }
+
             SettingsGroup(String(localized: "settings.utilities")) {
                 SettingsRow(title: String(localized: "settings.check-updates"), subtitle: String(localized: "settings.check-updates.subtitle")) {
                     Toggle("", isOn: $settings.updateChecksEnabled)
@@ -102,6 +129,12 @@ struct GeneralSettingsView: View {
             .padding(.top, -2)
             .padding(.trailing, 2)
         }
+        .onAppear {
+            refreshPermissionState()
+        }
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+            refreshPermissionState()
+        }
     }
 
     private var codexRefreshIntervalText: String {
@@ -109,5 +142,10 @@ struct GeneralSettingsView: View {
             format: String(localized: "settings.minutes-format"),
             Int(settings.codexRefreshIntervalMinutes)
         )
+    }
+
+    private func refreshPermissionState() {
+        accessibilityTrusted = AXIsProcessTrusted()
+        inputMonitoringTrusted = CGPreflightListenEventAccess()
     }
 }

@@ -6,6 +6,9 @@ final class SMCReader {
     private static let temperatureKeys = [
         "Tp09", "Tp0T", "Tp01", "Tp05", "Tp0D", "Tp0H", "Tp0L", "Tp0P", "Tp0X", "Tp0b"
     ]
+    private static let gpuTemperatureKeys = [
+        "TG0D", "TG0P", "TG0H", "TG0T", "Tg0D", "Tg0P", "Tg0H", "Tg0T"
+    ]
 
     init?() {
         var iterator: io_iterator_t = 0
@@ -27,8 +30,16 @@ final class SMCReader {
     }
 
     func cpuTemperature() -> Double? {
+        averageTemperature(for: Self.temperatureKeys)
+    }
+
+    func gpuTemperature() -> Double? {
+        averageTemperature(for: Self.gpuTemperatureKeys)
+    }
+
+    private func averageTemperature(for keys: [String]) -> Double? {
         var temperatures: [Double] = []
-        for key in Self.temperatureKeys {
+        for key in keys {
             if let value = readValue(key) {
                 temperatures.append(value)
             }

@@ -86,8 +86,12 @@ struct SettingsRow<Accessory: View>: View {
                     Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .minimumScaleFactor(0.82)
                 }
             }
+            .layoutPriority(1)
 
             Spacer(minLength: 16)
 

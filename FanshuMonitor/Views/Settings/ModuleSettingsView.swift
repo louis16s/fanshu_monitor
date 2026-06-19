@@ -8,7 +8,7 @@ struct ModuleSettingsView: View {
 
     var body: some View {
         SettingsPage {
-            SettingsGroup {
+            SettingsGroup(String(localized: "settings.modules")) {
                 SettingsRow(title: String(localized: "settings.show-in-panel")) {
                     Toggle("", isOn: Binding(
                         get: { settings.isVisible(kind) },
@@ -20,27 +20,41 @@ struct ModuleSettingsView: View {
             }
 
             SettingsGroup(String(localized: "settings.metrics")) {
-                LazyVGrid(columns: [
-                    GridItem(.flexible(), spacing: 8),
-                    GridItem(.flexible(), spacing: 8)
-                ], spacing: 0) {
-                    ForEach(kind.availableMetrics) { metric in
-                        let isSelected = settings.isMetricEnabled(metric.id, for: kind)
-                        MetricSelectionRow(
-                            title: metric.title,
-                            isSelected: isSelected,
-                            isEnabled: settings.canEnableMetric(metric.id, for: kind)
-                        ) {
-                            settings.setMetric(metric.id, enabled: !isSelected, for: kind)
-                        }
+                ForEach(Array(kind.availableMetrics.enumerated()), id: \.element.id) { index, metric in
+                    let isSelected = settings.isMetricEnabled(metric.id, for: kind)
+                    MetricSelectionRow(
+                        title: metric.title,
+                        isSelected: isSelected,
+                        isEnabled: isLocked(metric) || settings.canEnableMetric(metric.id, for: kind),
+                        isLocked: isLocked(metric)
+                    ) {
+                        guard !isLocked(metric) else { return }
+                        settings.setMetric(metric.id, enabled: !isSelected, for: kind)
+                    }
+
+                    if index < kind.availableMetrics.count - 1 {
+                        SettingsDivider()
                     }
                 }
+
+                if kind.availableMetrics.count > MonitorSettings.maximumEnabledMetricsPerKind {
+                    SettingsDivider()
+
+                    HStack {
+                        Text(String(localized: "settings.metrics-limit") + "\(MonitorSettings.maximumEnabledMetricsPerKind)" + String(localized: "settings.metrics-limit-suffix"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                }
             }
-            Text(String(localized: "settings.metrics-limit") + " \(MonitorSettings.maximumEnabledMetricsPerKind) " + String(localized: "settings.metrics-limit-suffix"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 2)
         }
+    }
+
+    private func isLocked(_ metric: MetricSwitch) -> Bool {
+        false
     }
 }
 
@@ -48,25 +62,33 @@ private struct MetricSelectionRow: View {
     let title: String
     let isSelected: Bool
     let isEnabled: Bool
+    var isLocked = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.clear)
-                    .frame(width: 16, height: 16)
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 15, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .frame(width: 18, height: 18)
 
                 Text(title)
-                    .font(.body)
+                    .font(.body.weight(.medium))
                     .foregroundStyle(isEnabled ? .primary : .secondary)
 
                 Spacer(minLength: 16)
+
+                if isSelected {
+                    Text(isLocked ? "默认" : String(localized: "settings.visible"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .frame(minHeight: 44)
+            .padding(.vertical, 9)
+            .frame(minHeight: 42)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -77,12 +99,10 @@ private struct MetricSelectionRow: View {
 #if DISPLAY_CONTROL
 struct DisplayModuleSettingsView: View {
     @ObservedObject var settings: MonitorSettings
-    @State private var accessibilityTrusted = AXIsProcessTrusted()
-
     var body: some View {
         SettingsPage {
             SettingsGroup("显示范围") {
-                SettingsRow(title: "包含内建显示器", subtitle: "关闭后面板只显示外接屏。") {
+                SettingsRow(title: "包含内建显示器", subtitle: "关闭后面板只显示外接屏") {
                     Toggle("", isOn: $settings.showBuiltInDisplays)
                         .toggleStyle(.switch)
                         .labelsHidden()
@@ -90,7 +110,7 @@ struct DisplayModuleSettingsView: View {
             }
 
             SettingsGroup("控制项") {
-                SettingsRow(title: "亮度", subtitle: "支持内建屏系统亮度与外接屏 DDC 亮度。") {
+                SettingsRow(title: "亮度", subtitle: "支持内建屏系统亮度与外接屏 DDC 亮度") {
                     Toggle("", isOn: $settings.displayBrightnessControlEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
@@ -98,7 +118,7 @@ struct DisplayModuleSettingsView: View {
 
                 SettingsDivider()
 
-                SettingsRow(title: "低亮度软件调光", subtitle: "DDC 到达最低亮度后，用屏幕遮罩继续变暗。") {
+                SettingsRow(title: "低亮度软件调光", subtitle: "DDC 到达最低亮度后，用屏幕遮罩继续变暗") {
                     Toggle("", isOn: $settings.displaySoftwareDimmingEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
@@ -106,7 +126,7 @@ struct DisplayModuleSettingsView: View {
 
                 SettingsDivider()
 
-                SettingsRow(title: "音量", subtitle: "不需要显示器音量控制时可以关闭。") {
+                SettingsRow(title: "音量", subtitle: "不需要显示器音量控制时可以关闭") {
                     Toggle("", isOn: $settings.displayVolumeControlEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
@@ -114,7 +134,7 @@ struct DisplayModuleSettingsView: View {
 
                 SettingsDivider()
 
-                SettingsRow(title: "对比度", subtitle: "部分显示器支持 DDC 对比度。") {
+                SettingsRow(title: "对比度", subtitle: "部分显示器支持 DDC 对比度") {
                     Toggle("", isOn: $settings.displayContrastControlEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
@@ -122,19 +142,7 @@ struct DisplayModuleSettingsView: View {
             }
 
             SettingsGroup("亮度键") {
-                SettingsRow(title: "辅助功能权限", subtitle: "允许应用拦截 F1/F2，并按鼠标所在屏幕分配亮度控制。") {
-                    Button(accessibilityTrusted ? "已授权" : "授权") {
-                        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-                        _ = AXIsProcessTrustedWithOptions(options)
-                        accessibilityTrusted = AXIsProcessTrusted()
-                    }
-                    .fixedSize()
-                    .disabled(accessibilityTrusted)
-                }
-
-                SettingsDivider()
-
-                SettingsRow(title: "接管 F1/F2", subtitle: "鼠标在可控外接屏上时拦截亮度键，否则交还系统。") {
+                SettingsRow(title: "接管 F1/F2", subtitle: "鼠标在可控外接屏上时拦截亮度键，否则交还系统") {
                     Toggle("", isOn: $settings.brightnessKeyInterceptionEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
@@ -142,7 +150,7 @@ struct DisplayModuleSettingsView: View {
 
                 SettingsDivider()
 
-                SettingsRow(title: "系统亮度浮层", subtitle: "使用原生 OSD，并显示在正在调整的屏幕上。") {
+                SettingsRow(title: "系统亮度浮层", subtitle: "使用原生 OSD，并显示在正在调整的屏幕上") {
                     Toggle("", isOn: $settings.displayNativeOSDEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
@@ -150,24 +158,18 @@ struct DisplayModuleSettingsView: View {
 
                 SettingsDivider()
 
-                SettingsRow(title: "亮度步进", subtitle: "F1/F2 每次调整的百分比。") {
+                SettingsRow(title: "亮度步进", subtitle: "F1/F2 每次调整的百分比") {
                     BrightnessStepControl(value: $settings.brightnessKeyStepPercent)
                 }
             }
 
             SettingsGroup("面板显示") {
-                SettingsRow(title: "显示可用性提示", subtitle: "显示“亮度可用/不可用原因”等诊断文字。") {
+                SettingsRow(title: "显示可用性提示", subtitle: "显示“亮度可用/不可用原因”等诊断文字") {
                     Toggle("", isOn: $settings.displayAvailabilityHintsEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
                 }
             }
-        }
-        .onAppear {
-            accessibilityTrusted = AXIsProcessTrusted()
-        }
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            accessibilityTrusted = AXIsProcessTrusted()
         }
     }
 }

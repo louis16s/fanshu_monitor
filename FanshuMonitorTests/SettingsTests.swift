@@ -66,9 +66,9 @@ struct SettingsTests {
         #expect(settings.isVisible(.cpu))
     }
 
-    @Test func metricSelectionCapsAtFiveItems() {
-        let defaults = UserDefaults(suiteName: "metricSelectionCapsAtFiveItems")!
-        defaults.removePersistentDomain(forName: "metricSelectionCapsAtFiveItems")
+    @Test func metricSelectionCapsAtFourItems() {
+        let defaults = UserDefaults(suiteName: "metricSelectionCapsAtFourItems")!
+        defaults.removePersistentDomain(forName: "metricSelectionCapsAtFourItems")
         let settings = MonitorSettings(defaults: defaults)
 
         settings.setMetric("system", enabled: true, for: .cpu)
@@ -82,7 +82,7 @@ struct SettingsTests {
         #expect(settings.isMetricEnabled("user", for: .cpu))
         #expect(settings.isMetricEnabled("idle", for: .cpu))
         #expect(settings.isMetricEnabled("temperature", for: .cpu))
-        #expect(settings.isMetricEnabled("temperature-status", for: .cpu))
+        #expect(!settings.isMetricEnabled("temperature-status", for: .cpu))
         #expect(!settings.isMetricEnabled("missing", for: .cpu))
         #expect(!settings.canEnableMetric("missing", for: .cpu))
     }
@@ -93,5 +93,46 @@ struct SettingsTests {
         let settings = MonitorSettings(defaults: defaults)
 
         #expect(settings.isMetricEnabled("compressed", for: .memory))
+    }
+
+    @Test func codexPlanIsOptionalByDefault() {
+        let defaults = UserDefaults(suiteName: "codexPlanIsOptionalByDefault")!
+        defaults.removePersistentDomain(forName: "codexPlanIsOptionalByDefault")
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(!settings.isMetricEnabled("plan", for: .codex))
+        #expect(settings.canEnableMetric("plan", for: .codex))
+        settings.setMetric("plan", enabled: true, for: .codex)
+        #expect(settings.isMetricEnabled("plan", for: .codex))
+        settings.setMetric("plan", enabled: false, for: .codex)
+        #expect(!settings.isMetricEnabled("plan", for: .codex))
+    }
+
+    @Test func mouseControlDefaultsAreLowOverhead() {
+        let defaults = UserDefaults(suiteName: "mouseControlDefaultsAreLowOverhead")!
+        defaults.removePersistentDomain(forName: "mouseControlDefaultsAreLowOverhead")
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(!settings.mouseControlEnabled)
+        #expect(settings.mouseDPIOnDemandEnabled)
+        #expect(settings.mouseDPI == 1600)
+        #expect(settings.mouseAction(for: .middle) == .passThrough)
+        #expect(settings.mouseAction(for: .gesture) == .passThrough)
+        #expect(settings.mouseAction(for: .back) == .paste)
+        #expect(settings.mouseAction(for: .forward) == .launchpad)
+        #expect(settings.brightnessKeyStepPercent == 5)
+    }
+
+    @Test func mouseButtonMappingLoadsPersistedValues() {
+        let suite = "mouseButtonMappingLoadsPersistedValues"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(true, forKey: "settings.mouse.controlEnabled")
+        defaults.set(MouseButtonAction.copy.rawValue, forKey: "settings.mouse.action.middle")
+
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(settings.mouseControlEnabled)
+        #expect(settings.mouseAction(for: .middle) == .copy)
     }
 }

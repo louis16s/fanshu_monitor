@@ -12,6 +12,7 @@ enum HaloRingSource: String, CaseIterable, Identifiable {
     case network
     case battery
     case codex
+    case codexWeekly
 
     var id: String { rawValue }
 
@@ -24,7 +25,8 @@ enum HaloRingSource: String, CaseIterable, Identifiable {
         case .storage: String(localized: "kind.storage")
         case .network: String(localized: "kind.network")
         case .battery: String(localized: "kind.battery")
-        case .codex: "Codex Usage"
+        case .codex: "Codex 5H"
+        case .codexWeekly: "Codex Week"
         }
     }
 }
@@ -67,9 +69,9 @@ enum MonitorKind: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .cpu:
-            String(localized: "kind.cpu")
+            "CPU"
         case .gpu:
-            String(localized: "kind.gpu")
+            "GPU"
         case .memory:
             String(localized: "kind.memory")
         case .storage:
@@ -79,7 +81,7 @@ enum MonitorKind: String, CaseIterable, Identifiable {
         case .battery:
             String(localized: "kind.battery")
         case .codex:
-            "Codex Usage"
+            "Codex"
         }
     }
 
@@ -116,7 +118,8 @@ enum MonitorKind: String, CaseIterable, Identifiable {
                 MetricSwitch(id: "gpu-memory", title: String(localized: "metric.gpu.gpu-memory"), isDefault: true),
                 MetricSwitch(id: "allocated", title: String(localized: "metric.gpu.allocated"), isDefault: true),
                 MetricSwitch(id: "render", title: String(localized: "metric.gpu.render"), isDefault: true),
-                MetricSwitch(id: "tiler", title: String(localized: "metric.gpu.tiler"), isDefault: true),
+                MetricSwitch(id: "temperature", title: String(localized: "metric.gpu.temperature"), isDefault: true),
+                MetricSwitch(id: "tiler", title: String(localized: "metric.gpu.tiler"), isDefault: false),
             ]
         case .memory:
             return [
@@ -151,10 +154,11 @@ enum MonitorKind: String, CaseIterable, Identifiable {
             ]
         case .codex:
             return [
+                MetricSwitch(id: "plan", title: "套餐", isDefault: false),
                 MetricSwitch(id: "five-hour", title: "5H", isDefault: true),
                 MetricSwitch(id: "weekly", title: "一周", isDefault: true),
                 MetricSwitch(id: "five-hour-reset", title: "5H刷新", isDefault: true),
-                MetricSwitch(id: "weekly-reset", title: "周刷新", isDefault: true),
+                MetricSwitch(id: "weekly-reset", title: "周刷新", isDefault: false),
             ]
         }
     }
@@ -235,6 +239,7 @@ final class MonitorStore: ObservableObject {
     let displayController = DisplayControlController()
     private var brightnessKeyEventTap: BrightnessKeyEventTap?
     #endif
+    let mouseController = MouseControlController()
 
     private var allModules: [MonitorModule]
     private let refreshSchedule = MonitorRefreshSchedule()
@@ -259,9 +264,9 @@ final class MonitorStore: ObservableObject {
         displayController.startAutomaticRefresh()
         displayController.refreshSynchronously()
         brightnessKeyEventTap = BrightnessKeyEventTap(settings: settings, displayController: displayController)
-        brightnessKeyEventTap?.requestInitialAccessibilityPermissionIfNeeded()
         brightnessKeyEventTap?.start()
         #endif
+        mouseController.configure(settings: settings)
         settings.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -338,13 +343,17 @@ final class MonitorStore: ObservableObject {
             return allModules.first { $0.kind == .battery }?.value ?? 0
         case .codex:
             return allModules.first { $0.kind == .codex }?.value ?? 0
+        case .codexWeekly:
+            return codexMetricPercent("weekly")
         }
     }
 
     var haloRingLoadLevel: MenuBarComputeLoadLevel {
         switch settings.ringSource {
-        case .combined, .cpu, .gpu, .storage, .network, .battery, .codex:
+        case .combined, .cpu, .gpu, .storage, .network, .battery:
             return ComputeLoadModel.loadLevel(for: combinedComputeLoad)
+        case .codex, .codexWeekly:
+            return ComputeLoadModel.quotaLevel(forRemaining: combinedComputeLoad)
         case .memory:
             let pressure = allModules.first { $0.kind == .memory }?.pressure ?? .unknown
             switch pressure {
@@ -354,6 +363,18 @@ final class MonitorStore: ObservableObject {
             case .unknown: return .working
             }
         }
+    }
+
+    private func codexMetricPercent(_ name: String) -> Double {
+        guard let value = allModules.first(where: { $0.kind == .codex })?
+            .metrics
+            .first(where: { $0.name == name })?
+            .value
+            .replacingOccurrences(of: "%", with: ""),
+              let number = Double(value) else {
+            return 0
+        }
+        return min(100, max(0, number))
     }
 
     private func advance() {
@@ -492,6 +513,15 @@ enum ComputeLoadModel {
         case ..<35: return .idle
         case ..<65: return .working
         case ..<85: return .busy
+        default: return .stressed
+        }
+    }
+
+    static func quotaLevel(forRemaining remaining: Double) -> MenuBarComputeLoadLevel {
+        switch remaining {
+        case 65...: return .idle
+        case 35..<65: return .working
+        case 15..<35: return .busy
         default: return .stressed
         }
     }

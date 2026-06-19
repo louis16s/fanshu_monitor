@@ -5,6 +5,7 @@ import OSLog
 
 final class GPUSampler: MonitorSampler {
     var kind: MonitorKind { .gpu }
+    private let smcReader = SMCReader()
 
     func sample(previous: MonitorModule?) -> MonitorModule {
         guard let reading = gpuReading() else {
@@ -21,6 +22,8 @@ final class GPUSampler: MonitorSampler {
         if let renderUtilization = reading.renderUtilization {
             metrics.append(MonitorMetric(name: "render", value: percent(renderUtilization)))
         }
+
+        metrics.append(MonitorMetric(name: "temperature", value: gpuTemperatureText()))
 
         if let tilerUtilization = reading.tilerUtilization {
             metrics.append(MonitorMetric(name: "tiler", value: percent(tilerUtilization)))
@@ -98,6 +101,10 @@ final class GPUSampler: MonitorSampler {
             services.append(service)
         }
         return services
+    }
+
+    private func gpuTemperatureText() -> String {
+        smcReader?.gpuTemperature().map { "\(String(format: "%.0f", $0))°C" } ?? "--"
     }
 }
 

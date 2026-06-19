@@ -8,8 +8,6 @@ import OSLog
 @MainActor
 final class BrightnessKeyEventTap {
     private static let systemDefinedEventType = CGEventType(rawValue: 14)!
-    private static let accessibilityPromptTimestampKey = "permissions.keyboardCapture.lastPromptTimestamp.v3"
-    private static let accessibilityPromptRetryInterval: TimeInterval = 60 * 60
     private weak var settings: MonitorSettings?
     private weak var displayController: DisplayControlController?
     private var eventTap: CFMachPort?
@@ -31,7 +29,6 @@ final class BrightnessKeyEventTap {
         guard eventTap == nil else { return }
         guard settings?.brightnessKeyInterceptionEnabled == true else { return }
         guard hasKeyboardCapturePermission() else {
-            requestInitialAccessibilityPermissionIfNeeded()
             return
         }
 
@@ -46,7 +43,6 @@ final class BrightnessKeyEventTap {
             userInfo: userInfo
         ) else {
             AppLogger.ui.error("Unable to create brightness key event tap; check Accessibility/Input Monitoring permissions and sandbox state")
-            requestInitialAccessibilityPermissionIfNeeded()
             return
         }
 
@@ -57,30 +53,6 @@ final class BrightnessKeyEventTap {
         }
         CGEvent.tapEnable(tap: tap, enable: true)
         AppLogger.ui.notice("Brightness key event tap started")
-    }
-
-    func requestInitialAccessibilityPermissionIfNeeded() {
-        guard settings?.brightnessKeyInterceptionEnabled == true else { return }
-        let needsAccessibility = !AXIsProcessTrusted()
-        let needsListenAccess = !CGPreflightListenEventAccess()
-        guard needsAccessibility || needsListenAccess else { return }
-
-        let now = Date().timeIntervalSince1970
-        let lastPrompt = UserDefaults.standard.double(forKey: Self.accessibilityPromptTimestampKey)
-        guard lastPrompt == 0 || now - lastPrompt > Self.accessibilityPromptRetryInterval else {
-            logWaitingForAccessibility()
-            return
-        }
-
-        if needsAccessibility {
-            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-            _ = AXIsProcessTrustedWithOptions(options)
-        }
-        if needsListenAccess {
-            _ = CGRequestListenEventAccess()
-        }
-        UserDefaults.standard.set(now, forKey: Self.accessibilityPromptTimestampKey)
-        AppLogger.ui.notice("Requested keyboard capture permissions for brightness key interception")
     }
 
     func stop() {

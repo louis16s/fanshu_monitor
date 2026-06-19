@@ -2,6 +2,7 @@ import SwiftUI
 
 enum SettingsRoute: Hashable {
     case general
+    case mouse
     case module(MonitorKind)
     #if DISPLAY_CONTROL
     case displayModule
@@ -18,11 +19,22 @@ struct SettingsSidebar: View {
             Section {
                 Label(String(localized: "settings.sidebar.general"), systemImage: "gearshape")
                     .tag(SettingsRoute.general)
+
+                Label("鼠标", systemImage: "computermouse")
+                    .tag(SettingsRoute.mouse)
             }
 
             Section(String(localized: "settings.sidebar.modules")) {
                 ForEach(MonitorKind.allCases) { kind in
-                    Label(kind.title, systemImage: kind.symbol)
+                    Label {
+                        Text(kind == .codex ? "Codex" : kind.title)
+                            .foregroundStyle(settings.isVisible(kind) ? .primary : .secondary)
+                            .strikethrough(!settings.isVisible(kind), color: .secondary)
+                    } icon: {
+                        Image(systemName: kind.symbol)
+                            .foregroundStyle(settings.isVisible(kind) ? .primary : .secondary)
+                            .opacity(settings.isVisible(kind) ? 1 : 0.48)
+                    }
                         .tag(SettingsRoute.module(kind))
                 }
 

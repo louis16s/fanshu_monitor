@@ -94,14 +94,21 @@ final class MonitorSettings: ObservableObject {
     @Published var displayAvailabilityHintsEnabled: Bool = true
     @Published var displayNativeOSDEnabled: Bool = true
     @Published var displaySoftwareDimmingEnabled: Bool = true
-    @Published var brightnessKeyStepPercent: Double = 6.25
+    @Published var brightnessKeyStepPercent: Double = 5
     @Published var codexRefreshIntervalMinutes: Double = 5
     @Published var updateChecksEnabled: Bool = true
     @Published var brightnessKeyInterceptionEnabled: Bool = true
+    @Published var mouseControlEnabled: Bool = false
+    @Published var mouseDPIOnDemandEnabled: Bool = true
+    @Published var mouseDPI: Double = 1600
+    @Published var mouseMiddleAction: MouseButtonAction = .passThrough
+    @Published var mouseBackAction: MouseButtonAction = .paste
+    @Published var mouseForwardAction: MouseButtonAction = .launchpad
+    @Published var mouseGestureAction: MouseButtonAction = .passThrough
     @Published private(set) var visibleKinds: Set<MonitorKind> = []
     @Published private(set) var enabledMetrics: [MonitorKind: Set<String>] = [:]
 
-    static let maximumEnabledMetricsPerKind = 5
+    static let maximumEnabledMetricsPerKind = 4
 
     private let defaults: UserDefaults
     private var isUpdatingLaunchAtLogin = false
@@ -130,10 +137,17 @@ final class MonitorSettings: ObservableObject {
         displayAvailabilityHintsEnabled = defaults.object(forKey: Keys.displayAvailabilityHintsEnabled) as? Bool ?? true
         displayNativeOSDEnabled = defaults.object(forKey: Keys.displayNativeOSDEnabled) as? Bool ?? true
         displaySoftwareDimmingEnabled = defaults.object(forKey: Keys.displaySoftwareDimmingEnabled) as? Bool ?? true
-        brightnessKeyStepPercent = defaults.object(forKey: Keys.brightnessKeyStepPercent) as? Double ?? 6.25
+        brightnessKeyStepPercent = defaults.object(forKey: Keys.brightnessKeyStepPercent) as? Double ?? 5
         codexRefreshIntervalMinutes = defaults.object(forKey: Keys.codexRefreshIntervalMinutes) as? Double ?? 5
         updateChecksEnabled = defaults.object(forKey: Keys.updateChecksEnabled) as? Bool ?? true
         brightnessKeyInterceptionEnabled = defaults.object(forKey: Keys.brightnessKeyInterceptionEnabled) as? Bool ?? true
+        mouseControlEnabled = defaults.object(forKey: Keys.mouseControlEnabled) as? Bool ?? false
+        mouseDPIOnDemandEnabled = defaults.object(forKey: Keys.mouseDPIOnDemandEnabled) as? Bool ?? true
+        mouseDPI = defaults.object(forKey: Keys.mouseDPI) as? Double ?? 1600
+        mouseMiddleAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseMiddleAction) ?? "") ?? .passThrough
+        mouseBackAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseBackAction) ?? "") ?? .paste
+        mouseForwardAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseForwardAction) ?? "") ?? .launchpad
+        mouseGestureAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseGestureAction) ?? "") ?? .passThrough
 
         if let storedKinds = defaults.array(forKey: Keys.visibleKinds) as? [String] {
             let kinds = storedKinds.compactMap(MonitorKind.init(rawValue:))
@@ -202,6 +216,32 @@ final class MonitorSettings: ObservableObject {
 
     func resetMetrics(for kind: MonitorKind) {
         enabledMetrics[kind] = defaultMetricIds(for: kind)
+    }
+
+    func mouseAction(for slot: MouseButtonSlot) -> MouseButtonAction {
+        switch slot {
+        case .middle:
+            mouseMiddleAction
+        case .back:
+            mouseBackAction
+        case .forward:
+            mouseForwardAction
+        case .gesture:
+            mouseGestureAction
+        }
+    }
+
+    func setMouseAction(_ action: MouseButtonAction, for slot: MouseButtonSlot) {
+        switch slot {
+        case .middle:
+            mouseMiddleAction = action
+        case .back:
+            mouseBackAction = action
+        case .forward:
+            mouseForwardAction = action
+        case .gesture:
+            mouseGestureAction = action
+        }
     }
 
     private func migrateMetrics(_ ids: [String], for kind: MonitorKind) -> [String] {
@@ -376,6 +416,55 @@ final class MonitorSettings: ObservableObject {
             }
             .store(in: &cancellables)
 
+        $mouseControlEnabled
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(newValue, forKey: Keys.mouseControlEnabled)
+            }
+            .store(in: &cancellables)
+
+        $mouseDPIOnDemandEnabled
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(newValue, forKey: Keys.mouseDPIOnDemandEnabled)
+            }
+            .store(in: &cancellables)
+
+        $mouseDPI
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(min(8000, max(200, newValue)), forKey: Keys.mouseDPI)
+            }
+            .store(in: &cancellables)
+
+        $mouseMiddleAction
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(newValue.rawValue, forKey: Keys.mouseMiddleAction)
+            }
+            .store(in: &cancellables)
+
+        $mouseBackAction
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(newValue.rawValue, forKey: Keys.mouseBackAction)
+            }
+            .store(in: &cancellables)
+
+        $mouseForwardAction
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(newValue.rawValue, forKey: Keys.mouseForwardAction)
+            }
+            .store(in: &cancellables)
+
+        $mouseGestureAction
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(newValue.rawValue, forKey: Keys.mouseGestureAction)
+            }
+            .store(in: &cancellables)
+
         $visibleKinds
             .dropFirst()
             .sink { [weak self] newValue in
@@ -434,10 +523,17 @@ final class MonitorSettings: ObservableObject {
         displayAvailabilityHintsEnabled = true
         displayNativeOSDEnabled = true
         displaySoftwareDimmingEnabled = true
-        brightnessKeyStepPercent = 6.25
+        brightnessKeyStepPercent = 5
         codexRefreshIntervalMinutes = 5
         updateChecksEnabled = true
         brightnessKeyInterceptionEnabled = true
+        mouseControlEnabled = false
+        mouseDPIOnDemandEnabled = true
+        mouseDPI = 1600
+        mouseMiddleAction = .passThrough
+        mouseBackAction = .paste
+        mouseForwardAction = .launchpad
+        mouseGestureAction = .passThrough
         visibleKinds = Set(MonitorKind.allCases).subtracting([.storage, .network])
         enabledMetrics = [:]
     }
@@ -460,6 +556,13 @@ private enum Keys {
     static let codexRefreshIntervalMinutes = "settings.codexRefreshIntervalMinutes"
     static let updateChecksEnabled = "settings.updateChecksEnabled"
     static let brightnessKeyInterceptionEnabled = "settings.brightnessKeyInterceptionEnabled"
+    static let mouseControlEnabled = "settings.mouse.controlEnabled"
+    static let mouseDPIOnDemandEnabled = "settings.mouse.dpiOnDemandEnabled"
+    static let mouseDPI = "settings.mouse.dpi"
+    static let mouseMiddleAction = "settings.mouse.action.middle"
+    static let mouseBackAction = "settings.mouse.action.back"
+    static let mouseForwardAction = "settings.mouse.action.forward"
+    static let mouseGestureAction = "settings.mouse.action.gesture"
     static let visibleKinds = "settings.visibleKinds"
     static let codexVisibilityMigrated = "settings.codexVisibilityMigrated"
     static let enabledMetricsPrefix = "settings.enabledMetrics."

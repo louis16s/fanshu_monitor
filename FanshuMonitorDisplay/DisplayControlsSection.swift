@@ -33,13 +33,13 @@ struct DisplayControlsSection: View {
                     .foregroundStyle(tint)
                     .frame(width: 18)
 
-                Text("显示器:")
+                Text("Display:")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(palette.primaryText)
                     .lineLimit(1)
 
                 Text(summary(for: visibleDisplays, hasControls: hasControls))
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(palette.valueText)
                     .lineLimit(1)
 
@@ -121,14 +121,14 @@ struct DisplayControlsSection: View {
 
     private func summary(for displays: [ControlledDisplay], hasControls: Bool) -> String {
         guard hasControls else {
-            return "已关闭"
+            return "Off"
         }
 
         let externalCount = displays.filter { !$0.isBuiltIn }.count
         if externalCount > 0 {
-            return "\(displays.count) 台 · 外接 \(externalCount)"
+            return "外接 \(externalCount)"
         }
-        return "\(displays.count) 台"
+        return "内置"
     }
 }
 
@@ -188,8 +188,7 @@ private struct DisplayControlGroup: View {
                             value: binding(for: .brightness),
                             isEnabled: display.supports(.brightness),
                             palette: palette,
-                            tint: tint,
-                            marker: hardwareDDCZeroMarker
+                            tint: tint
                         )
 
                     }
@@ -201,8 +200,7 @@ private struct DisplayControlGroup: View {
                             value: binding(for: .volume),
                             isEnabled: display.supports(.volume),
                             palette: palette,
-                            tint: tint,
-                            marker: nil
+                            tint: tint
                         )
                     }
 
@@ -213,8 +211,7 @@ private struct DisplayControlGroup: View {
                             value: binding(for: .contrast),
                             isEnabled: display.supports(.contrast),
                             palette: palette,
-                            tint: tint,
-                            marker: nil
+                            tint: tint
                         )
                     }
                 }
@@ -234,15 +231,6 @@ private struct DisplayControlGroup: View {
         )
     }
 
-    private var hardwareDDCZeroMarker: DisplaySliderMarker? {
-        guard !display.isBuiltIn, settings.displaySoftwareDimmingEnabled else {
-            return nil
-        }
-        return DisplaySliderMarker(
-            position: DisplayDimmingCalibration.hardwareZeroUserBrightness,
-            label: "DDC 0"
-        )
-    }
 }
 
 private struct ControlAvailabilityGrid: View {
@@ -278,7 +266,6 @@ private struct DisplayControlSlider: View {
     let isEnabled: Bool
     let palette: MonitorPalette
     let tint: Color
-    let marker: DisplaySliderMarker?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -293,22 +280,11 @@ private struct DisplayControlSlider: View {
                 .foregroundStyle(isEnabled ? palette.secondaryText : palette.captionText)
                 .frame(width: 34, alignment: .leading)
 
-            ZStack(alignment: .leading) {
-                Slider(value: $value, in: 0...100, step: 1)
-                    .tint(tint)
-                    .controlSize(.small)
-                    .disabled(!isEnabled)
-
-                if let marker {
-                    DisplaySliderMarkerView(
-                        marker: marker,
-                        palette: palette,
-                        tint: tint,
-                        isEnabled: isEnabled
-                    )
-                }
-            }
-            .frame(height: marker == nil ? 16 : 29)
+            Slider(value: $value, in: 0...100, step: 1)
+                .tint(tint)
+                .controlSize(.small)
+                .disabled(!isEnabled)
+                .frame(height: 16)
 
             Text("\(Int(value.rounded()))%")
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
@@ -317,45 +293,6 @@ private struct DisplayControlSlider: View {
                 .frame(width: 34, alignment: .trailing)
         }
         .opacity(isEnabled ? 1 : 0.48)
-    }
-}
-
-private struct DisplaySliderMarker {
-    let position: Double
-    let label: String
-}
-
-private struct DisplaySliderMarkerView: View {
-    let marker: DisplaySliderMarker
-    let palette: MonitorPalette
-    let tint: Color
-    let isEnabled: Bool
-
-    private let labelWidth: CGFloat = 42
-
-    var body: some View {
-        GeometryReader { proxy in
-            let fraction = min(1, max(0, marker.position / 100))
-            let x = proxy.size.width * fraction
-            let clampedX = min(max(0, x - labelWidth / 2), max(0, proxy.size.width - labelWidth))
-
-            VStack(spacing: 1) {
-                Capsule()
-                    .fill((isEnabled ? tint : palette.captionText).opacity(0.8))
-                    .frame(width: 2, height: 7)
-
-                Text(marker.label)
-                    .font(.system(size: 6.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(palette.captionText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .frame(width: labelWidth)
-            }
-            .frame(width: labelWidth)
-            .offset(x: clampedX, y: 18)
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 
@@ -408,7 +345,9 @@ final class DisplayControlController: ObservableObject {
         if displayCallbackRegistered {
             CGDisplayRemoveReconfigurationCallback(displayReconfigurationCallback, Unmanaged.passUnretained(self).toOpaque())
         }
-        service.clearSoftwareDimming()
+        Task { @MainActor [service] in
+            service.clearSoftwareDimming()
+        }
     }
 
     func refreshAsync() {

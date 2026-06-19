@@ -27,6 +27,7 @@ final class CodexQuotaSampler: MonitorSampler {
             value: 0,
             summary: "刷新中",
             metrics: [
+                MonitorMetric(name: "plan", value: "--"),
                 MonitorMetric(name: "five-hour", value: "--"),
                 MonitorMetric(name: "weekly", value: "--"),
                 MonitorMetric(name: "five-hour-reset", value: "--"),
@@ -87,6 +88,7 @@ final class CodexQuotaSampler: MonitorSampler {
                 value: cachedModule?.value ?? 0,
                 summary: "--",
                 metrics: [
+                    MonitorMetric(name: "plan", value: cachedMetric("plan")),
                     MonitorMetric(name: "five-hour", value: cachedMetric("five-hour")),
                     MonitorMetric(name: "weekly", value: cachedMetric("weekly")),
                     MonitorMetric(name: "five-hour-reset", value: cachedMetric("five-hour-reset")),
@@ -105,8 +107,6 @@ final class CodexQuotaSampler: MonitorSampler {
     static func module(from report: CodexQuotaReport) -> MonitorModule {
         let fiveHour = report.periods.first { $0.id == "5h" }
         let weekly = report.periods.first { $0.id == "week" }
-        let fiveHourUsed = fiveHour?.usedPercent ?? usedPercent(from: fiveHour)
-        let weeklyUsed = weekly?.usedPercent ?? usedPercent(from: weekly)
         let fiveHourRemainingValue = (fiveHour?.remainingRatio).map { $0 * 100 } ?? 0
         let fiveHourRemaining = percentText(fiveHour?.remainingRatio)
         let weeklyRemaining = percentText(weekly?.remainingRatio)
@@ -119,6 +119,7 @@ final class CodexQuotaSampler: MonitorSampler {
             value: fiveHourRemainingValue,
             summary: planName,
             metrics: [
+                MonitorMetric(name: "plan", value: planName),
                 MonitorMetric(name: "five-hour", value: fiveHourRemaining),
                 MonitorMetric(name: "weekly", value: weeklyRemaining),
                 MonitorMetric(name: "five-hour-reset", value: fiveHourResetText),
@@ -233,7 +234,7 @@ struct CodexUsageClient: Sendable {
         request.httpMethod = "GET"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("番薯Monitor/0.2.3", forHTTPHeaderField: "User-Agent")
+        request.setValue("番薯Monitor/0.2.4", forHTTPHeaderField: "User-Agent")
 
         let data: Data
         let response: HTTPURLResponse

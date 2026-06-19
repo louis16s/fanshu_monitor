@@ -9,6 +9,7 @@ private enum SettingsWindowMetrics {
 
 struct SettingsRootView: View {
     @ObservedObject var settings: MonitorSettings
+    @ObservedObject var mouseController: MouseControlController
     @State private var selection: SettingsRoute = .general
 
     var body: some View {
@@ -36,6 +37,8 @@ struct SettingsRootView: View {
         switch selection {
         case .general:
             GeneralSettingsView(settings: settings)
+        case .mouse:
+            MouseSettingsView(settings: settings, controller: mouseController)
         case .module(let kind):
             ModuleSettingsView(kind: kind, settings: settings)
         #if DISPLAY_CONTROL
@@ -142,6 +145,8 @@ extension SettingsTab {
         switch self {
         case .general:
             return .general
+        case .mouse:
+            return .mouse
         case .modules:
             return nil
         case .about:

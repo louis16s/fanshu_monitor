@@ -41,6 +41,16 @@ struct AboutSettingsView: View {
                 }
             }
 
+            SettingsGroup("参考") {
+                ReferenceLinkRow(title: "MonitorControl", url: URL(string: "https://github.com/MonitorControl/MonitorControl")!)
+                SettingsDivider()
+                ReferenceLinkRow(title: "BetterDisplay", url: URL(string: "https://github.com/waydabber/BetterDisplay")!)
+                SettingsDivider()
+                ReferenceLinkRow(title: "Mouser", url: URL(string: "https://github.com/TomBadash/Mouser")!)
+                SettingsDivider()
+                ReferenceLinkRow(title: "Hagimi Monitor", url: URL(string: "https://github.com/Acerola-1/hagimi-monitor")!)
+            }
+
             Text("© 2026 番薯Monitor contributors · MIT")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -135,6 +145,21 @@ struct AboutSettingsView: View {
         } else {
             Button(title, action: action)
                 .buttonStyle(.borderedProminent)
+        }
+    }
+}
+
+private struct ReferenceLinkRow: View {
+    let title: String
+    let url: URL
+
+    var body: some View {
+        SettingsRow(title: title) {
+            Link(destination: url) {
+                Image(systemName: "arrow.up.right")
+            }
+            .buttonStyle(.plain)
+            .fixedSize()
         }
     }
 }
