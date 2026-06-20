@@ -190,12 +190,12 @@ struct UpdateCheckerTests {
 
     @Test func checkForUpdatesDoesNotReportSameVersionWithPrefix() async {
         let checker = UpdateChecker(
-            currentVersionProvider: { "0.2.4" },
+            currentVersionProvider: { "0.2.5" },
             dataLoader: { request in
                 let json = """
                 {
-                    "tag_name": "v0.2.4",
-                    "html_url": "https://github.com/louis16s/fanshu_monitor/releases/tag/v0.2.4"
+                    "tag_name": "v0.2.5",
+                    "html_url": "https://github.com/louis16s/fanshu_monitor/releases/tag/v0.2.5"
                 }
                 """
                 return (

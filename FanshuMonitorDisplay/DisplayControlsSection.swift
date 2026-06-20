@@ -168,6 +168,25 @@ private struct DisplayControlGroup: View {
 
                     Spacer(minLength: 8)
 
+                    if display.isBuiltIn {
+                        Button {
+                            controller.toggleBuiltInBlackout(displayID: display.id)
+                        } label: {
+                            Text(controller.isBuiltInBlackoutEnabled(displayID: display.id) ? "恢复" : "关闭")
+                                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(controller.isBuiltInBlackoutEnabled(displayID: display.id) ? tint : palette.secondaryText)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1.5)
+                        .background {
+                            Capsule()
+                                .fill(controller.isBuiltInBlackoutEnabled(displayID: display.id) ? tint.opacity(0.16) : palette.displayBadgeFill)
+                        }
+                        .help(controller.isBuiltInBlackoutEnabled(displayID: display.id) ? "恢复内建显示器" : "关闭内建显示器")
+                    }
+
                     Text(display.isBuiltIn ? "内置" : "外接")
                         .font(.system(size: 9, weight: .semibold, design: .rounded))
                         .foregroundStyle(palette.secondaryText)
@@ -416,11 +435,13 @@ private struct DisplayEmptyState: View {
 @MainActor
 final class DisplayControlController: ObservableObject {
     @Published private(set) var displays: [ControlledDisplay] = []
+    @Published private var builtInBlackoutDisplayIDs: Set<CGDirectDisplayID> = []
     @Published private var pendingValues: [CGDirectDisplayID: [DisplayControlKind: Double]] = [:]
 
     private let service = DisplayControlService()
     private let worker = DisplayControlWorker()
     private var fallbackValues: [CGDirectDisplayID: [DisplayControlKind: Double]] = [:]
+    private var recentWrittenValues: [ControlKey: RecentDisplayValue] = [:]
     private var screenChangeObserver: NSObjectProtocol?
     private var refreshWorkItem: DispatchWorkItem?
     private var displayCallbackRegistered = false
@@ -443,6 +464,7 @@ final class DisplayControlController: ObservableObject {
             CGDisplayRemoveReconfigurationCallback(displayReconfigurationCallback, Unmanaged.passUnretained(self).toOpaque())
         }
         Task { @MainActor [service] in
+            service.clearBuiltInBlackouts()
             service.clearSoftwareDimming()
         }
     }
@@ -451,10 +473,12 @@ final class DisplayControlController: ObservableObject {
         worker.refresh(service: service) { detectedDisplays in
             DispatchQueue.main.async {
                 AppLogger.ui.info("Display refresh completed, found \(detectedDisplays.count) displays")
-                self.displays = detectedDisplays
-                for display in detectedDisplays {
+                let mergedDisplays = detectedDisplays.map { self.mergedDisplayValues(for: $0) }
+                self.displays = mergedDisplays
+                for display in mergedDisplays {
                     self.seedFallbackValues(for: display)
                 }
+                self.syncBuiltInBlackouts()
                 self.syncSoftwareDimming()
             }
         }
@@ -469,11 +493,34 @@ final class DisplayControlController: ObservableObject {
         refreshWorkItem?.cancel()
         let detectedDisplays = service.displays()
         AppLogger.ui.info("Synchronous display refresh completed, found \(detectedDisplays.count) displays")
-        displays = detectedDisplays
-        for display in detectedDisplays {
+        let mergedDisplays = detectedDisplays.map { mergedDisplayValues(for: $0) }
+        displays = mergedDisplays
+        for display in mergedDisplays {
             seedFallbackValues(for: display)
         }
+        syncBuiltInBlackouts()
         syncSoftwareDimming()
+    }
+
+    func isBuiltInBlackoutEnabled(displayID: CGDirectDisplayID) -> Bool {
+        builtInBlackoutDisplayIDs.contains(displayID)
+    }
+
+    func toggleBuiltInBlackout(displayID: CGDirectDisplayID) {
+        guard let display = displays.first(where: { $0.id == displayID }),
+              display.isBuiltIn
+        else {
+            return
+        }
+
+        let shouldEnable = !builtInBlackoutDisplayIDs.contains(displayID)
+        if service.setBuiltInBlackout(shouldEnable, display: display, displays: displays) {
+            if shouldEnable {
+                builtInBlackoutDisplayIDs.insert(displayID)
+            } else {
+                builtInBlackoutDisplayIDs.remove(displayID)
+            }
+        }
     }
 
     func startAutomaticRefresh() {
@@ -522,7 +569,7 @@ final class DisplayControlController: ObservableObject {
     }
 
     func displayUnderMouse() -> ControlledDisplay? {
-        guard let displayID = displayIDsUnderMouse().first else { return nil }
+        guard let displayID = primaryDisplayIDUnderMouse() ?? displayIDsUnderMouse().first else { return nil }
         if displays.isEmpty {
             refreshNow()
         }
@@ -530,6 +577,34 @@ final class DisplayControlController: ObservableObject {
     }
 
     func brightnessDisplayUnderMouse() -> ControlledDisplay? {
+        if let primaryDisplayID = primaryDisplayIDUnderMouse() {
+            if displays.isEmpty {
+                AppLogger.ui.debug("Brightness key target list is empty; scheduling display refresh")
+                refreshNow()
+                return nil
+            }
+
+            guard let primaryDisplay = displays.first(where: { $0.id == primaryDisplayID }) else {
+                AppLogger.ui.debug("Brightness key primary display \(primaryDisplayID) is not in controller list; scheduling display refresh")
+                refreshNow()
+                return nil
+            }
+
+            if primaryDisplay.isBuiltIn {
+                AppLogger.ui.debug("Brightness key pass-through: mouse is on built-in display \(primaryDisplayID)")
+                return nil
+            }
+
+            if primaryDisplay.supports(.brightness) {
+                return primaryDisplay
+            }
+
+            AppLogger.ui.debug(
+                "Brightness key pass-through: primary external display \(primaryDisplayID) does not support brightness, reason: \(primaryDisplay.brightnessUnavailableReason ?? "unknown", privacy: .public)"
+            )
+            return nil
+        }
+
         let candidateIDs = displayIDsUnderMouse()
         guard !candidateIDs.isEmpty else {
             AppLogger.ui.debug("Brightness key pass-through: no display under mouse")
@@ -578,6 +653,14 @@ final class DisplayControlController: ObservableObject {
         return nil
     }
 
+    private func primaryDisplayIDUnderMouse() -> CGDirectDisplayID? {
+        let mouseLocation = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) }) else {
+            return nil
+        }
+        return screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+    }
+
     private func displayIDsUnderMouse() -> [CGDirectDisplayID] {
         let mouseLocation = NSEvent.mouseLocation
         var candidates: [CGDirectDisplayID] = []
@@ -598,8 +681,7 @@ final class DisplayControlController: ObservableObject {
             }
         }
 
-        if let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) }),
-           let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID {
+        if let displayID = primaryDisplayIDUnderMouse() {
             append(displayID)
             appendMirroredDisplays(for: displayID)
         }
@@ -696,6 +778,25 @@ final class DisplayControlController: ObservableObject {
         ]
     }
 
+    private func mergedDisplayValues(for display: ControlledDisplay) -> ControlledDisplay {
+        pruneExpiredRecentValues()
+        var mergedDisplay = display
+        for control in DisplayControlKind.allCases {
+            let key = ControlKey(displayID: display.id, control: control)
+            if let pendingValue = pendingValues[display.id]?[control] {
+                mergedDisplay.setValue(pendingValue, for: control)
+            } else if let recentValue = recentWrittenValues[key] {
+                mergedDisplay.setValue(recentValue.value, for: control)
+            }
+        }
+        return mergedDisplay
+    }
+
+    private func pruneExpiredRecentValues() {
+        let now = Date()
+        recentWrittenValues = recentWrittenValues.filter { now.timeIntervalSince($0.value.date) < 3 }
+    }
+
     private func updateLocalValue(_ value: Double, for control: DisplayControlKind, displayID: CGDirectDisplayID) {
         guard let index = displays.firstIndex(where: { $0.id == displayID }) else {
             return
@@ -708,10 +809,13 @@ final class DisplayControlController: ObservableObject {
         let currentPendingValue = pendingValues[result.key.displayID]?[result.key.control]
         let isCurrentResult = currentPendingValue.map { abs($0 - result.value) < 0.001 } ?? false
 
-        if result.success {
+        if result.success, isCurrentResult {
             updateLocalValue(result.value, for: result.key.control, displayID: result.key.displayID)
             fallbackValues[result.key.displayID, default: [:]][result.key.control] = result.value
+            recentWrittenValues[result.key] = RecentDisplayValue(value: result.value, date: Date())
             AppLogger.ui.debug("Write succeeded for display \(result.key.displayID), control: \(result.key.control.storageKey, privacy: .public)")
+        } else if result.success {
+            AppLogger.ui.debug("Ignored stale write result for display \(result.key.displayID), control: \(result.key.control.storageKey, privacy: .public)")
         } else {
             AppLogger.ui.error("Write failed for display \(result.key.displayID), control: \(result.key.control.storageKey, privacy: .public)")
             if isCurrentResult, markUnsupportedOnFailure {
@@ -736,6 +840,17 @@ final class DisplayControlController: ObservableObject {
             return
         }
         service.syncSoftwareDimming(for: displays)
+    }
+
+    private func syncBuiltInBlackouts() {
+        let displayIDs = Set(displays.map(\.id))
+        builtInBlackoutDisplayIDs = builtInBlackoutDisplayIDs.intersection(displayIDs)
+        guard displays.contains(where: { !$0.isBuiltIn }) else {
+            builtInBlackoutDisplayIDs.removeAll()
+            service.clearBuiltInBlackouts()
+            return
+        }
+        service.syncBuiltInBlackouts(keeping: builtInBlackoutDisplayIDs, displays: displays)
     }
 
     private func markControlUnsupported(_ control: DisplayControlKind, displayID: CGDirectDisplayID) {
@@ -859,7 +974,7 @@ nonisolated(unsafe) private let displayReconfigurationCallback: CGDisplayReconfi
     }
 }
 
-nonisolated enum DisplayControlKind: Hashable {
+nonisolated enum DisplayControlKind: Hashable, CaseIterable {
     case brightness
     case volume
     case contrast
@@ -892,11 +1007,17 @@ private nonisolated struct ControlKey: Hashable {
     let control: DisplayControlKind
 }
 
+private struct RecentDisplayValue {
+    let value: Double
+    let date: Date
+}
+
 final class DisplayControlService {
     private let displayServices = DisplayServicesBridge()
     private let ddc = DisplayDDCBridge()
     private let defaults = UserDefaults.standard
     private let softwareDimming = DisplaySoftwareDimmingService()
+    private let builtInBlackout = BuiltInDisplayBlackoutService()
     var softwareDimmingEnabled = true
 
     func displays() -> [ControlledDisplay] {
@@ -988,6 +1109,53 @@ final class DisplayControlService {
 
     func clearSoftwareDimming() {
         softwareDimming.clearAll()
+    }
+
+    func setBuiltInBlackout(_ enabled: Bool, display: ControlledDisplay, displays: [ControlledDisplay]) -> Bool {
+        guard display.isBuiltIn else {
+            return false
+        }
+
+        if enabled {
+            guard let mirrorTarget = displays.first(where: { !$0.isBuiltIn }) else {
+                return false
+            }
+            let previousBrightness = displayServices.getBrightness(displayID: display.id)
+                ?? Float(display.brightness / 100)
+            let didMirror = builtInBlackout.setEnabled(
+                true,
+                displayID: display.id,
+                mirrorTargetID: mirrorTarget.id,
+                previousBrightness: previousBrightness
+            )
+            guard didMirror else {
+                return false
+            }
+            _ = displayServices.setBrightness(displayID: display.id, value: 0)
+            return didMirror
+        }
+
+        guard builtInBlackout.setEnabled(false, displayID: display.id, mirrorTargetID: nil, previousBrightness: nil) else {
+            return false
+        }
+        let restoredBrightness = builtInBlackout.restoreBrightness(for: display.id) ?? Float(display.brightness / 100)
+        _ = displayServices.setBrightness(displayID: display.id, value: restoredBrightness)
+        return true
+    }
+
+    func syncBuiltInBlackouts(keeping displayIDs: Set<CGDirectDisplayID>, displays: [ControlledDisplay]) {
+        builtInBlackout.sync(keeping: displayIDs)
+        guard let mirrorTarget = displays.first(where: { !$0.isBuiltIn })?.id else { return }
+        for displayID in displayIDs {
+            _ = builtInBlackout.setEnabled(true, displayID: displayID, mirrorTargetID: mirrorTarget, previousBrightness: nil)
+        }
+    }
+
+    func clearBuiltInBlackouts() {
+        let brightnessByDisplayID = builtInBlackout.clearAll()
+        for (displayID, brightness) in brightnessByDisplayID {
+            _ = displayServices.setBrightness(displayID: displayID, value: brightness)
+        }
     }
 
     private func displayName(for id: CGDirectDisplayID, isBuiltIn: Bool) -> String {
@@ -1211,6 +1379,68 @@ private final class DisplaySoftwareDimmingService {
         NSScreen.screens.first {
             ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) == displayID
         }
+    }
+}
+
+private final class BuiltInDisplayBlackoutService {
+    private var previousBrightnessByDisplayID: [CGDirectDisplayID: Float] = [:]
+
+    func setEnabled(
+        _ enabled: Bool,
+        displayID: CGDirectDisplayID,
+        mirrorTargetID: CGDirectDisplayID?,
+        previousBrightness: Float?
+    ) -> Bool {
+        guard CGDisplayIsBuiltin(displayID) != 0 else { return false }
+
+        if enabled {
+            guard let mirrorTargetID else { return false }
+            let didConfigure = configureMirroring(displayID: displayID, mirrorTargetID: mirrorTargetID)
+            if didConfigure, previousBrightnessByDisplayID[displayID] == nil {
+                previousBrightnessByDisplayID[displayID] = previousBrightness
+            }
+            return didConfigure
+        }
+
+        return configureMirroring(displayID: displayID, mirrorTargetID: nil)
+    }
+
+    func restoreBrightness(for displayID: CGDirectDisplayID) -> Float? {
+        previousBrightnessByDisplayID.removeValue(forKey: displayID)
+    }
+
+    func sync(keeping displayIDs: Set<CGDirectDisplayID>) {
+        let removedIDs = Set(previousBrightnessByDisplayID.keys).subtracting(displayIDs)
+        for displayID in removedIDs {
+            _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+        }
+        previousBrightnessByDisplayID = previousBrightnessByDisplayID.filter { displayIDs.contains($0.key) }
+    }
+
+    func clearAll() -> [CGDirectDisplayID: Float] {
+        let brightnessByDisplayID = previousBrightnessByDisplayID
+        previousBrightnessByDisplayID.removeAll()
+        for displayID in brightnessByDisplayID.keys {
+            _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+        }
+
+        return brightnessByDisplayID
+    }
+
+    private func configureMirroring(displayID: CGDirectDisplayID, mirrorTargetID: CGDirectDisplayID?) -> Bool {
+        var config: CGDisplayConfigRef?
+        guard CGBeginDisplayConfiguration(&config) == .success, let config else {
+            return false
+        }
+
+        let target = mirrorTargetID ?? kCGNullDirectDisplay
+        CGConfigureDisplayMirrorOfDisplay(config, displayID, target)
+        let result = CGCompleteDisplayConfiguration(config, .forSession)
+        if result != .success {
+            CGCancelDisplayConfiguration(config)
+            return false
+        }
+        return true
     }
 }
 
