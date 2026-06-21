@@ -438,13 +438,29 @@ final class DisplayControlController: ObservableObject {
     @Published private var builtInBlackoutDisplayIDs: Set<CGDirectDisplayID> = []
     @Published private var pendingValues: [CGDirectDisplayID: [DisplayControlKind: Double]] = [:]
 
+    private static let builtInBlackoutPreferenceKey = "displayControl.builtInBlackoutDesired"
     private let service = DisplayControlService()
     private let worker = DisplayControlWorker()
+    private let defaults = UserDefaults.standard
     private var fallbackValues: [CGDirectDisplayID: [DisplayControlKind: Double]] = [:]
     private var recentWrittenValues: [ControlKey: RecentDisplayValue] = [:]
     private var screenChangeObserver: NSObjectProtocol?
+    private var didWakeObserver: NSObjectProtocol?
+    private var screensDidWakeObserver: NSObjectProtocol?
     private var refreshWorkItem: DispatchWorkItem?
+    private var wakeMaintenanceGeneration = 0
     private var displayCallbackRegistered = false
+    private var isBuiltInBlackoutDesired: Bool {
+        get {
+            defaults.bool(forKey: Self.builtInBlackoutPreferenceKey)
+        }
+        set {
+            defaults.set(newValue, forKey: Self.builtInBlackoutPreferenceKey)
+        }
+    }
+    var needsBuiltInBlackoutMaintenance: Bool {
+        isBuiltInBlackoutDesired
+    }
     weak var settings: MonitorSettings? {
         didSet {
             service.softwareDimmingEnabled = settings?.displaySoftwareDimmingEnabled ?? true
@@ -459,6 +475,12 @@ final class DisplayControlController: ObservableObject {
     deinit {
         if let screenChangeObserver {
             NotificationCenter.default.removeObserver(screenChangeObserver)
+        }
+        if let didWakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(didWakeObserver)
+        }
+        if let screensDidWakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(screensDidWakeObserver)
         }
         if displayCallbackRegistered {
             CGDisplayRemoveReconfigurationCallback(displayReconfigurationCallback, Unmanaged.passUnretained(self).toOpaque())
@@ -516,8 +538,10 @@ final class DisplayControlController: ObservableObject {
         let shouldEnable = !builtInBlackoutDisplayIDs.contains(displayID)
         if service.setBuiltInBlackout(shouldEnable, display: display, displays: displays) {
             if shouldEnable {
+                isBuiltInBlackoutDesired = true
                 builtInBlackoutDisplayIDs.insert(displayID)
             } else {
+                isBuiltInBlackoutDesired = false
                 builtInBlackoutDisplayIDs.remove(displayID)
             }
         }
@@ -537,6 +561,32 @@ final class DisplayControlController: ObservableObject {
             }
         }
 
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        if didWakeObserver == nil {
+            didWakeObserver = workspaceCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                guard let controller = self else { return }
+                Task { @MainActor in
+                    controller.scheduleWakeRefreshes()
+                }
+            }
+        }
+        if screensDidWakeObserver == nil {
+            screensDidWakeObserver = workspaceCenter.addObserver(
+                forName: NSWorkspace.screensDidWakeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                guard let controller = self else { return }
+                Task { @MainActor in
+                    controller.scheduleWakeRefreshes()
+                }
+            }
+        }
+
         guard !displayCallbackRegistered else { return }
         let pointer = Unmanaged.passUnretained(self).toOpaque()
         if CGDisplayRegisterReconfigurationCallback(displayReconfigurationCallback, pointer) == .success {
@@ -551,13 +601,21 @@ final class DisplayControlController: ObservableObject {
             NotificationCenter.default.removeObserver(screenChangeObserver)
             self.screenChangeObserver = nil
         }
+        if let didWakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(didWakeObserver)
+            self.didWakeObserver = nil
+        }
+        if let screensDidWakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(screensDidWakeObserver)
+            self.screensDidWakeObserver = nil
+        }
         if displayCallbackRegistered {
             CGDisplayRemoveReconfigurationCallback(displayReconfigurationCallback, Unmanaged.passUnretained(self).toOpaque())
             displayCallbackRegistered = false
         }
     }
 
-    func scheduleRefresh() {
+    func scheduleRefresh(delay: TimeInterval = 0.45) {
         refreshWorkItem?.cancel()
         let item = DispatchWorkItem { [weak self] in
             Task { @MainActor in
@@ -565,7 +623,49 @@ final class DisplayControlController: ObservableObject {
             }
         }
         refreshWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: item)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    func scheduleWakeRefreshes() {
+        AppLogger.ui.notice("Display wake detected; reapplying display control state")
+        wakeMaintenanceGeneration &+= 1
+        let generation = wakeMaintenanceGeneration
+        let passes: [(delay: TimeInterval, fullRefresh: Bool)] = [
+            (0.15, false),
+            (0.8, true),
+            (1.8, false),
+            (3.2, true),
+            (6.0, false),
+            (10.0, true)
+        ]
+
+        for pass in passes {
+            DispatchQueue.main.asyncAfter(deadline: .now() + pass.delay) { [weak self] in
+                Task { @MainActor in
+                    self?.performWakeMaintenancePass(
+                        generation: generation,
+                        fullRefresh: pass.fullRefresh
+                    )
+                }
+            }
+        }
+    }
+
+    private func performWakeMaintenancePass(generation: Int, fullRefresh: Bool) {
+        guard generation == wakeMaintenanceGeneration, isBuiltInBlackoutDesired else {
+            return
+        }
+
+        let appliedDisplayIDs = service.reapplyBuiltInBlackoutsToOnlineDisplays()
+        if !appliedDisplayIDs.isEmpty {
+            builtInBlackoutDisplayIDs.formUnion(appliedDisplayIDs)
+        }
+
+        if fullRefresh {
+            refreshAsync()
+        } else if !displays.isEmpty {
+            syncBuiltInBlackouts()
+        }
     }
 
     func displayUnderMouse() -> ControlledDisplay? {
@@ -849,6 +949,13 @@ final class DisplayControlController: ObservableObject {
             builtInBlackoutDisplayIDs.removeAll()
             service.clearBuiltInBlackouts()
             return
+        }
+        if isBuiltInBlackoutDesired {
+            for display in displays where display.isBuiltIn {
+                if service.setBuiltInBlackout(true, display: display, displays: displays) {
+                    builtInBlackoutDisplayIDs.insert(display.id)
+                }
+            }
         }
         service.syncBuiltInBlackouts(keeping: builtInBlackoutDisplayIDs, displays: displays)
     }
@@ -1149,6 +1256,35 @@ final class DisplayControlService {
         for displayID in displayIDs {
             _ = builtInBlackout.setEnabled(true, displayID: displayID, mirrorTargetID: mirrorTarget, previousBrightness: nil)
         }
+    }
+
+    func reapplyBuiltInBlackoutsToOnlineDisplays() -> Set<CGDirectDisplayID> {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(UInt32(ids.count), &ids, &count) == .success else {
+            AppLogger.ui.error("CGGetOnlineDisplayList failed while reapplying built-in blackout")
+            return []
+        }
+
+        let displayIDs = Array(ids.prefix(Int(count)))
+        guard let mirrorTargetID = displayIDs.first(where: { CGDisplayIsBuiltin($0) == 0 }) else {
+            return []
+        }
+
+        var appliedDisplayIDs: Set<CGDirectDisplayID> = []
+        for displayID in displayIDs where CGDisplayIsBuiltin(displayID) != 0 {
+            let previousBrightness = displayServices.getBrightness(displayID: displayID)
+            if builtInBlackout.setEnabled(
+                true,
+                displayID: displayID,
+                mirrorTargetID: mirrorTargetID,
+                previousBrightness: previousBrightness
+            ) {
+                _ = displayServices.setBrightness(displayID: displayID, value: 0)
+                appliedDisplayIDs.insert(displayID)
+            }
+        }
+        return appliedDisplayIDs
     }
 
     func clearBuiltInBlackouts() {

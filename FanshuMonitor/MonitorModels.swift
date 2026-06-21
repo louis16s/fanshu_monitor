@@ -462,6 +462,7 @@ final class MonitorStore: ObservableObject {
 
     private var needsDisplayController: Bool {
         settings.brightnessKeyInterceptionEnabled
+            || displayController.needsBuiltInBlackoutMaintenance
             || (
                 settings.displayModuleVisible
                 && (
