@@ -167,6 +167,9 @@ final class MouseControlController: ObservableObject {
             guard let self else { return }
             self.device = result
             if let result {
+                if let currentDPI = result.currentDPI {
+                    self.settings?.mouseDPI = Double(currentDPI)
+                }
                 let dpi = result.currentDPI.map { " · \($0) DPI" } ?? ""
                 self.statusText = "\(result.displayName)\(dpi)"
             } else {
@@ -191,6 +194,7 @@ final class MouseControlController: ObservableObject {
                 var updated = self.device
                 updated?.currentDPI = clamped
                 self.device = updated
+                self.settings?.mouseDPI = Double(clamped)
                 self.statusText = "\(updated?.displayName ?? "Logitech 鼠标") · \(clamped) DPI"
             } else {
                 self.statusText = "DPI 未应用"

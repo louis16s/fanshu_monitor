@@ -657,6 +657,7 @@ private struct BatteryGlassRow: View {
     var details: [MonitorMetric] = []
     var isExpanded = false
     var toggleExpansion: (() -> Void)?
+    @State private var batteryBreathIsDimmed = false
 
     private var tint: Color {
         theme.moduleTint(for: module.kind)
@@ -670,7 +671,13 @@ private struct BatteryGlassRow: View {
                     .symbolRenderingMode(.monochrome)
                     .foregroundStyle(tint)
                     .frame(width: 18)
-                    .symbolEffect(.variableColor.iterative, isActive: isCharging)
+                    .opacity(isActivelyCharging && batteryBreathIsDimmed ? 0.46 : 1)
+                    .animation(
+                        isActivelyCharging
+                            ? .easeInOut(duration: MonitorConstants.batteryAnimationDuration).repeatForever(autoreverses: true)
+                            : .easeInOut(duration: 0.18),
+                        value: batteryBreathIsDimmed
+                    )
 
                 Text("Power:")
                     .panelMetricLabelFont()
@@ -714,6 +721,12 @@ private struct BatteryGlassRow: View {
                 toggleExpansion?()
             }
         }
+        .onAppear {
+            updateBatteryBreath()
+        }
+        .onChange(of: isActivelyCharging) { _, _ in
+            updateBatteryBreath()
+        }
         .glassEffect(.regular.tint(theme.rowGlassTint(for: module.kind)), in: .rect(cornerRadius: MonitorConstants.rowCornerRadius, style: .continuous))
     }
 
@@ -723,6 +736,17 @@ private struct BatteryGlassRow: View {
 
     private var isCharging: Bool {
         rawValue("status") == "charging"
+    }
+
+    private var isActivelyCharging: Bool {
+        hasBattery
+            && isCharging
+            && module.value < 99.5
+            && positiveWattValue(rawValue("charging-power")) != nil
+    }
+
+    private func updateBatteryBreath() {
+        batteryBreathIsDimmed = isActivelyCharging
     }
 
     private var powerSymbol: String {
@@ -791,6 +815,17 @@ private struct BatteryGlassRow: View {
 
     private var isConnectedToPower: Bool {
         rawValue("status") != "on-battery"
+    }
+
+    private func positiveWattValue(_ value: String) -> Double? {
+        let normalized = value
+            .replacingOccurrences(of: "W", with: "")
+            .replacingOccurrences(of: "瓦", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let number = Double(normalized), number > 0.05 else {
+            return nil
+        }
+        return number
     }
 }
 

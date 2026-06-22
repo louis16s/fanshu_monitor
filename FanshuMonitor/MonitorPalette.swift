@@ -35,7 +35,7 @@ struct MonitorPalette {
     var displayTint: Color {
         switch preference {
         case .systemBlue:
-            Color(hex: 0x4E7FD9)
+            Color(hex: 0x8B5CF6)
         case .graphite:
             Color(hex: 0x64748B)
         case .teal:
@@ -140,9 +140,9 @@ struct MonitorPalette {
         case .memory:
             Color(hex: 0x42A39A)
         case .storage:
-            Color(hex: 0x9A865E)
+            Color(hex: 0xB8872E)
         case .network:
-            Color(hex: 0x43A6A0)
+            Color(hex: 0x8B5CF6)
         case .battery:
             Color(hex: 0x65AF52)
         case .codex:
@@ -157,15 +157,15 @@ struct MonitorPalette {
         case .gpu:
             Color(hex: 0x475569)
         case .memory:
-            Color(hex: 0x0F766E)
+            Color(hex: 0x0D9488)
         case .storage:
             Color(hex: 0xA16207)
         case .network:
-            Color(hex: 0x0369A1)
+            Color(hex: 0x4338CA)
         case .battery:
             Color(hex: 0x4D7C0F)
         case .codex:
-            Color(hex: 0x7C3AED)
+            Color(hex: 0xBE185D)
         }
     }
 
@@ -184,7 +184,7 @@ struct MonitorPalette {
         case .battery:
             Color(hex: 0x65A30D)
         case .codex:
-            Color(hex: 0x06B6D4)
+            Color(hex: 0xE11D48)
         }
     }
 
@@ -203,7 +203,7 @@ struct MonitorPalette {
         case .battery:
             Color(hex: 0x16A34A)
         case .codex:
-            Color(hex: 0xDB2777)
+            Color(hex: 0xF59E0B)
         }
     }
 }

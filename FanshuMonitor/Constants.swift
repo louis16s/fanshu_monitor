@@ -21,7 +21,7 @@ enum MonitorConstants {
 
     // MARK: Animation Durations
     static let cpuAnimationDuration = 0.30
-    static let batteryAnimationDuration = 2.20
+    static let batteryAnimationDuration = 2.80
     static let gpuAnimationDuration = 0.85
     static let defaultAnimationDuration = 1.65
 
