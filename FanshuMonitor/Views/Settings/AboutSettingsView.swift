@@ -48,13 +48,13 @@ struct AboutSettingsView: View {
             }
 
             SettingsGroup("参考") {
-                ReferenceLinkRow(title: "MonitorControl", url: URL(string: "https://github.com/MonitorControl/MonitorControl")!)
+                ReferenceLinkRow(title: "Mouser", url: URL(string: "https://github.com/TomBadash/Mouser")!)
                 SettingsDivider()
                 ReferenceLinkRow(title: "BetterDisplay", url: URL(string: "https://github.com/waydabber/BetterDisplay")!)
                 SettingsDivider()
-                ReferenceLinkRow(title: "Mouser", url: URL(string: "https://github.com/TomBadash/Mouser")!)
-                SettingsDivider()
                 ReferenceLinkRow(title: "Hagimi Monitor", url: URL(string: "https://github.com/Acerola-1/hagimi-monitor")!)
+                SettingsDivider()
+                ReferenceLinkRow(title: "MonitorControl", url: URL(string: "https://github.com/MonitorControl/MonitorControl")!)
             }
 
             Text("© 2026 番薯Monitor contributors · MIT")

@@ -493,6 +493,20 @@ h2 {
   color: var(--muted);
 }
 
+.settings-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.settings-gallery img {
+  border: 1px solid var(--line-strong);
+  border-radius: 24px;
+  background: var(--panel-solid);
+  box-shadow: var(--shadow);
+}
+
 .metrics-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -662,6 +676,7 @@ h2 {
   .hero-facts,
   .feature-grid,
   .showcase,
+  .settings-gallery,
   .metrics-strip,
   .install-list {
     grid-template-columns: 1fr;

@@ -38,6 +38,14 @@
   <img src="docs/images/current-panel.png" width="360" alt="番薯Monitor 面板截图">
 </p>
 
+<p align="center">
+  <img src="docs/images/settings-about.png" width="620" alt="番薯Monitor 关于设置截图">
+</p>
+
+<p align="center">
+  <img src="docs/images/settings-mouse.png" width="620" alt="番薯Monitor 鼠标设置截图">
+</p>
+
 ## 安装
 
 1. 打开 [Releases](https://github.com/louis16s/fanshu_monitor/releases)。

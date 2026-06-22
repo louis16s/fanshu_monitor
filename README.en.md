@@ -38,6 +38,14 @@ If GitHub image caching is temporarily unavailable, open the [website](https://l
   <img src="docs/images/current-panel.png" width="360" alt="Fanshu Monitor panel screenshot">
 </p>
 
+<p align="center">
+  <img src="docs/images/settings-about.png" width="620" alt="Fanshu Monitor about settings screenshot">
+</p>
+
+<p align="center">
+  <img src="docs/images/settings-mouse.png" width="620" alt="Fanshu Monitor mouse settings screenshot">
+</p>
+
 ## Installation
 
 1. Open [Releases](https://github.com/louis16s/fanshu_monitor/releases).
