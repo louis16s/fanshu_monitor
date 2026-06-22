@@ -92,25 +92,6 @@ struct GeneralSettingsView: View {
                 }
             }
 
-            SettingsGroup(String(localized: "settings.utilities")) {
-                SettingsRow(title: String(localized: "settings.check-updates"), subtitle: String(localized: "settings.check-updates.subtitle")) {
-                    Toggle("", isOn: $settings.updateChecksEnabled)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                }
-
-                SettingsDivider()
-
-                SettingsRow(title: String(localized: "settings.codex-refresh-interval"), subtitle: String(localized: "settings.codex-refresh-interval.subtitle")) {
-                    Stepper(value: $settings.codexRefreshIntervalMinutes, in: 1...60, step: 1) {
-                        Text(codexRefreshIntervalText)
-                            .monospacedDigit()
-                    }
-                    .fixedSize()
-                }
-
-            }
-
             HStack {
                 Spacer()
                 if #available(macOS 26, *) {
@@ -135,13 +116,6 @@ struct GeneralSettingsView: View {
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
             refreshPermissionState()
         }
-    }
-
-    private var codexRefreshIntervalText: String {
-        String(
-            format: String(localized: "settings.minutes-format"),
-            Int(settings.codexRefreshIntervalMinutes)
-        )
     }
 
     private func refreshPermissionState() {

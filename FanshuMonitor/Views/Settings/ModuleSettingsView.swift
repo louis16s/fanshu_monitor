@@ -19,6 +19,18 @@ struct ModuleSettingsView: View {
                 }
             }
 
+            if kind == .codex {
+                SettingsGroup("Codex") {
+                    SettingsRow(title: String(localized: "settings.codex-refresh-interval"), subtitle: String(localized: "settings.codex-refresh-interval.subtitle")) {
+                        Stepper(value: $settings.codexRefreshIntervalMinutes, in: 1...60, step: 1) {
+                            Text(codexRefreshIntervalText)
+                                .monospacedDigit()
+                        }
+                        .fixedSize()
+                    }
+                }
+            }
+
             SettingsGroup(String(localized: "settings.metrics")) {
                 ForEach(Array(kind.availableMetrics.enumerated()), id: \.element.id) { index, metric in
                     let isSelected = settings.isMetricEnabled(metric.id, for: kind)
@@ -55,6 +67,13 @@ struct ModuleSettingsView: View {
 
     private func isLocked(_ metric: MetricSwitch) -> Bool {
         false
+    }
+
+    private var codexRefreshIntervalText: String {
+        String(
+            format: String(localized: "settings.minutes-format"),
+            Int(settings.codexRefreshIntervalMinutes)
+        )
     }
 }
 

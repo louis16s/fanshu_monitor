@@ -22,7 +22,13 @@ struct AboutSettingsView: View {
                 aboutHeader
             }
 
-            Spacer(minLength: 0)
+            SettingsGroup(String(localized: "settings.utilities")) {
+                SettingsRow(title: String(localized: "settings.check-updates"), subtitle: String(localized: "settings.check-updates.subtitle")) {
+                    Toggle("", isOn: $settings.updateChecksEnabled)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+            }
 
             SettingsGroup {
                 SettingsRow(title: String(localized: "about.release-version")) {

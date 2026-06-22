@@ -75,6 +75,9 @@ private struct MouseDPIControl: View {
     let isApplying: Bool
     let apply: (Int) -> Void
 
+    @State private var dpiText = ""
+    @FocusState private var isDPIFieldFocused: Bool
+
     private let range: ClosedRange<Double> = 200...8000
     private let presets = [800, 1600, 2400, 4000, 8000]
 
@@ -89,15 +92,23 @@ private struct MouseDPIControl: View {
                 )
                 .frame(width: 190, height: 18)
 
-                Text("\(Int(dpi.rounded()))")
+                TextField("", text: $dpiText)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .monospacedDigit()
-                    .frame(width: 48, alignment: .trailing)
+                    .multilineTextAlignment(.trailing)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 58)
+                    .focused($isDPIFieldFocused)
+                    .disabled(!isEnabled || isApplying)
+                    .onSubmit {
+                        commitDPIText()
+                    }
 
-                Button(isApplying ? "应用中" : "应用") {
+                Button(isApplying ? "设定中" : "设定") {
                     apply(Int(dpi.rounded()))
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.green)
                 .controlSize(.mini)
                 .disabled(!isEnabled || isApplying)
             }
@@ -119,10 +130,46 @@ private struct MouseDPIControl: View {
                 }
             }
         }
+        .onAppear {
+            syncDPIText(with: dpi)
+        }
+        .onChange(of: dpi) { _, newValue in
+            guard !isDPIFieldFocused else { return }
+            syncDPIText(with: newValue)
+        }
+        .onChange(of: isDPIFieldFocused) { _, isFocused in
+            if isFocused {
+                syncDPIText(with: dpi)
+            }
+        }
     }
 
     private func presetText(_ value: Int) -> String {
-        value >= 1000 ? "\(value / 1000)k" : "\(value)"
+        guard value >= 1000 else {
+            return "\(value)"
+        }
+        if value.isMultiple(of: 1000) {
+            return "\(value / 1000)k"
+        }
+        let scaled = Double(value) / 1000
+        return String(format: "%.1fk", scaled)
+    }
+
+    private func syncDPIText(with value: Double) {
+        dpiText = "\(Int(value.rounded()))"
+    }
+
+    private func commitDPIText() {
+        let digits = dpiText.filter(\.isNumber)
+        guard let rawValue = Int(digits) else {
+            syncDPIText(with: dpi)
+            return
+        }
+        let clamped = min(Int(range.upperBound), max(Int(range.lowerBound), rawValue))
+        dpi = Double(clamped)
+        syncDPIText(with: dpi)
+        apply(clamped)
+        isDPIFieldFocused = false
     }
 }
 
