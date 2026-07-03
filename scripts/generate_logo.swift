@@ -78,26 +78,26 @@ struct LogoRenderer {
 
     private func drawPotato() {
         let potato = NSBezierPath()
-        potato.move(to: NSPoint(x: size * 0.280, y: size * 0.410))
+        potato.move(to: NSPoint(x: size * 0.275, y: size * 0.430))
         potato.curve(
-            to: NSPoint(x: size * 0.580, y: size * 0.765),
-            controlPoint1: NSPoint(x: size * 0.220, y: size * 0.570),
-            controlPoint2: NSPoint(x: size * 0.355, y: size * 0.800)
+            to: NSPoint(x: size * 0.510, y: size * 0.745),
+            controlPoint1: NSPoint(x: size * 0.260, y: size * 0.585),
+            controlPoint2: NSPoint(x: size * 0.350, y: size * 0.735)
         )
         potato.curve(
-            to: NSPoint(x: size * 0.790, y: size * 0.455),
-            controlPoint1: NSPoint(x: size * 0.790, y: size * 0.730),
-            controlPoint2: NSPoint(x: size * 0.860, y: size * 0.560)
+            to: NSPoint(x: size * 0.770, y: size * 0.560),
+            controlPoint1: NSPoint(x: size * 0.680, y: size * 0.755),
+            controlPoint2: NSPoint(x: size * 0.790, y: size * 0.685)
         )
         potato.curve(
-            to: NSPoint(x: size * 0.395, y: size * 0.240),
-            controlPoint1: NSPoint(x: size * 0.690, y: size * 0.300),
-            controlPoint2: NSPoint(x: size * 0.545, y: size * 0.195)
+            to: NSPoint(x: size * 0.575, y: size * 0.255),
+            controlPoint1: NSPoint(x: size * 0.750, y: size * 0.410),
+            controlPoint2: NSPoint(x: size * 0.675, y: size * 0.285)
         )
         potato.curve(
-            to: NSPoint(x: size * 0.280, y: size * 0.410),
-            controlPoint1: NSPoint(x: size * 0.285, y: size * 0.275),
-            controlPoint2: NSPoint(x: size * 0.235, y: size * 0.330)
+            to: NSPoint(x: size * 0.275, y: size * 0.430),
+            controlPoint1: NSPoint(x: size * 0.415, y: size * 0.205),
+            controlPoint2: NSPoint(x: size * 0.285, y: size * 0.285)
         )
         potato.close()
 
@@ -109,38 +109,18 @@ struct LogoRenderer {
 
         NSGradient(colors: [
             NSColor(calibratedRed: 1.000, green: 0.620, blue: 0.275, alpha: 1),
-            NSColor(calibratedRed: 0.965, green: 0.305, blue: 0.395, alpha: 1),
-            NSColor(calibratedRed: 0.420, green: 0.235, blue: 0.690, alpha: 1)
-        ])!.draw(in: potato, angle: 32)
+            NSColor(calibratedRed: 0.965, green: 0.345, blue: 0.430, alpha: 1),
+            NSColor(calibratedRed: 0.610, green: 0.305, blue: 0.735, alpha: 1)
+        ])!.draw(in: potato, angle: 36)
 
         NSGraphicsContext.current?.cgContext.setShadow(offset: .zero, blur: 0, color: nil)
 
-        let innerShade = NSBezierPath()
-        innerShade.move(to: NSPoint(x: size * 0.590, y: size * 0.735))
-        innerShade.curve(
-            to: NSPoint(x: size * 0.755, y: size * 0.465),
-            controlPoint1: NSPoint(x: size * 0.760, y: size * 0.690),
-            controlPoint2: NSPoint(x: size * 0.820, y: size * 0.550)
-        )
-        innerShade.curve(
-            to: NSPoint(x: size * 0.565, y: size * 0.255),
-            controlPoint1: NSPoint(x: size * 0.705, y: size * 0.350),
-            controlPoint2: NSPoint(x: size * 0.650, y: size * 0.285)
-        )
-        innerShade.curve(
-            to: NSPoint(x: size * 0.590, y: size * 0.735),
-            controlPoint1: NSPoint(x: size * 0.705, y: size * 0.315),
-            controlPoint2: NSPoint(x: size * 0.815, y: size * 0.610)
-        )
-        NSColor(calibratedRed: 0.140, green: 0.090, blue: 0.180, alpha: 0.16).setFill()
-        innerShade.fill()
-
         let highlight = NSBezierPath()
-        highlight.move(to: NSPoint(x: size * 0.410, y: size * 0.590))
+        highlight.move(to: NSPoint(x: size * 0.405, y: size * 0.575))
         highlight.curve(
-            to: NSPoint(x: size * 0.555, y: size * 0.645),
-            controlPoint1: NSPoint(x: size * 0.450, y: size * 0.690),
-            controlPoint2: NSPoint(x: size * 0.530, y: size * 0.695)
+            to: NSPoint(x: size * 0.540, y: size * 0.635),
+            controlPoint1: NSPoint(x: size * 0.445, y: size * 0.675),
+            controlPoint2: NSPoint(x: size * 0.520, y: size * 0.680)
         )
         highlight.lineCapStyle = .round
         highlight.lineWidth = max(size * 0.032, 2)
