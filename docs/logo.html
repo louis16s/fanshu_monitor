@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>番薯Monitor Logo</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f7fb;
+      --text: #17202a;
+      --muted: #667085;
+      --panel: rgba(255, 255, 255, 0.74);
+      --line: rgba(32, 44, 57, 0.12);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1218;
+        --text: #edf3f8;
+        --muted: #9aa8b5;
+        --panel: rgba(18, 25, 32, 0.78);
+        --line: rgba(255, 255, 255, 0.12);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 24% 20%, rgba(42, 228, 173, 0.18), transparent 32rem),
+        radial-gradient(circle at 74% 72%, rgba(255, 117, 76, 0.14), transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    }
+
+    main {
+      width: min(960px, calc(100vw - 48px));
+      display: grid;
+      grid-template-columns: minmax(280px, 420px) 1fr;
+      gap: 44px;
+      align-items: center;
+      padding: 44px;
+      border: 1px solid var(--line);
+      border-radius: 32px;
+      background: var(--panel);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.16);
+      backdrop-filter: blur(28px);
+    }
+
+    .preview {
+      display: grid;
+      place-items: center;
+      aspect-ratio: 1;
+      border-radius: 32px;
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.12));
+      border: 1px solid var(--line);
+    }
+
+    svg {
+      width: min(72vw, 320px);
+      height: auto;
+      display: block;
+      filter: drop-shadow(0 24px 36px rgba(0, 0, 0, 0.24));
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(32px, 5vw, 56px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 16px 0 0;
+      max-width: 36rem;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 26px;
+    }
+
+    .chip {
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.24);
+    }
+
+    @media (max-width: 760px) {
+      main {
+        grid-template-columns: 1fr;
+        padding: 28px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="preview" aria-label="番薯Monitor logo preview">
+      <svg viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc" xmlns="http://www.w3.org/2000/svg">
+        <title id="title">番薯Monitor Logo</title>
+        <desc id="desc">深色圆角 macOS 图标，包含青绿色监控环、蓝色显示器轮廓和暖橙番薯主体</desc>
+        <defs>
+          <linearGradient id="icon-bg" x1="18%" y1="10%" x2="86%" y2="92%">
+            <stop offset="0%" stop-color="#061923"/>
+            <stop offset="54%" stop-color="#063f49"/>
+            <stop offset="100%" stop-color="#09212d"/>
+          </linearGradient>
+          <radialGradient id="glow" cx="36%" cy="34%" r="62%">
+            <stop offset="0%" stop-color="#38f0bd" stop-opacity=".26"/>
+            <stop offset="56%" stop-color="#1c7fdd" stop-opacity=".08"/>
+            <stop offset="100%" stop-color="#1c7fdd" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="potato" x1="32%" y1="30%" x2="78%" y2="74%">
+            <stop offset="0%" stop-color="#ff9e4e"/>
+            <stop offset="52%" stop-color="#ea4d63"/>
+            <stop offset="100%" stop-color="#8f3d8c"/>
+          </linearGradient>
+          <filter id="soft-shadow" x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="0" dy="24" stdDeviation="32" flood-color="#000" flood-opacity=".28"/>
+          </filter>
+          <filter id="cyan-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="#54c7ff" flood-opacity=".42"/>
+          </filter>
+          <filter id="mint-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="#49f2af" flood-opacity=".42"/>
+          </filter>
+        </defs>
+
+        <rect x="56" y="56" width="912" height="912" rx="220" fill="url(#icon-bg)" filter="url(#soft-shadow)"/>
+        <rect x="56" y="56" width="912" height="912" rx="220" fill="none" stroke="#ffffff" stroke-opacity=".16" stroke-width="8"/>
+        <circle cx="512" cy="512" r="330" fill="url(#glow)"/>
+
+        <g filter="url(#cyan-glow)" fill="none" stroke="#5cb9ff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="225" y="305" width="574" height="400" rx="56"/>
+          <path d="M512 705v58M438 763h148"/>
+        </g>
+
+        <path d="M379 443C330 575 482 728 626 664C787 592 784 425 627 374C503 335 416 346 379 443Z" fill="url(#potato)" filter="url(#soft-shadow)"/>
+        <path d="M455 562C498 630 583 632 635 590" fill="none" stroke="#fff" stroke-opacity=".42" stroke-width="24" stroke-linecap="round"/>
+
+        <g filter="url(#mint-glow)" fill="none" stroke="#2feaaa" stroke-width="44" stroke-linecap="round">
+          <path d="M310 646A282 282 0 1 1 744 682"/>
+        </g>
+        <circle cx="732" cy="688" r="31" fill="#92ffc6"/>
+        <path d="M350 190h324" stroke="#fff" stroke-opacity=".2" stroke-width="18" stroke-linecap="round"/>
+      </svg>
+    </section>
+
+    <section>
+      <h1>番薯Monitor</h1>
+      <p>新图标使用青绿色监控环表达实时状态，蓝色屏幕轮廓表达外接显示器控制，暖橙番薯主体保留软件名称的亲和力。整体采用 macOS 风格的深色圆角图标底，适合 Dock、菜单栏、官网和 README。</p>
+      <div class="chips" aria-label="logo keywords">
+        <span class="chip">macOS</span>
+        <span class="chip">Monitor</span>
+        <span class="chip">Display</span>
+        <span class="chip">Sweet Potato</span>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
