@@ -30,14 +30,16 @@ struct FanshuMonitorApp: App {
             .help("番薯Monitor")
         }
         .menuBarExtraStyle(.window)
+        .commands { AppMenuCommands() }
 
+        #if DEBUG
         WindowGroup("番薯Monitor Preview") {
             ContentView(store: monitorStore)
                 .preferredColorScheme(effectiveColorScheme)
                 .environment(\.locale, effectiveLocale)
         }
         .windowResizability(.contentSize)
-        .commands { AppMenuCommands() }
+        #endif
 
         Settings {
             SettingsRootView(settings: monitorStore.settings, mouseController: monitorStore.mouseController)

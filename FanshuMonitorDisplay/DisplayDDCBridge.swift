@@ -162,11 +162,6 @@ struct DDCValueRange: Equatable {
     }
 }
 
-private struct ControlKey: Hashable {
-    let displayID: CGDirectDisplayID
-    let control: DisplayControlKind
-}
-
 private enum DDCVCPCode: UInt8 {
     case luminance = 0x10
     case contrast = 0x12
