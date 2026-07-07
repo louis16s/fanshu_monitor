@@ -93,4 +93,6 @@ https://louis16s.github.io/fanshu_monitor/
 
 ## 许可证
 
-MIT
+本项目使用 [MIT License](LICENSE)。
+
+项目中吸收或参考了 MonitorControl、Hagimi Monitor、Mouser 等开源项目的思路和部分实现。第三方许可与来源说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
