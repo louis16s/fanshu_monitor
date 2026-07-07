@@ -55,8 +55,8 @@ If GitHub image caching is temporarily unavailable, open the [website](https://l
 ## Install
 
 1. Open [Releases](https://github.com/louis16s/fanshu_monitor/releases)
-2. Download the latest `番薯Monitor.zip`
-3. Unzip and move `番薯Monitor.app` to `Applications`
+2. Download the latest `FanshuMonitor.zip`
+3. Unzip and move the bundled `番薯Monitor.app` to `Applications`
 4. Grant Accessibility permission on first launch
 
 If macOS blocks the unsigned app, run:

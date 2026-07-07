@@ -41,15 +41,15 @@ jobs:
           test -d "$APP_PATH"
 
           mkdir -p build/release
-          ditto -c -k --keepParent "$APP_PATH" 'build/release/番薯Monitor.zip'
-          shasum -a 256 'build/release/番薯Monitor.zip' > 'build/release/checksums.txt'
+          ditto -c -k --keepParent "$APP_PATH" 'build/release/FanshuMonitor.zip'
+          shasum -a 256 'build/release/FanshuMonitor.zip' > 'build/release/checksums.txt'
           ls -lh build/release
 
       - name: Create release and upload assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/release/番薯Monitor.zip
+            build/release/FanshuMonitor.zip
             build/release/checksums.txt
           body_path: RELEASE_NOTES.md
           generate_release_notes: true

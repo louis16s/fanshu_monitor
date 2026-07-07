@@ -55,8 +55,8 @@
 ## 安装
 
 1. 打开 [Releases](https://github.com/louis16s/fanshu_monitor/releases)
-2. 下载最新版本的 `番薯Monitor.zip`
-3. 解压后将 `番薯Monitor.app` 移到 `Applications`
+2. 下载最新版本的 `FanshuMonitor.zip`
+3. 解压后将里面的 `番薯Monitor.app` 移到 `Applications`
 4. 首次启动后授予辅助功能权限
 
 如果 macOS 因未公证而阻止打开，可以执行：
