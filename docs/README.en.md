@@ -3,13 +3,13 @@
 A macOS menu bar system monitor and external display control utility for Apple Silicon.
 
 <p align="center">
-  <img src="docs/images/icon-128.png" width="112" alt="Fanshu Monitor logo">
+  <img src="images/icon-128.png" width="112" alt="Fanshu Monitor logo">
 </p>
 
 <p align="center">
   <a href="https://louis16s.github.io/fanshu_monitor/">Website</a> ·
   <a href="https://github.com/louis16s/fanshu_monitor/releases">Download</a> ·
-  <a href="README.md">中文</a>
+  <a href="../README.md">中文</a>
 </p>
 
 ## System Requirements
@@ -41,15 +41,15 @@ Current version: `0.2.6`
 If GitHub image caching is temporarily unavailable, open the [website](https://louis16s.github.io/fanshu_monitor/) for the full showcase.
 
 <p align="center">
-  <img src="docs/images/current-panel.png" width="390" alt="Fanshu Monitor panel screenshot">
+  <img src="images/current-panel.png" width="390" alt="Fanshu Monitor panel screenshot">
 </p>
 
 <p align="center">
-  <img src="docs/images/settings-about.png" width="680" alt="Fanshu Monitor about settings screenshot">
+  <img src="images/settings-about.png" width="680" alt="Fanshu Monitor about settings screenshot">
 </p>
 
 <p align="center">
-  <img src="docs/images/settings-mouse.png" width="680" alt="Fanshu Monitor mouse settings screenshot">
+  <img src="images/settings-mouse.png" width="680" alt="Fanshu Monitor mouse settings screenshot">
 </p>
 
 ## Install
@@ -91,6 +91,6 @@ https://louis16s.github.io/fanshu_monitor/
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [MIT License](../LICENSE).
 
 Fanshu Monitor incorporates or was informed by ideas and small portions of implementation from projects including MonitorControl, Hagimi Monitor, and Mouser. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party license and source notes.

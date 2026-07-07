@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://louis16s.github.io/fanshu_monitor/">官网</a> ·
   <a href="https://github.com/louis16s/fanshu_monitor/releases">下载</a> ·
-  <a href="README.en.md">English</a>
+  <a href="docs/README.en.md">English</a>
 </p>
 
 ## 系统要求
@@ -93,4 +93,4 @@ https://louis16s.github.io/fanshu_monitor/
 
 本项目使用 [MIT License](LICENSE)。
 
-项目中吸收或参考了 MonitorControl、Hagimi Monitor、Mouser 等开源项目的思路和部分实现。第三方许可与来源说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+项目中吸收或参考了 MonitorControl、Hagimi Monitor、Mouser 等开源项目的思路和部分实现。第三方许可与来源说明见 [THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md)。

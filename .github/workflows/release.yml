@@ -83,7 +83,7 @@ jobs:
           files: |
             build/release/FanshuMonitor.zip
             build/release/checksums.txt
-          body_path: RELEASE_NOTES.md
+          body_path: docs/RELEASE_NOTES.md
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
