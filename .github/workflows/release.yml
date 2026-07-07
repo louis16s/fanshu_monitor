@@ -7,41 +7,50 @@ on:
 
 jobs:
   build-and-release:
-    runs-on: macos-15
+    name: Build and release
+    runs-on: macos-26
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-
-      - name: Build
+      - name: Show toolchain
         run: |
-          xcodebuild -project hagimi-monitor.xcodeproj \
-            -scheme HagimiMonitorDirect \
+          sw_vers
+          xcodebuild -version
+
+      - name: Build Release app
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project '番薯monitor.xcodeproj' \
+            -scheme '番薯Monitor' \
             -configuration Release \
-            -arch arm64 \
-            -archivePath build/HagimiMonitor.xcarchive \
-            CODE_SIGN_IDENTITY="-" \
+            -destination 'generic/platform=macOS' \
+            -archivePath 'build/番薯Monitor.xcarchive' \
+            CODE_SIGN_IDENTITY='-' \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             archive
 
-      - name: Package .dmg
+      - name: Package zip
         run: |
-          mkdir -p dmg-temp
-          cp -R build/HagimiMonitor.xcarchive/Products/Applications/HagimiMonitor.app dmg-temp/
-          ln -s /Applications dmg-temp/Applications
-          hdiutil create -volname HagimiMonitor \
-            -srcfolder dmg-temp \
-            -ov -format UDZO \
-            build/HagimiMonitor.dmg
+          set -euo pipefail
+          APP_PATH='build/番薯Monitor.xcarchive/Products/Applications/番薯Monitor.app'
+          test -d "$APP_PATH"
 
-      - name: Create Release & Upload
+          mkdir -p build/release
+          ditto -c -k --keepParent "$APP_PATH" 'build/release/番薯Monitor.zip'
+          shasum -a 256 'build/release/番薯Monitor.zip' > 'build/release/checksums.txt'
+          ls -lh build/release
+
+      - name: Create release and upload assets
         uses: softprops/action-gh-release@v2
         with:
-          files: build/HagimiMonitor.dmg
+          files: |
+            build/release/番薯Monitor.zip
+            build/release/checksums.txt
           body_path: RELEASE_NOTES.md
           generate_release_notes: true
         env:
