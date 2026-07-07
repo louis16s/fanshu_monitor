@@ -38,7 +38,7 @@ enum SettingsWindowPresenter {
         AppLogger.settings.info("Registering settings window")
         settingsWindow = window
         window.title = ""
-        window.minSize = NSSize(width: 700, height: 620)
+        window.minSize = SettingsWindowMetrics.contentSize
 
         if pendingFocus {
             pendingFocus = false

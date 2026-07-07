@@ -1,6 +1,6 @@
 # Fanshu Monitor
 
-> A macOS menu bar system monitor and external display control utility for Apple Silicon.
+A macOS menu bar system monitor and external display control utility for Apple Silicon.
 
 <p align="center">
   <img src="docs/images/icon-128.png" width="112" alt="Fanshu Monitor logo">
@@ -12,46 +12,52 @@
   <a href="README.md">中文</a>
 </p>
 
+## System Requirements
+
+- Apple Silicon Mac
+- macOS 26 or later
+- External display brightness control requires a DDC/CI-capable display, cable, and connection path
+- F1/F2 takeover and mouse button mapping require Accessibility permission
+
 ## Overview
 
-Fanshu Monitor is a lightweight macOS menu bar app for watching CPU, GPU, memory, battery, network, and display status. The direct distribution build also includes external display control: it can take over F1/F2 brightness keys based on the screen under your pointer, then show the native macOS brightness OSD when a controllable external display is targeted.
+Fanshu Monitor is a lightweight menu bar app for CPU, GPU, memory, battery, Codex quota, mouse, and display status. The direct distribution build can take over F1/F2 brightness keys based on the screen under your pointer, adjust DDC brightness for controllable external displays, and show the native macOS brightness overlay whenever possible.
 
-The project is still moving quickly. The goal is simple: useful monitoring and display controls without making a resident menu bar app feel heavy.
+Current version: `0.2.6`
 
-## Features
+## Highlights
 
-- Live menu bar monitoring for CPU, GPU, memory, battery, storage, and network.
-- Core metrics such as CPU temperature, GPU utilization, memory pressure, and the app's own memory footprint.
-- External display brightness control with pointer-based target selection.
-- Native macOS brightness OSD when available.
-- Per-display capability status and clear unsupported reasons.
-- HiDPI controls for external displays.
-- Hidden monitor modules stop sampling.
-- Lower sampling frequency while the panel is closed.
-- Update checking toggle, manual update check, settings reset, and practical utility actions.
+- Menu bar panel for CPU, GPU, memory, battery, Codex quota, and display state
+- External display brightness target follows the pointer
+- Built-in and unsupported displays pass F1/F2 back to macOS
+- Display capability, DDC state, and unsupported reasons are shown per display
+- Hidden modules stop sampling, and panel-closed refresh slows down
+- Memory panel shows the app's own memory footprint
+- Mouse settings support MX Anywhere 3S DPI reads, DPI apply, and button mapping
+- About settings include update checks, project links, and reference project notes
 
-## Screenshot
+## Screenshots
 
 If GitHub image caching is temporarily unavailable, open the [website](https://louis16s.github.io/fanshu_monitor/) for the full showcase.
 
 <p align="center">
-  <img src="docs/images/current-panel.png" width="360" alt="Fanshu Monitor panel screenshot">
+  <img src="docs/images/current-panel.png" width="390" alt="Fanshu Monitor panel screenshot">
 </p>
 
 <p align="center">
-  <img src="docs/images/settings-about.png" width="620" alt="Fanshu Monitor about settings screenshot">
+  <img src="docs/images/settings-about.png" width="680" alt="Fanshu Monitor about settings screenshot">
 </p>
 
 <p align="center">
-  <img src="docs/images/settings-mouse.png" width="620" alt="Fanshu Monitor mouse settings screenshot">
+  <img src="docs/images/settings-mouse.png" width="680" alt="Fanshu Monitor mouse settings screenshot">
 </p>
 
-## Installation
+## Install
 
-1. Open [Releases](https://github.com/louis16s/fanshu_monitor/releases).
-2. Download the latest `番薯Monitor.zip` or app attachment.
-3. Unzip and move `番薯Monitor.app` to `Applications`.
-4. Grant Accessibility permission on first launch so F1/F2 brightness key takeover can work.
+1. Open [Releases](https://github.com/louis16s/fanshu_monitor/releases)
+2. Download the latest `番薯Monitor.zip`
+3. Unzip and move `番薯Monitor.app` to `Applications`
+4. Grant Accessibility permission on first launch
 
 If macOS blocks the unsigned app, run:
 
@@ -59,28 +65,25 @@ If macOS blocks the unsigned app, run:
 sudo xattr -cr /Applications/番薯Monitor.app
 ```
 
-## Requirements
-
-- Apple Silicon Mac
-- macOS 26 or later
-
 ## Build
 
+Use the project script to build Release, refresh `outputs/番薯Monitor.app` and `outputs/番薯Monitor.zip`, then launch the new app:
+
 ```bash
-xcodebuild -project 番薯monitor.xcodeproj -scheme 番薯Monitor -configuration Debug build
+./script/build_and_run.sh --verify
 ```
 
-Release build:
+Or build with Xcode directly:
 
 ```bash
-xcodebuild -project 番薯monitor.xcodeproj -scheme 番薯Monitor -configuration Release build
+xcodebuild -project 番薯monitor.xcodeproj -scheme 番薯Monitor -configuration Release -destination 'platform=macOS' build
 ```
 
 ## Website Deployment
 
 The GitHub Pages site lives in `docs/`. In the GitHub repository, open `Settings` → `Pages`, choose `Deploy from a branch`, select `main`, and set the directory to `/docs`.
 
-Final URL:
+Deployed URL:
 
 ```text
 https://louis16s.github.io/fanshu_monitor/

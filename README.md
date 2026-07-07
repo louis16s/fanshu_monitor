@@ -1,6 +1,6 @@
 # 番薯Monitor
 
-> 面向 Apple Silicon 的 macOS 菜单栏系统监控与外接显示器控制工具。
+面向 Apple Silicon 的 macOS 菜单栏系统监控与外接显示器控制工具。
 
 <p align="center">
   <img src="docs/images/icon-128.png" width="112" alt="番薯Monitor logo">
@@ -12,46 +12,52 @@
   <a href="README.en.md">English</a>
 </p>
 
+## 系统要求
+
+- Apple Silicon Mac
+- macOS 26 或更高版本
+- 外接显示器亮度控制需要支持 DDC/CI 的显示器、线缆和连接方式
+- F1/F2 接管、鼠标按键映射等功能需要授予辅助功能权限
+
 ## 简介
 
-番薯Monitor 是一个轻量的 macOS 菜单栏应用，用来观察 CPU、GPU、内存、电池、网络和显示器状态。直发版本加入了外接显示器控制能力，可以根据鼠标所在屏幕接管 F1/F2 亮度键，并在可控外接屏上显示系统原生亮度浮层。
+番薯Monitor 是一个轻量常驻的菜单栏应用，用来观察 CPU、GPU、内存、电池、Codex 额度、鼠标和显示器状态。直发版本支持根据鼠标所在屏幕接管 F1/F2 亮度键，在可控外接屏上调整 DDC 亮度，并尽量显示系统原生亮度浮层。
 
-当前版本仍在快速迭代，目标是：功能足够丰富，但长期常驻时保持低开销。
+当前版本：`0.2.6`
 
-## 功能
+## 主要功能
 
-- 菜单栏实时监控 CPU、GPU、内存、电池、存储和网络。
-- CPU 温度、GPU 利用率、内存压力、App 自身内存占用等核心指标。
-- 外接显示器亮度控制，支持按鼠标所在屏幕选择控制目标。
-- 可用时显示 macOS 原生亮度 OSD。
-- 显示每台屏幕的控制能力和不可控原因。
-- 外接屏 HiDPI 控制入口。
-- 监控模块可隐藏；隐藏后停止对应采样。
-- 面板关闭时降低采样频率，减少常驻开销。
-- 自动检查更新开关、手动检查更新、设置重置等实用操作。
+- 菜单栏面板显示 CPU、GPU、内存、电池、Codex 额度和显示器状态
+- 根据鼠标所在屏幕控制外接显示器亮度
+- 内建屏和不可控外接屏会把 F1/F2 交回 macOS
+- 显示每台屏幕的控制能力、DDC 状态和不可控原因
+- 隐藏模块停止对应采样，面板关闭后降低采样频率
+- 内存面板显示 App 自身内存占用，便于观察常驻开销
+- 鼠标页支持 MX Anywhere 3S DPI 读取、设定和按键映射
+- 关于页提供更新检查、项目链接和参考项目说明
 
 ## 截图
 
 如果 GitHub 图片缓存暂时不可用，可以直接访问 [官网](https://louis16s.github.io/fanshu_monitor/) 查看完整展示。
 
 <p align="center">
-  <img src="docs/images/current-panel.png" width="360" alt="番薯Monitor 面板截图">
+  <img src="docs/images/current-panel.png" width="390" alt="番薯Monitor 面板截图">
 </p>
 
 <p align="center">
-  <img src="docs/images/settings-about.png" width="620" alt="番薯Monitor 关于设置截图">
+  <img src="docs/images/settings-about.png" width="680" alt="番薯Monitor 关于设置截图">
 </p>
 
 <p align="center">
-  <img src="docs/images/settings-mouse.png" width="620" alt="番薯Monitor 鼠标设置截图">
+  <img src="docs/images/settings-mouse.png" width="680" alt="番薯Monitor 鼠标设置截图">
 </p>
 
 ## 安装
 
-1. 打开 [Releases](https://github.com/louis16s/fanshu_monitor/releases)。
-2. 下载最新版本的 `番薯Monitor.zip` 或应用附件。
-3. 解压后将 `番薯Monitor.app` 移到 `Applications`。
-4. 首次启动后授予辅助功能权限，用于接管 F1/F2 亮度键。
+1. 打开 [Releases](https://github.com/louis16s/fanshu_monitor/releases)
+2. 下载最新版本的 `番薯Monitor.zip`
+3. 解压后将 `番薯Monitor.app` 移到 `Applications`
+4. 首次启动后授予辅助功能权限
 
 如果 macOS 因未公证而阻止打开，可以执行：
 
@@ -59,21 +65,18 @@
 sudo xattr -cr /Applications/番薯Monitor.app
 ```
 
-## 系统要求
-
-- Apple Silicon Mac
-- macOS 26 或更高版本
-
 ## 构建
 
+推荐使用项目内统一脚本，它会构建 Release、刷新 `outputs/番薯Monitor.app` 和 `outputs/番薯Monitor.zip`，并打开新版应用：
+
 ```bash
-xcodebuild -project 番薯monitor.xcodeproj -scheme 番薯Monitor -configuration Debug build
+./script/build_and_run.sh --verify
 ```
 
-Release 构建：
+也可以直接使用 Xcode：
 
 ```bash
-xcodebuild -project 番薯monitor.xcodeproj -scheme 番薯Monitor -configuration Release build
+xcodebuild -project 番薯monitor.xcodeproj -scheme 番薯Monitor -configuration Release -destination 'platform=macOS' build
 ```
 
 ## 官网部署

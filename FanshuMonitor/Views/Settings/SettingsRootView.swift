@@ -1,12 +1,6 @@
 import AppKit
 import SwiftUI
 
-private enum SettingsWindowMetrics {
-    static let width: CGFloat = 700
-    static let height: CGFloat = 620
-    static let sidebarWidth: CGFloat = 176
-}
-
 struct SettingsRootView: View {
     @ObservedObject var settings: MonitorSettings
     @ObservedObject var mouseController: MouseControlController
@@ -129,7 +123,7 @@ private final class SettingsWindowTrackingView: NSView {
 
 private extension NSWindow {
     func setStableSettingsSize() {
-        let size = NSSize(width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height)
+        let size = SettingsWindowMetrics.contentSize
         contentMinSize = size
         contentMaxSize = size
         guard abs(contentView?.frame.width ?? 0 - size.width) > 0.5 ||

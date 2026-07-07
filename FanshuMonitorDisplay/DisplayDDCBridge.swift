@@ -14,8 +14,13 @@ final class DisplayDDCBridge {
     private var valueRanges: [ControlKey: DDCValueRange] = [:]
     private var controlCodes: [ControlKey: DDCVCPCode] = [:]
     private let maxDetectLimit: UInt16 = 100
+    private let registry = DDCFaultRegistry()
 
     func refresh(displayIDs: [CGDirectDisplayID]) {
+        let knownDisplayIDs = Set(servicesByDisplayID.keys)
+        for displayID in knownDisplayIDs.subtracting(displayIDs) {
+            registry.reset(displayID: displayID)
+        }
         servicesByDisplayID = Arm64DDCMatcher().matchedServices(for: displayIDs)
         valueRanges = valueRanges.filter { displayIDs.contains($0.key.displayID) }
         controlCodes = controlCodes.filter { displayIDs.contains($0.key.displayID) }
@@ -25,15 +30,31 @@ final class DisplayDDCBridge {
         servicesByDisplayID[displayID] != nil
     }
 
-    func read(_ control: DisplayControlKind, displayID: CGDirectDisplayID) -> Double? {
+    func isTemporarilyDisabled(_ control: DisplayControlKind, displayID: CGDirectDisplayID) -> Bool {
+        registry.isDisabled(ControlKey(displayID: displayID, control: control))
+    }
+
+    func read(_ control: DisplayControlKind, displayID: CGDirectDisplayID, fastFail: Bool = false) -> Double? {
         guard let service = servicesByDisplayID[displayID] else {
             displayDDCLog.debug("No DDC service for display \(displayID, privacy: .public)")
             return nil
         }
 
         let key = ControlKey(displayID: displayID, control: control)
+        guard !registry.isDisabled(key) else {
+            displayDDCLog.debug("DDC read skipped for display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public); temporarily disabled")
+            return nil
+        }
+
         for vcp in orderedCandidates(for: key) {
-            guard let values = DDCTransport.read(service: service.service, vcpCode: vcp.rawValue),
+            let useLongerDelay = registry.shouldUseLongerDelay(key)
+            let maxRetries = fastFail ? 2 : 5
+            guard let values = DDCTransport.read(
+                service: service.service,
+                vcpCode: vcp.rawValue,
+                longerDelay: useLongerDelay,
+                maxRetries: maxRetries
+            ),
                   values.max > 0
             else {
                 continue
@@ -46,6 +67,7 @@ final class DisplayDDCBridge {
             controlCodes[key] = vcp
 
             let percentage = range.percentage(from: values.current)
+            registry.recordReadSuccess(key)
 
             displayDDCLog.notice(
                 "Read DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public) code \(vcp.rawValue, privacy: .public) raw \(values.current, privacy: .public)/\(values.max, privacy: .public) range \(range.min, privacy: .public)-\(range.max, privacy: .public) mapped \(percentage, privacy: .public)"
@@ -54,6 +76,7 @@ final class DisplayDDCBridge {
         }
 
         displayDDCLog.warning("Failed to read DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public)")
+        registry.recordReadFailure(key)
         return nil
     }
 
@@ -64,6 +87,11 @@ final class DisplayDDCBridge {
         }
 
         let key = ControlKey(displayID: displayID, control: control)
+        guard !registry.isDisabled(key) else {
+            displayDDCLog.debug("DDC write skipped for display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public); temporarily disabled")
+            return false
+        }
+
         let range = valueRanges[key] ?? DDCValueRange(min: 0, max: maxDetectLimit)
         let clampedPercentage = min(100, max(0, value))
         var ddcValue = range.rawValue(for: clampedPercentage)
@@ -79,6 +107,7 @@ final class DisplayDDCBridge {
                 value: muteValue
             )
             if value <= 0, muteSuccess {
+                registry.recordWriteSuccess(key)
                 displayDDCLog.notice("Wrote DDC mute display \(displayID, privacy: .public)")
                 return true
             }
@@ -91,6 +120,7 @@ final class DisplayDDCBridge {
             )
             if success {
                 controlCodes[key] = vcp
+                registry.recordWriteSuccess(key)
                 calibrateMinimumIfNeeded(
                     requestedPercentage: clampedPercentage,
                     requestedRawValue: ddcValue,
@@ -103,6 +133,7 @@ final class DisplayDDCBridge {
             }
         }
 
+        registry.recordWriteFailure(key)
         return false
     }
 
@@ -123,7 +154,7 @@ final class DisplayDDCBridge {
         vcp: DDCVCPCode
     ) {
         guard control == .brightness, requestedPercentage <= 0 else { return }
-        guard let values = DDCTransport.read(service: service, vcpCode: vcp.rawValue),
+        guard let values = DDCTransport.read(service: service, vcpCode: vcp.rawValue, maxRetries: 2),
               values.max > 0
         else { return }
 
@@ -184,11 +215,27 @@ private enum DDCVCPCode: UInt8 {
 private enum DDCTransport {
     private static let sevenBitAddress: UInt8 = 0x37
     private static let dataAddress: UInt8 = 0x51
+    private static let ioQueue = DispatchQueue(label: "fanshu.ddc.io")
+    private static let communicateTimeoutSeconds = 3
+    private static let circuitCooldownSeconds = 10
+    private static let circuitLock = NSLock()
+    private nonisolated(unsafe) static var circuitOpenUntil: DispatchTime?
 
-    static func read(service: IOAVService, vcpCode: UInt8) -> (current: UInt16, max: UInt16)? {
+    static func read(
+        service: IOAVService,
+        vcpCode: UInt8,
+        longerDelay: Bool = false,
+        maxRetries: Int = 5
+    ) -> (current: UInt16, max: UInt16)? {
         var send = [vcpCode]
         var reply = [UInt8](repeating: 0, count: 11)
-        guard communicate(service: service, send: &send, reply: &reply) else {
+        guard communicate(
+            service: service,
+            send: &send,
+            reply: &reply,
+            longerDelay: longerDelay,
+            maxRetries: maxRetries
+        ) else {
             return nil
         }
         let maxValue = (UInt16(reply[6]) << 8) + UInt16(reply[7])
@@ -196,13 +243,63 @@ private enum DDCTransport {
         return (currentValue, maxValue)
     }
 
-    static func write(service: IOAVService, vcpCode: UInt8, value: UInt16) -> Bool {
+    static func write(
+        service: IOAVService,
+        vcpCode: UInt8,
+        value: UInt16,
+        maxRetries: Int = 5
+    ) -> Bool {
         var send = [vcpCode, UInt8(value >> 8), UInt8(value & 0xFF)]
         var reply: [UInt8] = []
-        return communicate(service: service, send: &send, reply: &reply)
+        return communicate(service: service, send: &send, reply: &reply, maxRetries: maxRetries)
     }
 
-    private static func communicate(service: IOAVService, send: inout [UInt8], reply: inout [UInt8]) -> Bool {
+    private static func communicate(
+        service: IOAVService,
+        send: inout [UInt8],
+        reply: inout [UInt8],
+        longerDelay: Bool = false,
+        maxRetries: Int = 5
+    ) -> Bool {
+        guard !circuitIsOpen() else {
+            return false
+        }
+
+        var sendCopy = send
+        var replyCopy = reply
+        var result = false
+        let semaphore = DispatchSemaphore(value: 0)
+
+        ioQueue.async {
+            result = communicateUnlocked(
+                service: service,
+                send: &sendCopy,
+                reply: &replyCopy,
+                longerDelay: longerDelay,
+                maxRetries: maxRetries
+            )
+            semaphore.signal()
+        }
+
+        if semaphore.wait(timeout: .now() + .seconds(communicateTimeoutSeconds)) == .timedOut {
+            tripCircuit()
+            displayDDCLog.error("DDC communicate timed out after \(communicateTimeoutSeconds, privacy: .public)s; circuit opened for \(circuitCooldownSeconds, privacy: .public)s")
+            return false
+        }
+
+        resetCircuit()
+        send = sendCopy
+        reply = replyCopy
+        return result
+    }
+
+    private static func communicateUnlocked(
+        service: IOAVService,
+        send: inout [UInt8],
+        reply: inout [UInt8],
+        longerDelay: Bool,
+        maxRetries: Int
+    ) -> Bool {
         let dataAddress = Self.dataAddress
         var success = false
         var packet = [UInt8(0x80 | (send.count + 1)), UInt8(send.count)] + send + [0]
@@ -211,7 +308,7 @@ private enum DDCTransport {
             : Self.sevenBitAddress << 1 ^ dataAddress
         packet[packet.count - 1] = checksum(seed: checksumSeed, data: packet, start: 0, end: packet.count - 2)
 
-        for _ in 0..<5 {
+        for _ in 0..<maxRetries {
             for _ in 0..<2 {
                 usleep(10_000)
                 let packetCount = UInt32(packet.count)
@@ -234,7 +331,7 @@ private enum DDCTransport {
                     return true
                 }
             } else {
-                usleep(50_000)
+                usleep(longerDelay ? 150_000 : 50_000)
                 let replyCount = UInt32(reply.count)
                 success = reply.withUnsafeMutableBufferPointer { buffer in
                     guard let baseAddress = buffer.baseAddress else {
@@ -260,6 +357,31 @@ private enum DDCTransport {
         }
 
         return false
+    }
+
+    private static func circuitIsOpen() -> Bool {
+        circuitLock.lock()
+        defer { circuitLock.unlock() }
+        guard let openUntil = circuitOpenUntil else {
+            return false
+        }
+        if DispatchTime.now() >= openUntil {
+            circuitOpenUntil = nil
+            return false
+        }
+        return true
+    }
+
+    private static func tripCircuit() {
+        circuitLock.lock()
+        circuitOpenUntil = .now() + .seconds(circuitCooldownSeconds)
+        circuitLock.unlock()
+    }
+
+    private static func resetCircuit() {
+        circuitLock.lock()
+        circuitOpenUntil = nil
+        circuitLock.unlock()
     }
 
     private static func checksum(seed: UInt8, data: [UInt8], start: Int, end: Int) -> UInt8 {

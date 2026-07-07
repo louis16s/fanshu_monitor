@@ -234,7 +234,7 @@ struct CodexUsageClient: Sendable {
         request.httpMethod = "GET"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("番薯Monitor/0.2.5", forHTTPHeaderField: "User-Agent")
+        request.setValue("番薯Monitor/0.2.6", forHTTPHeaderField: "User-Agent")
 
         let data: Data
         let response: HTTPURLResponse

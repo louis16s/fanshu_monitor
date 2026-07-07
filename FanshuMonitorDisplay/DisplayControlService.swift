@@ -9,6 +9,7 @@ final class DisplayControlService {
     private let defaults = UserDefaults.standard
     private let softwareDimming = DisplaySoftwareDimmingService()
     private let builtInBlackout = BuiltInDisplayBlackoutService()
+    private let displayClassifier = DisplayClassifier()
     var softwareDimmingEnabled = true
 
     func displays() -> [ControlledDisplay] {
@@ -24,26 +25,37 @@ final class DisplayControlService {
         ddc.refresh(displayIDs: displayIDs)
 
         return displayIDs.map { id in
-            let isBuiltIn = CGDisplayIsBuiltin(id) != 0
+            let displayKind = displayClassifier.classify(displayID: id)
+            let isBuiltIn = displayKind == .builtIn
+            let usesNativeBrightness = displayKind == .builtIn || displayKind == .appleNative
+            let usesDDC = displayKind == .externalDDC
             let name = displayName(for: id, isBuiltIn: isBuiltIn)
             let storageID = displayStorageID(for: id, name: name, isBuiltIn: isBuiltIn)
-            let appleBrightness = isBuiltIn ? displayServices.getBrightness(displayID: id) : nil
-            let hasDDCService = !isBuiltIn && ddc.hasService(for: id)
-            let ddcBrightness = isBuiltIn ? nil : ddc.read(.brightness, displayID: id)
-            let ddcVolume = isBuiltIn ? nil : ddc.read(.volume, displayID: id)
-            let ddcContrast = isBuiltIn ? nil : ddc.read(.contrast, displayID: id)
+            let appleBrightness = usesNativeBrightness ? displayServices.getBrightness(displayID: id) : nil
+            let hasDDCService = usesDDC && ddc.hasService(for: id)
+            let brightnessTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.brightness, displayID: id)
+            let volumeTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.volume, displayID: id)
+            let contrastTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.contrast, displayID: id)
+            let ddcBrightness = usesDDC ? ddc.read(.brightness, displayID: id) : nil
+            let ddcVolume = usesDDC ? ddc.read(.volume, displayID: id) : nil
+            let ddcContrast = usesDDC ? ddc.read(.contrast, displayID: id) : nil
             let storedBrightness = storedValue(for: .brightness, displayStorageID: storageID)
             let storedVolume = storedValue(for: .volume, displayStorageID: storageID)
             let storedContrast = storedValue(for: .contrast, displayStorageID: storageID)
+            let supportsBrightness = usesNativeBrightness
+                ? appleBrightness != nil
+                : usesDDC && !brightnessTemporarilyDisabled && (ddcBrightness != nil || storedBrightness != nil || hasDDCService)
+            let supportsVolume = usesDDC && !volumeTemporarilyDisabled && (ddcVolume != nil || storedVolume != nil)
+            let supportsContrast = usesDDC && !contrastTemporarilyDisabled && (ddcContrast != nil || storedContrast != nil)
 
             return ControlledDisplay(
                 id: id,
                 storageID: storageID,
                 name: name,
                 isBuiltIn: isBuiltIn,
-                supportsBrightness: isBuiltIn ? appleBrightness != nil : (ddcBrightness != nil || storedBrightness != nil || hasDDCService),
-                supportsVolume: !isBuiltIn && (ddcVolume != nil || storedVolume != nil),
-                supportsContrast: !isBuiltIn && (ddcContrast != nil || storedContrast != nil),
+                supportsBrightness: supportsBrightness,
+                supportsVolume: supportsVolume,
+                supportsContrast: supportsContrast,
                 brightness: appleBrightness.map { Double($0 * 100) }
                     ?? softwareDimming.userBrightness(for: id, storedUserBrightness: storedBrightness, hardwareBrightness: ddcBrightness)
                     ?? storedBrightness
@@ -54,9 +66,24 @@ final class DisplayControlService {
                 contrast: ddcContrast
                     ?? storedContrast
                     ?? DisplayControlKind.contrast.defaultValue,
-                brightnessUnavailableReason: isBuiltIn ? "系统亮度服务不可用" : (hasDDCService ? nil : "未匹配到 DDC/CI 服务"),
-                volumeUnavailableReason: isBuiltIn ? "内建屏不支持 DDC 音量" : (ddcVolume != nil || storedVolume != nil ? nil : "显示器未响应音量 VCP"),
-                contrastUnavailableReason: isBuiltIn ? "内建屏不支持 DDC 对比度" : (ddcContrast != nil || storedContrast != nil ? nil : "显示器未响应对比度 VCP")
+                brightnessUnavailableReason: supportsBrightness ? nil : unavailableReason(
+                    for: .brightness,
+                    displayKind: displayKind,
+                    hasDDCService: hasDDCService,
+                    isTemporarilyDisabled: brightnessTemporarilyDisabled
+                ),
+                volumeUnavailableReason: supportsVolume ? nil : unavailableReason(
+                    for: .volume,
+                    displayKind: displayKind,
+                    hasDDCService: hasDDCService,
+                    isTemporarilyDisabled: volumeTemporarilyDisabled
+                ),
+                contrastUnavailableReason: supportsContrast ? nil : unavailableReason(
+                    for: .contrast,
+                    displayKind: displayKind,
+                    hasDDCService: hasDDCService,
+                    isTemporarilyDisabled: contrastTemporarilyDisabled
+                )
             )
         }
     }
@@ -224,6 +251,56 @@ final class DisplayControlService {
 
     private func storedValueKey(for control: DisplayControlKind, displayStorageID: String) -> String {
         "displayControl.value.\(displayStorageID).\(control.storageKey)"
+    }
+
+    private func unavailableReason(
+        for control: DisplayControlKind,
+        displayKind: DisplayKind,
+        hasDDCService: Bool,
+        isTemporarilyDisabled: Bool
+    ) -> String {
+        if isTemporarilyDisabled {
+            return "DDC 暂时不可用，稍后自动重试"
+        }
+
+        switch displayKind {
+        case .builtIn:
+            switch control {
+            case .brightness:
+                return "系统亮度服务不可用"
+            case .volume:
+                return "内建屏不支持 DDC 音量"
+            case .contrast:
+                return "内建屏不支持 DDC 对比度"
+            }
+        case .appleNative:
+            switch control {
+            case .brightness:
+                return "Apple 原生亮度服务不可用"
+            case .volume:
+                return "Apple 原生亮度显示器不支持 DDC 音量"
+            case .contrast:
+                return "Apple 原生亮度显示器不支持 DDC 对比度"
+            }
+        case .virtual:
+            return "虚拟显示器不支持 DDC 控制"
+        case .dummy:
+            return "Dummy 显示器不支持 DDC 控制"
+        case .externalDDC:
+            guard hasDDCService else {
+                return "未匹配到 DDC/CI 服务"
+            }
+            switch control {
+            case .brightness:
+                return "显示器未响应亮度 VCP"
+            case .volume:
+                return "显示器未响应音量 VCP"
+            case .contrast:
+                return "显示器未响应对比度 VCP"
+            }
+        case .unsupported:
+            return "显示器类型暂不支持"
+        }
     }
 }
 
