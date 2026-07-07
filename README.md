@@ -12,10 +12,12 @@
   <a href="README.en.md">English</a>
 </p>
 
+> 最低系统版本：macOS 26.0，仅支持 Apple Silicon Mac。
+
 ## 系统要求
 
 - Apple Silicon Mac
-- macOS 26 或更高版本
+- 最低系统版本：macOS 26.0
 - 外接显示器亮度控制需要支持 DDC/CI 的显示器、线缆和连接方式
 - F1/F2 接管、鼠标按键映射等功能需要授予辅助功能权限
 
