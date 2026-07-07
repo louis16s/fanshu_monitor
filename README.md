@@ -12,8 +12,6 @@
   <a href="README.en.md">English</a>
 </p>
 
-> 最低系统版本：macOS 26.0，仅支持 Apple Silicon Mac。
-
 ## 系统要求
 
 - Apple Silicon Mac

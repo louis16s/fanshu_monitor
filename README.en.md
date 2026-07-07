@@ -12,8 +12,6 @@ A macOS menu bar system monitor and external display control utility for Apple S
   <a href="README.md">中文</a>
 </p>
 
-> Minimum macOS version: macOS 26.0. Apple Silicon Mac only.
-
 ## System Requirements
 
 - Apple Silicon Mac
