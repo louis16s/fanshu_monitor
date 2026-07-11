@@ -56,15 +56,24 @@ final class MonitorStore: ObservableObject {
             .sink { [weak self] _ in
                 guard let self else { return }
                 self.modules = self.visibleModules(from: self.allModules)
-                #if DISPLAY_CONTROL
-                DispatchQueue.main.async { [weak self] in
-                    self?.configureDisplayControlServices()
-                }
-                #endif
                 self.objectWillChange.send()
             }
             .store(in: &cancellables)
         #if DISPLAY_CONTROL
+        Publishers.MergeMany(
+            settings.$displayModuleVisible.map { _ in () }.eraseToAnyPublisher(),
+            settings.$displayBrightnessControlEnabled.map { _ in () }.eraseToAnyPublisher(),
+            settings.$displayVolumeControlEnabled.map { _ in () }.eraseToAnyPublisher(),
+            settings.$displayContrastControlEnabled.map { _ in () }.eraseToAnyPublisher(),
+            settings.$brightnessKeyInterceptionEnabled.map { _ in () }.eraseToAnyPublisher()
+        )
+        .dropFirst()
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] _ in
+            self?.configureDisplayControlServices()
+        }
+        .store(in: &cancellables)
+
         settings.$displaySoftwareDimmingEnabled
             .dropFirst()
             .receive(on: DispatchQueue.main)

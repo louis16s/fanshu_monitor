@@ -51,6 +51,7 @@ final class DisplayDDCBridge {
             let maxRetries = fastFail ? 2 : 5
             guard let values = DDCTransport.read(
                 service: service.service,
+                displayID: displayID,
                 vcpCode: vcp.rawValue,
                 longerDelay: useLongerDelay,
                 maxRetries: maxRetries
@@ -103,6 +104,7 @@ final class DisplayDDCBridge {
             let muteValue: UInt16 = value > 0 ? 2 : 1
             let muteSuccess = DDCTransport.write(
                 service: service.service,
+                displayID: displayID,
                 vcpCode: DDCVCPCode.audioMuteScreenBlank.rawValue,
                 value: muteValue
             )
@@ -114,7 +116,12 @@ final class DisplayDDCBridge {
         }
 
         for vcp in orderedCandidates(for: key) {
-            let success = DDCTransport.write(service: service.service, vcpCode: vcp.rawValue, value: ddcValue)
+            let success = DDCTransport.write(
+                service: service.service,
+                displayID: displayID,
+                vcpCode: vcp.rawValue,
+                value: ddcValue
+            )
             displayDDCLog.notice(
                 "Write DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public) code \(vcp.rawValue, privacy: .public) value \(ddcValue, privacy: .public) range \(range.min, privacy: .public)-\(range.max, privacy: .public) success \(success, privacy: .public)"
             )
@@ -154,7 +161,12 @@ final class DisplayDDCBridge {
         vcp: DDCVCPCode
     ) {
         guard control == .brightness, requestedPercentage <= 0 else { return }
-        guard let values = DDCTransport.read(service: service, vcpCode: vcp.rawValue, maxRetries: 2),
+        guard let values = DDCTransport.read(
+            service: service,
+            displayID: key.displayID,
+            vcpCode: vcp.rawValue,
+            maxRetries: 2
+        ),
               values.max > 0
         else { return }
 
@@ -219,10 +231,11 @@ private enum DDCTransport {
     private static let communicateTimeoutSeconds = 3
     private static let circuitCooldownSeconds = 10
     private static let circuitLock = NSLock()
-    private nonisolated(unsafe) static var circuitOpenUntil: DispatchTime?
+    private nonisolated(unsafe) static var circuitOpenUntilByDisplayID: [CGDirectDisplayID: DispatchTime] = [:]
 
     static func read(
         service: IOAVService,
+        displayID: CGDirectDisplayID,
         vcpCode: UInt8,
         longerDelay: Bool = false,
         maxRetries: Int = 5
@@ -231,6 +244,7 @@ private enum DDCTransport {
         var reply = [UInt8](repeating: 0, count: 11)
         guard communicate(
             service: service,
+            displayID: displayID,
             send: &send,
             reply: &reply,
             longerDelay: longerDelay,
@@ -245,23 +259,31 @@ private enum DDCTransport {
 
     static func write(
         service: IOAVService,
+        displayID: CGDirectDisplayID,
         vcpCode: UInt8,
         value: UInt16,
         maxRetries: Int = 5
     ) -> Bool {
         var send = [vcpCode, UInt8(value >> 8), UInt8(value & 0xFF)]
         var reply: [UInt8] = []
-        return communicate(service: service, send: &send, reply: &reply, maxRetries: maxRetries)
+        return communicate(
+            service: service,
+            displayID: displayID,
+            send: &send,
+            reply: &reply,
+            maxRetries: maxRetries
+        )
     }
 
     private static func communicate(
         service: IOAVService,
+        displayID: CGDirectDisplayID,
         send: inout [UInt8],
         reply: inout [UInt8],
         longerDelay: Bool = false,
         maxRetries: Int = 5
     ) -> Bool {
-        guard !circuitIsOpen() else {
+        guard !circuitIsOpen(for: displayID) else {
             return false
         }
 
@@ -282,12 +304,12 @@ private enum DDCTransport {
         }
 
         if semaphore.wait(timeout: .now() + .seconds(communicateTimeoutSeconds)) == .timedOut {
-            tripCircuit()
-            displayDDCLog.error("DDC communicate timed out after \(communicateTimeoutSeconds, privacy: .public)s; circuit opened for \(circuitCooldownSeconds, privacy: .public)s")
+            tripCircuit(for: displayID)
+            displayDDCLog.error("DDC communicate timed out for display \(displayID, privacy: .public) after \(communicateTimeoutSeconds, privacy: .public)s; circuit opened for \(circuitCooldownSeconds, privacy: .public)s")
             return false
         }
 
-        resetCircuit()
+        resetCircuit(for: displayID)
         send = sendCopy
         reply = replyCopy
         return result
@@ -359,28 +381,28 @@ private enum DDCTransport {
         return false
     }
 
-    private static func circuitIsOpen() -> Bool {
+    private static func circuitIsOpen(for displayID: CGDirectDisplayID) -> Bool {
         circuitLock.lock()
         defer { circuitLock.unlock() }
-        guard let openUntil = circuitOpenUntil else {
+        guard let openUntil = circuitOpenUntilByDisplayID[displayID] else {
             return false
         }
         if DispatchTime.now() >= openUntil {
-            circuitOpenUntil = nil
+            circuitOpenUntilByDisplayID.removeValue(forKey: displayID)
             return false
         }
         return true
     }
 
-    private static func tripCircuit() {
+    private static func tripCircuit(for displayID: CGDirectDisplayID) {
         circuitLock.lock()
-        circuitOpenUntil = .now() + .seconds(circuitCooldownSeconds)
+        circuitOpenUntilByDisplayID[displayID] = .now() + .seconds(circuitCooldownSeconds)
         circuitLock.unlock()
     }
 
-    private static func resetCircuit() {
+    private static func resetCircuit(for displayID: CGDirectDisplayID) {
         circuitLock.lock()
-        circuitOpenUntil = nil
+        circuitOpenUntilByDisplayID.removeValue(forKey: displayID)
         circuitLock.unlock()
     }
 

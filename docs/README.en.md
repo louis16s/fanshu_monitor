@@ -94,3 +94,7 @@ https://louis16s.github.io/fanshu_monitor/
 This project is licensed under the [MIT License](../LICENSE).
 
 Fanshu Monitor incorporates or was informed by ideas and small portions of implementation from projects including MonitorControl, Hagimi Monitor, and Mouser. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party license and source notes.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for permission, Codex quota, and release verification notes.

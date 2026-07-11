@@ -7,6 +7,8 @@ final class NetworkSampler: MonitorSampler {
     var kind: MonitorKind { .network }
 
     private var previousNetworkBytes: (input: UInt64, output: UInt64, timestamp: Date)?
+    private var cachedSSID: (value: String, refreshedAt: Date)?
+    private let ssidRefreshInterval: TimeInterval = 30
 
     func sample(previous: MonitorModule?) -> MonitorModule {
         let now = Date()
@@ -20,7 +22,7 @@ final class NetworkSampler: MonitorSampler {
                 value: 0,
                 summary: bytes.interface,
                 metrics: [
-                    MonitorMetric(name: "ssid", value: currentSSID()),
+                    MonitorMetric(name: "ssid", value: currentSSID(at: now)),
                     MonitorMetric(name: "ipv4", value: networkAddressSummary(bytes.ipv4Addresses)),
                     MonitorMetric(name: "ipv6", value: networkAddressSummary(bytes.ipv6Addresses)),
                     MonitorMetric(name: "upload", value: "--"),
@@ -40,7 +42,7 @@ final class NetworkSampler: MonitorSampler {
             value: value,
             summary: bytes.interface,
             metrics: [
-                MonitorMetric(name: "ssid", value: currentSSID()),
+                MonitorMetric(name: "ssid", value: currentSSID(at: now)),
                 MonitorMetric(name: "ipv4", value: networkAddressSummary(bytes.ipv4Addresses)),
                 MonitorMetric(name: "ipv6", value: networkAddressSummary(bytes.ipv6Addresses)),
                 MonitorMetric(name: "upload", value: bytesPerSecond(upload)),
@@ -183,8 +185,15 @@ final class NetworkSampler: MonitorSampler {
         return address
     }
 
-    private func currentSSID() -> String {
-        CWWiFiClient.shared().interface()?.ssid() ?? "--"
+    private func currentSSID(at date: Date) -> String {
+        if let cachedSSID,
+           date.timeIntervalSince(cachedSSID.refreshedAt) < ssidRefreshInterval {
+            return cachedSSID.value
+        }
+
+        let value = CWWiFiClient.shared().interface()?.ssid() ?? "--"
+        cachedSSID = (value, date)
+        return value
     }
 }
 
