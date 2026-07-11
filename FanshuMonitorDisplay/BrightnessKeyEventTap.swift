@@ -28,7 +28,10 @@ final class BrightnessKeyEventTap {
     func start() {
         guard eventTap == nil else { return }
         guard settings?.brightnessKeyInterceptionEnabled == true else { return }
-        guard hasKeyboardCapturePermission() else {
+        guard Self.canInterceptBrightnessKeys(
+            accessibilityGranted: AXIsProcessTrusted(),
+            inputMonitoringGranted: CGPreflightListenEventAccess()
+        ) else {
             return
         }
 
@@ -66,6 +69,24 @@ final class BrightnessKeyEventTap {
         eventTap = nil
     }
 
+    func refreshPermissionState() {
+        guard settings?.brightnessKeyInterceptionEnabled == true else {
+            stop()
+            return
+        }
+
+        let hasPermission = Self.canInterceptBrightnessKeys(
+            accessibilityGranted: AXIsProcessTrusted(),
+            inputMonitoringGranted: CGPreflightListenEventAccess()
+        )
+        guard hasPermission else {
+            stop()
+            logWaitingForAccessibility()
+            return
+        }
+        start()
+    }
+
     private func handle(event: CGEvent, type: CGEventType) -> Bool {
         guard settings?.brightnessKeyInterceptionEnabled == true else {
             return false
@@ -93,16 +114,11 @@ final class BrightnessKeyEventTap {
         return true
     }
 
-    private func hasKeyboardCapturePermission() -> Bool {
-        let hasAccessibility = AXIsProcessTrusted()
-        let hasListenAccess = CGPreflightListenEventAccess()
-        guard hasAccessibility && hasListenAccess else {
-            AppLogger.ui.notice(
-                "Brightness key interception is waiting for permissions: accessibility \(hasAccessibility, privacy: .public), input monitoring \(hasListenAccess, privacy: .public)"
-            )
-            return false
-        }
-        return true
+    nonisolated static func canInterceptBrightnessKeys(
+        accessibilityGranted: Bool,
+        inputMonitoringGranted: Bool
+    ) -> Bool {
+        accessibilityGranted && inputMonitoringGranted
     }
 
     private func logWaitingForAccessibility() {

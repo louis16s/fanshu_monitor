@@ -59,11 +59,16 @@ final class MouseButtonEventTap {
     }
 
     func refresh() {
-        if settings?.mouseControlEnabled == true {
-            start()
-        } else {
+        guard settings?.mouseControlEnabled == true else {
             stop()
+            return
         }
+        guard AXIsProcessTrusted() else {
+            stop()
+            AppLogger.mouse.info("Mouse button tap stopped because Accessibility permission was revoked")
+            return
+        }
+        start()
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {

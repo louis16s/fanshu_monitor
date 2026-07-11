@@ -8,11 +8,14 @@ final class NetworkSampler: MonitorSampler {
 
     private var previousNetworkBytes: (input: UInt64, output: UInt64, timestamp: Date)?
     private var cachedSSID: (value: String, refreshedAt: Date)?
+    private var cachedAddresses: (ipv4: String, ipv6: String, refreshedAt: Date)?
     private let ssidRefreshInterval: TimeInterval = 30
+    private let addressRefreshInterval: TimeInterval = 30
 
     func sample(previous: MonitorModule?) -> MonitorModule {
         let now = Date()
         let bytes = networkBytes()
+        let addresses = addressSummary(for: bytes, at: now)
         let previousBytes = previousNetworkBytes
         previousNetworkBytes = (bytes.input, bytes.output, now)
 
@@ -23,8 +26,8 @@ final class NetworkSampler: MonitorSampler {
                 summary: bytes.interface,
                 metrics: [
                     MonitorMetric(name: "ssid", value: currentSSID(at: now)),
-                    MonitorMetric(name: "ipv4", value: networkAddressSummary(bytes.ipv4Addresses)),
-                    MonitorMetric(name: "ipv6", value: networkAddressSummary(bytes.ipv6Addresses)),
+                    MonitorMetric(name: "ipv4", value: addresses.ipv4),
+                    MonitorMetric(name: "ipv6", value: addresses.ipv6),
                     MonitorMetric(name: "upload", value: "--"),
                     MonitorMetric(name: "download", value: "--")
                 ],
@@ -43,8 +46,8 @@ final class NetworkSampler: MonitorSampler {
             summary: bytes.interface,
             metrics: [
                 MonitorMetric(name: "ssid", value: currentSSID(at: now)),
-                MonitorMetric(name: "ipv4", value: networkAddressSummary(bytes.ipv4Addresses)),
-                MonitorMetric(name: "ipv6", value: networkAddressSummary(bytes.ipv6Addresses)),
+                MonitorMetric(name: "ipv4", value: addresses.ipv4),
+                MonitorMetric(name: "ipv6", value: addresses.ipv6),
                 MonitorMetric(name: "upload", value: bytesPerSecond(upload)),
                 MonitorMetric(name: "download", value: bytesPerSecond(download))
             ],
@@ -193,6 +196,20 @@ final class NetworkSampler: MonitorSampler {
 
         let value = CWWiFiClient.shared().interface()?.ssid() ?? "--"
         cachedSSID = (value, date)
+        return value
+    }
+
+    private func addressSummary(for snapshot: NetworkInterfaceSnapshot, at date: Date) -> (ipv4: String, ipv6: String) {
+        if let cachedAddresses,
+           date.timeIntervalSince(cachedAddresses.refreshedAt) < addressRefreshInterval {
+            return (cachedAddresses.ipv4, cachedAddresses.ipv6)
+        }
+
+        let value = (
+            ipv4: networkAddressSummary(snapshot.ipv4Addresses),
+            ipv6: networkAddressSummary(snapshot.ipv6Addresses)
+        )
+        cachedAddresses = (value.ipv4, value.ipv6, date)
         return value
     }
 }

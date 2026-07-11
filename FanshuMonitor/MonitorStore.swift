@@ -27,7 +27,9 @@ final class MonitorStore: ObservableObject {
     private let refreshSchedule = MonitorRefreshSchedule()
     private var timerCancellable: AnyCancellable?
     private var animationTimerCancellable: AnyCancellable?
-    private let sampler = SystemMonitorSampler()
+    private let samplingCoordinator = SamplingCoordinator()
+    private var samplingTask: Task<Void, Never>?
+    private var samplingGeneration = 0
     private var cancellables: Set<AnyCancellable> = []
     private var menuBarTargetComputeLoad = 0.0
     private var framesSinceLastMenuBarTargetUpdate = MonitorConstants.menuBarLoadUpdateFrameInterval
@@ -40,7 +42,9 @@ final class MonitorStore: ObservableObject {
         self.settings = settings
         allModules = initialModules
         modules = initialModules.filter { settings.isVisible($0.kind) }
-        sampler.setCodexRefreshInterval(settings.codexRefreshIntervalMinutes * 60)
+        Task { [samplingCoordinator, settings] in
+            await samplingCoordinator.setCodexRefreshInterval(settings.codexRefreshIntervalMinutes * 60)
+        }
         advance(kinds: settings.visibleKinds)
         updateMenuBarTargetComputeLoadIfNeeded(force: true)
         updateMenuBarIcon(force: true)
@@ -87,7 +91,10 @@ final class MonitorStore: ObservableObject {
             .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] minutes in
-                self?.sampler.setCodexRefreshInterval(minutes * 60)
+                guard let self else { return }
+                Task { [samplingCoordinator = self.samplingCoordinator] in
+                    await samplingCoordinator.setCodexRefreshInterval(minutes * 60)
+                }
             }
             .store(in: &cancellables)
         timerCancellable = Timer.publish(every: refreshSchedule.tickInterval, on: .main, in: .common)
@@ -104,6 +111,7 @@ final class MonitorStore: ObservableObject {
     }
 
     deinit {
+        samplingTask?.cancel()
         timerCancellable?.cancel()
         animationTimerCancellable?.cancel()
         cancellables.removeAll()
@@ -187,13 +195,29 @@ final class MonitorStore: ObservableObject {
     }
 
     private func advance(kinds: some Sequence<MonitorKind>) {
-        let result = sampler.sample(kinds: kinds, previousModules: allModules)
-        switch result {
-        case .success(let snapshot):
-            allModules = snapshot.modules
-            modules = visibleModules(from: allModules)
-        case .failure(let error):
-            AppLogger.sampler.error("Sampling failed: \(error.description, privacy: .public)")
+        let requestedKinds = Array(kinds)
+        guard !requestedKinds.isEmpty else { return }
+
+        samplingTask?.cancel()
+        samplingGeneration &+= 1
+        let requestGeneration = samplingGeneration
+        let previousModules = allModules
+        let coordinator = samplingCoordinator
+
+        samplingTask = Task { [weak self] in
+            let snapshot = await coordinator.sample(
+                kinds: requestedKinds,
+                previousModules: previousModules
+            )
+            guard !Task.isCancelled,
+                  let snapshot,
+                  let self,
+                  requestGeneration == self.samplingGeneration
+            else {
+                return
+            }
+            self.allModules = snapshot.modules
+            self.modules = self.visibleModules(from: snapshot.modules)
         }
     }
 
@@ -213,11 +237,7 @@ final class MonitorStore: ObservableObject {
 
     private func retryBrightnessKeyTapIfNeeded() {
         #if DISPLAY_CONTROL
-        if settings.brightnessKeyInterceptionEnabled {
-            brightnessKeyEventTap?.start()
-        } else {
-            brightnessKeyEventTap?.stop()
-        }
+        brightnessKeyEventTap?.refreshPermissionState()
         #endif
     }
 
@@ -306,10 +326,17 @@ final class MonitorStore: ObservableObject {
     func refreshCodexUsageNow() {
         guard settings.isVisible(.codex) else { return }
         refreshSchedule.markRefreshed([MonitorKind.codex], at: Date())
-        sampler.refreshCodex(previousModules: allModules) { [weak self] snapshot in
-            guard let self else { return }
+        let previousModules = allModules
+        let coordinator = samplingCoordinator
+        Task { [weak self] in
+            guard let snapshot = await coordinator.refreshCodex(previousModules: previousModules),
+                  let self,
+                  !Task.isCancelled
+            else {
+                return
+            }
             self.allModules = snapshot.modules
-            self.modules = self.visibleModules(from: self.allModules)
+            self.modules = self.visibleModules(from: snapshot.modules)
         }
     }
 

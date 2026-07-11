@@ -1,11 +1,11 @@
 import Foundation
 import OSLog
 
-struct SystemMonitorSnapshot {
+struct SystemMonitorSnapshot: Sendable {
     var modules: [MonitorModule]
 }
 
-final class SystemMonitorSampler {
+nonisolated final class SystemMonitorSampler: @unchecked Sendable {
     private let codexSampler = CodexQuotaSampler()
     private let samplers: [MonitorKind: MonitorSampler]
 

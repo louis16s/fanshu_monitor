@@ -9,6 +9,8 @@ final class BatterySampler: MonitorSampler {
 
     private var powerTelemetryService: io_service_t = IO_OBJECT_NULL
     private var didSearchPowerTelemetryService = false
+    private var cachedSmartBatteryInfo: (value: SmartBatteryInfo, refreshedAt: Date)?
+    private let smartBatteryRefreshInterval: TimeInterval = 5
 
     deinit {
         if powerTelemetryService != IO_OBJECT_NULL {
@@ -32,7 +34,7 @@ final class BatterySampler: MonitorSampler {
         let sourceState = description[kIOPSPowerSourceStateKey] as? String
         let connected = sourceState == kIOPSACPowerValue
 
-        let smart = smartBatteryInfo()
+        let smart = smartBatteryInfo(at: Date())
         let adapterWatts = smart.adapterWatts ?? externalAdapterWatts()
         let chargingPower = connected
             ? (smart.telemetryChargingWatts ?? smart.chargingPowerWatts)
@@ -74,7 +76,18 @@ final class BatterySampler: MonitorSampler {
         )
     }
 
-    private func smartBatteryInfo() -> SmartBatteryInfo {
+    private func smartBatteryInfo(at date: Date) -> SmartBatteryInfo {
+        if let cachedSmartBatteryInfo,
+           date.timeIntervalSince(cachedSmartBatteryInfo.refreshedAt) < smartBatteryRefreshInterval {
+            return cachedSmartBatteryInfo.value
+        }
+
+        let value = readSmartBatteryInfo()
+        cachedSmartBatteryInfo = (value, date)
+        return value
+    }
+
+    private func readSmartBatteryInfo() -> SmartBatteryInfo {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
         guard service != IO_OBJECT_NULL else {
             return SmartBatteryInfo()

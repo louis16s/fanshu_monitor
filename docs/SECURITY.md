@@ -4,7 +4,7 @@
 
 Only assets published on the official [GitHub Releases](https://github.com/louis16s/fanshu_monitor/releases) page are supported.
 
-Each automated release includes `FanshuMonitor.zip` and `checksums.txt`. Verify the archive before opening it:
+Each automated release includes `FanshuMonitor.zip`, `checksums.txt`, and `release-manifest.json`. The manifest binds the artifact SHA-256 to the release version and source commit. Verify the archive before opening it:
 
 ```bash
 shasum -a 256 -c checksums.txt

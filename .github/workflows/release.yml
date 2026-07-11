@@ -51,6 +51,35 @@ jobs:
           shasum -a 256 'build/release/FanshuMonitor.zip' > 'build/release/checksums.txt'
           ls -lh build/release
 
+      - name: Create release manifest
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          artifact = Path("build/release/FanshuMonitor.zip")
+          manifest = {
+              "schema": 1,
+              "product": "番薯Monitor",
+              "version": os.environ["RELEASE_VERSION"].removeprefix("v"),
+              "sourceCommit": os.environ["SOURCE_COMMIT"],
+              "artifact": {
+                  "name": artifact.name,
+                  "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+              },
+          }
+          Path("build/release/release-manifest.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
       - name: Remove old release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -89,6 +118,7 @@ jobs:
           files: |
             build/release/FanshuMonitor.zip
             build/release/checksums.txt
+            build/release/release-manifest.json
           body_path: docs/RELEASE_NOTES.md
           generate_release_notes: true
         env:

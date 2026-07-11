@@ -28,7 +28,7 @@ enum HaloRingSource: String, CaseIterable, Identifiable {
     }
 }
 
-enum MemoryPressureLevel {
+enum MemoryPressureLevel: Sendable {
     case normal
     case warning
     case critical
@@ -52,7 +52,7 @@ enum MonitorSeverity {
     }
 }
 
-enum MonitorKind: String, CaseIterable, Identifiable {
+enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
     case cpu
     case gpu
     case memory
@@ -167,14 +167,14 @@ struct MetricSwitch: Identifiable, Hashable {
     let isDefault: Bool
 }
 
-struct MonitorMetric: Identifiable {
+struct MonitorMetric: Identifiable, Sendable {
     let name: String
     let value: String
 
     var id: String { name }
 }
 
-struct MonitorModule: Identifiable {
+struct MonitorModule: Identifiable, Sendable {
     let kind: MonitorKind
     var context: String? = nil
     var value: Double

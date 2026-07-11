@@ -80,6 +80,7 @@ final class DisplayControlController: ObservableObject {
 
     func refreshNow() {
         refreshWorkItem?.cancel()
+        worker.invalidateDiscoveryCache()
         refreshAsync()
     }
 
@@ -189,6 +190,7 @@ final class DisplayControlController: ObservableObject {
 
     func scheduleRefresh(delay: TimeInterval = 0.45) {
         refreshWorkItem?.cancel()
+        worker.invalidateDiscoveryCache()
         let item = DispatchWorkItem { [weak self] in
             Task { @MainActor in
                 self?.refreshAsync()
@@ -200,6 +202,7 @@ final class DisplayControlController: ObservableObject {
 
     func scheduleWakeRefreshes() {
         AppLogger.ui.notice("Display wake detected; reapplying display control state")
+        worker.invalidateDiscoveryCache()
         wakeMaintenanceGeneration &+= 1
         let generation = wakeMaintenanceGeneration
         let passes: [(delay: TimeInterval, fullRefresh: Bool)] = [
@@ -545,11 +548,28 @@ private final class DisplayControlWorker {
     private let queue = DispatchQueue(label: "fanshu.ddc", qos: .userInitiated)
     private var pendingWrites: [ControlKey: Double] = [:]
     private var debounceTimers: [ControlKey: DispatchWorkItem] = [:]
+    private var cachedDiscovery: (displays: [ControlledDisplay], refreshedAt: Date)?
     private let debounceInterval: DispatchTimeInterval = .milliseconds(150)
+    private let discoveryCacheInterval: TimeInterval = 2
 
     func refresh(service: DisplayControlService, completion: @escaping ([ControlledDisplay]) -> Void) {
         queue.async {
-            completion(service.displays())
+            let now = Date()
+            if let cachedDiscovery = self.cachedDiscovery,
+               now.timeIntervalSince(cachedDiscovery.refreshedAt) < self.discoveryCacheInterval {
+                completion(cachedDiscovery.displays)
+                return
+            }
+
+            let displays = service.displays()
+            self.cachedDiscovery = (displays, now)
+            completion(displays)
+        }
+    }
+
+    func invalidateDiscoveryCache() {
+        queue.async {
+            self.cachedDiscovery = nil
         }
     }
 
