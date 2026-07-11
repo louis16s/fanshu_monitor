@@ -6,20 +6,8 @@ struct SystemMonitorSnapshot: Sendable {
 }
 
 nonisolated final class SystemMonitorSampler: @unchecked Sendable {
-    private let codexSampler = CodexQuotaSampler()
-    private let samplers: [MonitorKind: MonitorSampler]
-
-    init() {
-        samplers = [
-            .cpu: CPUSampler(),
-            .gpu: GPUSampler(),
-            .memory: MemorySampler(),
-            .storage: StorageSampler(),
-            .network: NetworkSampler(),
-            .battery: BatterySampler(),
-            .codex: codexSampler
-        ]
-    }
+    private var samplers: [MonitorKind: MonitorSampler] = [:]
+    private var codexRefreshInterval: TimeInterval = 300
 
     func sample(previousModules: [MonitorModule]) -> Result<SystemMonitorSnapshot, SamplingError> {
         sample(kinds: MonitorKind.allCases, previousModules: previousModules)
@@ -31,11 +19,7 @@ nonisolated final class SystemMonitorSampler: @unchecked Sendable {
             var errors: [SamplingError] = []
 
             for kind in kinds {
-                guard let sampler = samplers[kind] else {
-                    AppLogger.sampler.error("No sampler registered for kind: \(kind.rawValue, privacy: .public)")
-                    errors.append(samplingError(for: kind))
-                    continue
-                }
+                let sampler = sampler(for: kind)
                 let previous = modulesByKind[kind]
                 let module = sampler.sample(previous: previous)
 
@@ -65,11 +49,21 @@ nonisolated final class SystemMonitorSampler: @unchecked Sendable {
     }
 
     func setCodexRefreshInterval(_ interval: TimeInterval) {
-        codexSampler.setRefreshInterval(interval)
+        codexRefreshInterval = min(3600, max(60, interval))
+        (samplers[.codex] as? CodexQuotaSampler)?.setRefreshInterval(codexRefreshInterval)
+    }
+
+    func releaseSamplers(except visibleKinds: Set<MonitorKind>) {
+        samplers = samplers.filter { visibleKinds.contains($0.key) }
+    }
+
+    func loadedSamplerKinds() -> Set<MonitorKind> {
+        Set(samplers.keys)
     }
 
     func refreshCodex(previousModules: [MonitorModule], completion: @escaping (SystemMonitorSnapshot) -> Void) {
         let previous = previousModules.first { $0.kind == .codex }
+        let codexSampler = sampler(for: .codex) as! CodexQuotaSampler
         codexSampler.forceRefresh(previous: previous) { module in
             var modulesByKind = Dictionary(uniqueKeysWithValues: previousModules.map { ($0.kind, $0) })
             modulesByKind[.codex] = module
@@ -80,15 +74,32 @@ nonisolated final class SystemMonitorSampler: @unchecked Sendable {
         }
     }
 
-    private func samplingError(for kind: MonitorKind) -> SamplingError {
-        switch kind {
-        case .cpu: return .cpuUnavailable
-        case .gpu: return .gpuUnavailable
-        case .memory: return .memoryUnavailable
-        case .storage: return .storageUnavailable
-        case .network: return .networkUnavailable
-        case .battery: return .batteryUnavailable
-        case .codex: return .codexUnavailable
+    private func sampler(for kind: MonitorKind) -> MonitorSampler {
+        if let sampler = samplers[kind] {
+            return sampler
         }
+
+        let sampler: MonitorSampler
+        switch kind {
+        case .cpu:
+            sampler = CPUSampler()
+        case .gpu:
+            sampler = GPUSampler()
+        case .memory:
+            sampler = MemorySampler()
+        case .storage:
+            sampler = StorageSampler()
+        case .network:
+            sampler = NetworkSampler()
+        case .battery:
+            sampler = BatterySampler()
+        case .codex:
+            let codexSampler = CodexQuotaSampler()
+            codexSampler.setRefreshInterval(codexRefreshInterval)
+            sampler = codexSampler
+        }
+        samplers[kind] = sampler
+        AppLogger.sampler.debug("Loaded sampler for \(kind.rawValue, privacy: .public)")
+        return sampler
     }
 }

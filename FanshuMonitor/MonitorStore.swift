@@ -44,6 +44,7 @@ final class MonitorStore: ObservableObject {
         modules = initialModules.filter { settings.isVisible($0.kind) }
         Task { [samplingCoordinator, settings] in
             await samplingCoordinator.setCodexRefreshInterval(settings.codexRefreshIntervalMinutes * 60)
+            await samplingCoordinator.retainSamplers(for: settings.visibleKinds)
         }
         advance(kinds: settings.visibleKinds)
         updateMenuBarTargetComputeLoadIfNeeded(force: true)
@@ -95,6 +96,19 @@ final class MonitorStore: ObservableObject {
                 Task { [samplingCoordinator = self.samplingCoordinator] in
                     await samplingCoordinator.setCodexRefreshInterval(minutes * 60)
                 }
+            }
+            .store(in: &cancellables)
+        settings.$visibleKinds
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] visibleKinds in
+                guard let self else { return }
+                Task { [samplingCoordinator = self.samplingCoordinator] in
+                    await samplingCoordinator.retainSamplers(for: visibleKinds)
+                }
+                self.refreshSchedule.reset()
+                self.modules = self.visibleModules(from: self.allModules)
+                self.advance(kinds: visibleKinds)
             }
             .store(in: &cancellables)
         timerCancellable = Timer.publish(every: refreshSchedule.tickInterval, on: .main, in: .common)

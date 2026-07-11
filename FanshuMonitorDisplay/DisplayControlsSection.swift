@@ -73,10 +73,6 @@ struct DisplayControlsSection: View {
                 .transition(.detailDisclosure)
             }
         }
-        .onAppear {
-            controller.refreshAsync()
-            controller.startAutomaticRefresh()
-        }
         .animation(expansionAnimation, value: isExpanded)
         .glassEffect(.regular.tint(palette.displayGlassTint), in: .rect(cornerRadius: 14, style: .continuous))
     }
@@ -431,4 +427,3 @@ private struct DisplayEmptyState: View {
         }
     }
 }
-

@@ -9,6 +9,14 @@ actor SamplingCoordinator {
         sampler.setCodexRefreshInterval(interval)
     }
 
+    func retainSamplers(for visibleKinds: Set<MonitorKind>) {
+        sampler.releaseSamplers(except: visibleKinds)
+    }
+
+    func loadedSamplerKinds() -> Set<MonitorKind> {
+        sampler.loadedSamplerKinds()
+    }
+
     func sample(
         kinds: [MonitorKind],
         previousModules: [MonitorModule]

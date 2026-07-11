@@ -18,6 +18,13 @@ struct SamplingCoordinatorTests {
 
         #expect(snapshot?.modules.map(\.kind) == MonitorKind.allCases)
         #expect(snapshot?.modules.first(where: { $0.kind == .memory })?.summary != "--")
+        let loadedKinds = await coordinator.loadedSamplerKinds()
+        #expect(loadedKinds == [.memory])
+
+        await coordinator.retainSamplers(for: [])
+
+        let releasedKinds = await coordinator.loadedSamplerKinds()
+        #expect(releasedKinds.isEmpty)
     }
 
     @Test func brightnessInterceptionRequiresBothPermissions() {
