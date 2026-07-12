@@ -42,7 +42,11 @@ struct FanshuMonitorApp: App {
         #endif
 
         Settings {
-            SettingsRootView(settings: monitorStore.settings, mouseController: monitorStore.mouseController)
+            SettingsRootView(
+                settings: monitorStore.settings,
+                mouseController: monitorStore.mouseController,
+                lockScreenController: monitorStore.lockScreenController
+            )
                 .environment(\.locale, effectiveLocale)
                 // 设置窗口始终跟随系统外观
         }

@@ -2,6 +2,7 @@ import SwiftUI
 
 enum SettingsRoute: Hashable {
     case general
+    case lockScreen
     case mouse
     case module(MonitorKind)
     #if DISPLAY_CONTROL
@@ -19,6 +20,9 @@ struct SettingsSidebar: View {
             Section {
                 Label(String(localized: "settings.sidebar.general"), systemImage: "gearshape")
                     .tag(SettingsRoute.general)
+
+                Label("锁屏", systemImage: "lock")
+                    .tag(SettingsRoute.lockScreen)
 
                 Label("鼠标", systemImage: "computermouse")
                     .tag(SettingsRoute.mouse)

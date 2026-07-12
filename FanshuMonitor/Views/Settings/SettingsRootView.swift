@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsRootView: View {
     @ObservedObject var settings: MonitorSettings
     @ObservedObject var mouseController: MouseControlController
+    @ObservedObject var lockScreenController: LockScreenPolicyController
     @State private var selection: SettingsRoute = .general
 
     var body: some View {
@@ -31,6 +32,8 @@ struct SettingsRootView: View {
         switch selection {
         case .general:
             GeneralSettingsView(settings: settings)
+        case .lockScreen:
+            LockScreenSettingsView(settings: settings, controller: lockScreenController)
         case .mouse:
             MouseSettingsView(settings: settings, controller: mouseController)
         case .module(let kind):
@@ -139,6 +142,8 @@ extension SettingsTab {
         switch self {
         case .general:
             return .general
+        case .lockScreen:
+            return .lockScreen
         case .mouse:
             return .mouse
         case .modules:

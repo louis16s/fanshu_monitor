@@ -22,6 +22,7 @@ final class MonitorStore: ObservableObject {
     private var brightnessKeyEventTap: BrightnessKeyEventTap?
     #endif
     let mouseController = MouseControlController()
+    let lockScreenController = LockScreenPolicyController()
 
     private var allModules: [MonitorModule]
     private let refreshSchedule = MonitorRefreshSchedule()
@@ -56,6 +57,7 @@ final class MonitorStore: ObservableObject {
         configureDisplayControlServices()
         #endif
         mouseController.configure(settings: settings)
+        lockScreenController.configure(settings: settings)
         settings.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in

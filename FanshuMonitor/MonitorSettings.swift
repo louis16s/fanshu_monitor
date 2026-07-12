@@ -105,10 +105,14 @@ final class MonitorSettings: ObservableObject {
     @Published var mouseBackAction: MouseButtonAction = .paste
     @Published var mouseForwardAction: MouseButtonAction = .launchpad
     @Published var mouseGestureAction: MouseButtonAction = .passThrough
+    @Published var lockScreenPoliciesEnabled: Bool = false
+    @Published var lockScreenRequirePassword: Bool = true
+    @Published private(set) var lockScreenPolicies: [LockScreenPolicy] = []
     @Published private(set) var visibleKinds: Set<MonitorKind> = []
     @Published private(set) var enabledMetrics: [MonitorKind: Set<String>] = [:]
 
     static let maximumEnabledMetricsPerKind = 4
+    static let maximumLockScreenPolicies = 4
 
     private let defaults: UserDefaults
     private var isUpdatingLaunchAtLogin = false
@@ -148,6 +152,12 @@ final class MonitorSettings: ObservableObject {
         mouseBackAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseBackAction) ?? "") ?? .paste
         mouseForwardAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseForwardAction) ?? "") ?? .launchpad
         mouseGestureAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseGestureAction) ?? "") ?? .passThrough
+        lockScreenPoliciesEnabled = defaults.object(forKey: Keys.lockScreenPoliciesEnabled) as? Bool ?? false
+        lockScreenRequirePassword = defaults.object(forKey: Keys.lockScreenRequirePassword) as? Bool ?? true
+        if let data = defaults.data(forKey: Keys.lockScreenPolicies),
+           let policies = try? JSONDecoder().decode([LockScreenPolicy].self, from: data) {
+            lockScreenPolicies = Array(policies.prefix(Self.maximumLockScreenPolicies))
+        }
 
         if let storedKinds = defaults.array(forKey: Keys.visibleKinds) as? [String] {
             let kinds = storedKinds.compactMap(MonitorKind.init(rawValue:))
@@ -241,6 +251,45 @@ final class MonitorSettings: ObservableObject {
             mouseForwardAction = action
         case .gesture:
             mouseGestureAction = action
+        }
+    }
+
+    func addLockScreenPolicy() {
+        guard lockScreenPolicies.count < Self.maximumLockScreenPolicies else { return }
+        let newPolicy: LockScreenPolicy
+        if let last = lockScreenPolicies.last {
+            newPolicy = LockScreenPolicy(
+                dayScope: last.dayScope,
+                startMinutes: last.endMinutes,
+                endMinutes: min(23 * 60 + 59, last.endMinutes + 60),
+                idleMinutes: last.idleMinutes
+            )
+        } else {
+            newPolicy = LockScreenPolicy()
+        }
+        lockScreenPolicies.append(newPolicy)
+    }
+
+    func updateLockScreenPolicy(_ policy: LockScreenPolicy) {
+        guard let index = lockScreenPolicies.firstIndex(where: { $0.id == policy.id }) else { return }
+        lockScreenPolicies[index] = policy
+    }
+
+    func removeLockScreenPolicy(id: LockScreenPolicy.ID) {
+        lockScreenPolicies.removeAll { $0.id == id }
+    }
+
+    var lockScreenBaseline: ScreenSaverLockBaseline? {
+        get {
+            guard let data = defaults.data(forKey: Keys.lockScreenBaseline) else { return nil }
+            return try? JSONDecoder().decode(ScreenSaverLockBaseline.self, from: data)
+        }
+        set {
+            guard let newValue else {
+                defaults.removeObject(forKey: Keys.lockScreenBaseline)
+                return
+            }
+            defaults.set(try? JSONEncoder().encode(newValue), forKey: Keys.lockScreenBaseline)
         }
     }
 
@@ -465,6 +514,27 @@ final class MonitorSettings: ObservableObject {
             }
             .store(in: &cancellables)
 
+        $lockScreenPoliciesEnabled
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(newValue, forKey: Keys.lockScreenPoliciesEnabled)
+            }
+            .store(in: &cancellables)
+
+        $lockScreenRequirePassword
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(newValue, forKey: Keys.lockScreenRequirePassword)
+            }
+            .store(in: &cancellables)
+
+        $lockScreenPolicies
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(try? JSONEncoder().encode(newValue), forKey: Keys.lockScreenPolicies)
+            }
+            .store(in: &cancellables)
+
         $visibleKinds
             .dropFirst()
             .sink { [weak self] newValue in
@@ -534,6 +604,9 @@ final class MonitorSettings: ObservableObject {
         mouseBackAction = .paste
         mouseForwardAction = .launchpad
         mouseGestureAction = .passThrough
+        lockScreenPoliciesEnabled = false
+        lockScreenRequirePassword = true
+        lockScreenPolicies = []
         visibleKinds = Set(MonitorKind.allCases).subtracting([.storage, .network])
         enabledMetrics = [:]
     }
@@ -563,6 +636,10 @@ private enum Keys {
     static let mouseBackAction = "settings.mouse.action.back"
     static let mouseForwardAction = "settings.mouse.action.forward"
     static let mouseGestureAction = "settings.mouse.action.gesture"
+    static let lockScreenPoliciesEnabled = "settings.lockScreen.policiesEnabled"
+    static let lockScreenRequirePassword = "settings.lockScreen.requirePassword"
+    static let lockScreenPolicies = "settings.lockScreen.policies"
+    static let lockScreenBaseline = "settings.lockScreen.baseline"
     static let visibleKinds = "settings.visibleKinds"
     static let codexVisibilityMigrated = "settings.codexVisibilityMigrated"
     static let enabledMetricsPrefix = "settings.enabledMetrics."
