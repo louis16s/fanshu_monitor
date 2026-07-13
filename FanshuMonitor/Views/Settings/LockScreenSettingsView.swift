@@ -196,6 +196,8 @@ private struct LockScreenPolicyEditor: View {
     let policy: LockScreenPolicy
     @ObservedObject var settings: MonitorSettings
     @State private var idleMinutesText = ""
+    @State private var startTimeText = ""
+    @State private var endTimeText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -224,15 +226,21 @@ private struct LockScreenPolicyEditor: View {
             }
 
             HStack(spacing: 8) {
-                DatePicker("开始", selection: dateBinding(for: \.startMinutes), displayedComponents: .hourAndMinute)
-                    .labelsHidden()
-                    .fixedSize()
+                TextField("开始", text: $startTimeText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 66)
+                    .multilineTextAlignment(.center)
+                    .monospacedDigit()
+                    .onSubmit { commitTime(startTimeText, for: \.startMinutes) }
                 Text("至")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                DatePicker("结束", selection: dateBinding(for: \.endMinutes), displayedComponents: .hourAndMinute)
-                    .labelsHidden()
-                    .fixedSize()
+                TextField("结束", text: $endTimeText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 66)
+                    .multilineTextAlignment(.center)
+                    .monospacedDigit()
+                    .onSubmit { commitTime(endTimeText, for: \.endMinutes) }
 
                 Spacer(minLength: 8)
 
@@ -246,6 +254,28 @@ private struct LockScreenPolicyEditor: View {
                     Text("分钟")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    commitEditorValues()
+                } label: {
+                    Image(systemName: "checkmark")
+                }
+                .buttonStyle(.borderless)
+                .help("应用自定义时间")
+            }
+
+            if policy.dayScope == .custom {
+                HStack(spacing: 6) {
+                    ForEach(1...7, id: \.self) { weekday in
+                        Button(weekdayTitle(weekday)) {
+                            update { $0.toggleCustomWeekday(weekday) }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(policy.customWeekdays.contains(weekday) ? Color.accentColor : .secondary)
+                        .help("\(weekdayLongTitle(weekday))")
+                    }
                 }
             }
 
@@ -262,10 +292,12 @@ private struct LockScreenPolicyEditor: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .opacity(policy.isEnabled ? 1 : 0.52)
-        .onAppear { idleMinutesText = String(policy.idleMinutes) }
+        .onAppear { syncEditorText() }
         .onChange(of: policy.idleMinutes) { newValue in
             idleMinutesText = String(newValue)
         }
+        .onChange(of: policy.startMinutes) { _ in startTimeText = LockScreenPolicy.clockText(policy.startMinutes) }
+        .onChange(of: policy.endMinutes) { _ in endTimeText = LockScreenPolicy.clockText(policy.endMinutes) }
     }
 
     private var enabledBinding: Binding<Bool> {
@@ -278,18 +310,13 @@ private struct LockScreenPolicyEditor: View {
     private var dayScopeBinding: Binding<LockScreenDayScope> {
         Binding(
             get: { policy.dayScope },
-            set: { value in update { $0.dayScope = value } }
-        )
-    }
-
-    private func dateBinding(for keyPath: WritableKeyPath<LockScreenPolicy, Int>) -> Binding<Date> {
-        Binding(
-            get: {
-                Date(timeIntervalSinceReferenceDate: TimeInterval(policy[keyPath: keyPath] * 60))
-            },
-            set: { date in
-                let components = Calendar.autoupdatingCurrent.dateComponents([.hour, .minute], from: date)
-                update { $0[keyPath: keyPath] = (components.hour ?? 0) * 60 + (components.minute ?? 0) }
+            set: { value in
+                update {
+                    $0.dayScope = value
+                    if value == .custom && $0.customWeekdays.isEmpty {
+                        $0.customWeekdays = Set(2...6)
+                    }
+                }
             }
         )
     }
@@ -306,5 +333,42 @@ private struct LockScreenPolicyEditor: View {
             return
         }
         update { $0.idleMinutes = min(1_440, max(1, minutes)) }
+    }
+
+    private func commitTime(_ text: String, for keyPath: WritableKeyPath<LockScreenPolicy, Int>) {
+        guard let minutes = LockScreenPolicy.minutes(from: text) else {
+            syncEditorText()
+            return
+        }
+        update { $0[keyPath: keyPath] = minutes }
+    }
+
+    private func commitEditorValues() {
+        guard let startMinutes = LockScreenPolicy.minutes(from: startTimeText),
+              let endMinutes = LockScreenPolicy.minutes(from: endTimeText),
+              let idleMinutes = Int(idleMinutesText) else {
+            syncEditorText()
+            return
+        }
+
+        var updated = policy
+        updated.startMinutes = startMinutes
+        updated.endMinutes = endMinutes
+        updated.idleMinutes = min(1_440, max(1, idleMinutes))
+        settings.updateLockScreenPolicy(updated)
+    }
+
+    private func syncEditorText() {
+        idleMinutesText = String(policy.idleMinutes)
+        startTimeText = LockScreenPolicy.clockText(policy.startMinutes)
+        endTimeText = LockScreenPolicy.clockText(policy.endMinutes)
+    }
+
+    private func weekdayTitle(_ weekday: Int) -> String {
+        ["日", "一", "二", "三", "四", "五", "六"][weekday - 1]
+    }
+
+    private func weekdayLongTitle(_ weekday: Int) -> String {
+        "星期\(weekdayTitle(weekday))"
     }
 }

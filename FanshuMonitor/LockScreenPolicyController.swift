@@ -13,6 +13,14 @@ final class LockScreenPolicyController: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var notificationObservers: [NSObjectProtocol] = []
     private var transitionTimer: Timer?
+    private var lastAppliedConfiguration: AppliedConfiguration?
+    private var baselineIsRestored = false
+
+    private struct AppliedConfiguration: Equatable {
+        let policyID: LockScreenPolicy.ID
+        let idleSeconds: Int
+        let requirePassword: Bool
+    }
 
     func configure(settings: MonitorSettings) {
         tearDown()
@@ -27,15 +35,6 @@ final class LockScreenPolicyController: ObservableObject {
         .sink { [weak self] in self?.reevaluate() }
         .store(in: &cancellables)
 
-        let center = NotificationCenter.default
-        notificationObservers = [
-            center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.reevaluate() }
-            },
-            center.addObserver(forName: NSNotification.Name.NSSystemTimeZoneDidChange, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.reevaluate() }
-            }
-        ]
         reevaluate()
     }
 
@@ -76,16 +75,17 @@ final class LockScreenPolicyController: ObservableObject {
 
     func reevaluate(now: Date = Date()) {
         guard let settings else { return }
-        transitionTimer?.invalidate()
-        transitionTimer = nil
 
         guard settings.lockScreenPoliciesEnabled else {
+            setSystemEventObserving(false)
             restoreBaseline(using: settings)
             activePolicy = nil
-            nextTransition = nil
+            cancelTransitionTimer()
             statusText = "未启用"
             return
         }
+
+        setSystemEventObserving(true)
 
         guard let policy = settings.lockScreenPolicies.first(where: { $0.isActive(at: now) }) else {
             restoreBaseline(using: settings, clear: false)
@@ -96,10 +96,19 @@ final class LockScreenPolicyController: ObservableObject {
         }
 
         captureBaselineIfNeeded(using: settings)
-        ScreenSaverLockPreferences.apply(
+        let configuration = AppliedConfiguration(
+            policyID: policy.id,
             idleSeconds: policy.idleMinutes * 60,
             requirePassword: settings.lockScreenRequirePassword
         )
+        if configuration != lastAppliedConfiguration {
+            ScreenSaverLockPreferences.apply(
+                idleSeconds: configuration.idleSeconds,
+                requirePassword: configuration.requirePassword
+            )
+            lastAppliedConfiguration = configuration
+        }
+        baselineIsRestored = false
         activePolicy = policy
         statusText = "当前策略：\(policy.dayScope.title) \(policy.timeRangeText)，\(policy.idleMinutes) 分钟后锁屏"
         scheduleNextTransition(after: now, policies: settings.lockScreenPolicies)
@@ -109,6 +118,9 @@ final class LockScreenPolicyController: ObservableObject {
         let transition = policies
             .flatMap { $0.transitionDates(after: date) }
             .min()
+        guard transition != nextTransition || transitionTimer == nil else { return }
+
+        transitionTimer?.invalidate()
         nextTransition = transition
         guard let transition else { return }
 
@@ -121,19 +133,51 @@ final class LockScreenPolicyController: ObservableObject {
     private func captureBaselineIfNeeded(using settings: MonitorSettings) {
         guard settings.lockScreenBaseline == nil else { return }
         settings.lockScreenBaseline = ScreenSaverLockPreferences.read()
+        baselineIsRestored = false
     }
 
     private func restoreBaseline(using settings: MonitorSettings, clear: Bool = true) {
         guard let baseline = settings.lockScreenBaseline else { return }
+        guard !baselineIsRestored else { return }
         ScreenSaverLockPreferences.restore(baseline)
+        lastAppliedConfiguration = nil
+        baselineIsRestored = true
         if clear {
             settings.lockScreenBaseline = nil
         }
     }
 
-    private func tearDown() {
+    private func setSystemEventObserving(_ enabled: Bool) {
+        let isObserving = !notificationObservers.isEmpty
+        guard enabled != isObserving else { return }
+        if !enabled {
+            notificationObservers.forEach(NotificationCenter.default.removeObserver)
+            notificationObservers.removeAll()
+            return
+        }
+
+        let center = NotificationCenter.default
+        notificationObservers = [
+            center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    self?.lastAppliedConfiguration = nil
+                    self?.reevaluate()
+                }
+            },
+            center.addObserver(forName: NSNotification.Name.NSSystemTimeZoneDidChange, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.reevaluate() }
+            }
+        ]
+    }
+
+    private func cancelTransitionTimer() {
         transitionTimer?.invalidate()
         transitionTimer = nil
+        nextTransition = nil
+    }
+
+    private func tearDown() {
+        cancelTransitionTimer()
         cancellables.removeAll()
         notificationObservers.forEach(NotificationCenter.default.removeObserver)
         notificationObservers.removeAll()

@@ -41,6 +41,27 @@ struct LockScreenPolicyTests {
         #expect(cappedPolicy.idleMinutes == 1_440)
     }
 
+    @Test func customWeekdaysMatchOnlySelectedDays() {
+        let policy = LockScreenPolicy(
+            dayScope: .custom,
+            customWeekdays: [2, 4, 6],
+            startMinutes: 9 * 60,
+            endMinutes: 18 * 60
+        )
+
+        #expect(policy.isActive(at: date(2026, 7, 13, 12, 0), calendar: calendar)) // Monday
+        #expect(!policy.isActive(at: date(2026, 7, 14, 12, 0), calendar: calendar)) // Tuesday
+        #expect(policy.isActive(at: date(2026, 7, 15, 12, 0), calendar: calendar)) // Wednesday
+    }
+
+    @Test func customTimeParserRequiresValidTwentyFourHourTime() {
+        #expect(LockScreenPolicy.minutes(from: "00:00") == 0)
+        #expect(LockScreenPolicy.minutes(from: "20:37") == 1_237)
+        #expect(LockScreenPolicy.minutes(from: "24:00") == nil)
+        #expect(LockScreenPolicy.minutes(from: "08:60") == nil)
+        #expect(LockScreenPolicy.minutes(from: "8pm") == nil)
+    }
+
     @Test func settingsPersistLockScreenPolicies() {
         let suite = "LockScreenPolicyTests.settingsPersistLockScreenPolicies"
         let defaults = UserDefaults(suiteName: suite)!
