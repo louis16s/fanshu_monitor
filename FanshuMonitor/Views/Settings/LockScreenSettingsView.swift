@@ -203,7 +203,6 @@ private struct LockScreenPolicyEditor: View {
     private enum EditorField: Hashable {
         case start
         case end
-        case idle
     }
 
     let policy: LockScreenPolicy
@@ -214,99 +213,73 @@ private struct LockScreenPolicyEditor: View {
     @FocusState private var focusedField: EditorField?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Text("生效日期")
-                    .font(.body.weight(.medium))
-
-                Picker("日期", selection: dayScopeBinding) {
-                    ForEach(LockScreenDayScope.allCases) { scope in
-                        Text(scope.title).tag(scope)
+        VStack(spacing: 0) {
+            SettingsRow(title: "生效日期") {
+                HStack(spacing: 8) {
+                    Picker("日期", selection: dayScopeBinding) {
+                        ForEach(LockScreenDayScope.allCases) { scope in
+                            Text(scope.title).tag(scope)
+                        }
                     }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
+                    .labelsHidden()
+                    .pickerStyle(.menu)
 
-                Spacer(minLength: 0)
-
-                Button(role: .destructive) {
-                    settings.removeLockScreenPolicy(id: policy.id)
-                } label: {
-                    Image(systemName: "trash")
+                    Button(role: .destructive) {
+                        settings.removeLockScreenPolicy(id: policy.id)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("删除这条锁屏时间")
                 }
-                .buttonStyle(.borderless)
-                .help("删除此策略")
             }
 
-            HStack(spacing: 8) {
-                TextField("HH:mm", text: $startTimeText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 66)
-                    .multilineTextAlignment(.center)
-                    .monospacedDigit()
-                    .focused($focusedField, equals: .start)
-                    .onSubmit { commitTime(startTimeText, for: \.startMinutes) }
-                Text("至")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("HH:mm", text: $endTimeText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 66)
-                    .multilineTextAlignment(.center)
-                    .monospacedDigit()
-                    .focused($focusedField, equals: .end)
-                    .onSubmit { commitTime(endTimeText, for: \.endMinutes) }
+            SettingsDivider()
 
-                Spacer(minLength: 8)
+            SettingsRow(title: "开始时间", subtitle: "24 小时制") {
+                timeField(text: $startTimeText, field: .start, allowsEndOfDay: false)
+            }
 
-                HStack(spacing: 6) {
-                    TextField("闲置", text: $idleMinutesText)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 58)
-                        .multilineTextAlignment(.trailing)
-                        .monospacedDigit()
-                        .focused($focusedField, equals: .idle)
-                        .onSubmit(commitIdleMinutes)
-                    Text("分钟")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            SettingsDivider()
 
-                Button {
-                    syncEditorText()
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                }
-                .buttonStyle(.borderless)
-                .help("恢复这条时间的已保存值")
+            SettingsRow(title: "结束时间", subtitle: "可输入 24:00 表示当天结束") {
+                timeField(text: $endTimeText, field: .end, allowsEndOfDay: true)
+            }
+
+            SettingsDivider()
+
+            SettingsRow(title: "闲置后锁屏") {
+                IdleMinutesControl(
+                    text: $idleMinutesText,
+                    commit: commitIdleMinutes,
+                    restore: syncEditorText
+                )
             }
 
             if policy.dayScope == .custom {
-                HStack(spacing: 6) {
-                    ForEach(1...7, id: \.self) { weekday in
-                        Button(weekdayTitle(weekday)) {
-                            update { $0.toggleCustomWeekday(weekday) }
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .tint(policy.customWeekdays.contains(weekday) ? Color.accentColor : .secondary)
-                        .help("\(weekdayLongTitle(weekday))")
-                    }
+                CustomDaysSettingsRow(selected: policy.customWeekdays) { weekday in
+                    update { $0.toggleCustomWeekday(weekday) }
                 }
             }
 
             if !policy.hasValidTimeRange {
+                SettingsDivider()
                 Text("开始和结束时间不能相同")
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else if policy.crossesMidnight {
+                SettingsDivider()
                 Text("跨日时段按开始当天归类")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
         .onAppear { syncEditorText() }
         .onChange(of: policy.idleMinutes) { newValue in
             idleMinutesText = String(newValue)
@@ -314,13 +287,12 @@ private struct LockScreenPolicyEditor: View {
         .onChange(of: policy.startMinutes) { _ in startTimeText = LockScreenPolicy.clockText(policy.startMinutes) }
         .onChange(of: policy.endMinutes) { _ in endTimeText = LockScreenPolicy.clockText(policy.endMinutes) }
         .onChange(of: focusedField) { field in
-            if field != .start { commitTime(startTimeText, for: \.startMinutes) }
-            if field != .end { commitTime(endTimeText, for: \.endMinutes) }
-            if field != .idle { commitIdleMinutes() }
+            if field != .start { commitStartTime() }
+            if field != .end { commitEndTime() }
         }
         .onDisappear {
-            commitTime(startTimeText, for: \.startMinutes)
-            commitTime(endTimeText, for: \.endMinutes)
+            commitStartTime()
+            commitEndTime()
             commitIdleMinutes()
         }
     }
@@ -355,13 +327,48 @@ private struct LockScreenPolicyEditor: View {
         update { $0.idleMinutes = clampedMinutes }
     }
 
-    private func commitTime(_ text: String, for keyPath: WritableKeyPath<LockScreenPolicy, Int>) {
-        guard let minutes = LockScreenPolicy.minutes(from: text) else {
+    @ViewBuilder
+    private func timeField(
+        text: Binding<String>,
+        field: EditorField,
+        allowsEndOfDay: Bool
+    ) -> some View {
+        TextField("HH:mm", text: text)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 72)
+            .multilineTextAlignment(.center)
+            .monospacedDigit()
+            .focused($focusedField, equals: field)
+            .onSubmit {
+                if allowsEndOfDay {
+                    commitEndTime()
+                } else {
+                    commitStartTime()
+                }
+            }
+    }
+
+    private func commitStartTime() {
+        commitTime(startTimeText, allowsEndOfDay: false) { $0.startMinutes = $1 }
+    }
+
+    private func commitEndTime() {
+        commitTime(endTimeText, allowsEndOfDay: true) { $0.endMinutes = $1 }
+    }
+
+    private func commitTime(
+        _ text: String,
+        allowsEndOfDay: Bool,
+        updateMinute: (inout LockScreenPolicy, Int) -> Void
+    ) {
+        guard let minutes = LockScreenPolicy.minutes(from: text, allowsEndOfDay: allowsEndOfDay) else {
             syncEditorText()
             return
         }
-        guard minutes != policy[keyPath: keyPath] else { return }
-        update { $0[keyPath: keyPath] = minutes }
+        var updated = policy
+        updateMinute(&updated, minutes)
+        guard updated != policy else { return }
+        settings.updateLockScreenPolicy(updated)
     }
 
     private func syncEditorText() {
@@ -370,11 +377,80 @@ private struct LockScreenPolicyEditor: View {
         endTimeText = LockScreenPolicy.clockText(policy.endMinutes)
     }
 
-    private func weekdayTitle(_ weekday: Int) -> String {
-        ["日", "一", "二", "三", "四", "五", "六"][weekday - 1]
+}
+
+private struct CustomWeekdayPicker: View {
+    let selected: Set<Int>
+    let toggle: (Int) -> Void
+
+    var body: some View {
+        HStack(spacing: 5) {
+            weekdayButton(1, title: "日")
+            weekdayButton(2, title: "一")
+            weekdayButton(3, title: "二")
+            weekdayButton(4, title: "三")
+            weekdayButton(5, title: "四")
+            weekdayButton(6, title: "五")
+            weekdayButton(7, title: "六")
+        }
     }
 
-    private func weekdayLongTitle(_ weekday: Int) -> String {
-        "星期\(weekdayTitle(weekday))"
+    private func weekdayButton(_ weekday: Int, title: String) -> some View {
+        Button(title) {
+            toggle(weekday)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(selected.contains(weekday) ? Color.accentColor : .secondary)
+        .help("星期\(title)")
+    }
+}
+
+private struct IdleMinutesControl: View {
+    @Binding var text: String
+    let commit: () -> Void
+    let restore: () -> Void
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField("分钟", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 58)
+                .multilineTextAlignment(.trailing)
+                .monospacedDigit()
+                .focused($isFocused)
+                .onSubmit(commit)
+                .onChange(of: isFocused) { focused in
+                    if !focused { commit() }
+                }
+            Text("分钟")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button(action: restore) {
+                Image(systemName: "arrow.counterclockwise")
+            }
+            .buttonStyle(.borderless)
+            .help("恢复这条时间的已保存值")
+        }
+    }
+}
+
+private struct CustomDaysSettingsRow: View {
+    let selected: Set<Int>
+    let toggle: (Int) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SettingsDivider()
+            HStack(spacing: 10) {
+                Text("自选日期")
+                    .font(.body.weight(.medium))
+                Spacer(minLength: 12)
+                CustomWeekdayPicker(selected: selected, toggle: toggle)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+        }
     }
 }

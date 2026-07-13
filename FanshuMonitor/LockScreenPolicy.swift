@@ -40,8 +40,8 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         self.isEnabled = isEnabled
         self.dayScope = dayScope
         self.customWeekdays = Self.validWeekdays(customWeekdays ?? Self.defaultWeekdays(for: dayScope))
-        self.startMinutes = Self.clampedMinutes(startMinutes)
-        self.endMinutes = Self.clampedMinutes(endMinutes)
+        self.startMinutes = Self.clampedStartMinutes(startMinutes)
+        self.endMinutes = Self.clampedEndMinutes(endMinutes)
         self.idleMinutes = min(1_440, max(1, idleMinutes))
     }
 
@@ -106,17 +106,17 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         String(format: "%02d:%02d", minutes / 60, minutes % 60)
     }
 
-    static func minutes(from text: String) -> Int? {
+    static func minutes(from text: String, allowsEndOfDay: Bool = false) -> Int? {
         let parts = text.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ":")
         guard parts.count == 2,
               let hour = Int(parts[0]),
               let minute = Int(parts[1]),
-              (0...24).contains(hour),
+              (0...23).contains(hour) || (allowsEndOfDay && hour == 24),
               (0...59).contains(minute),
               hour < 24 || minute == 0 else {
             return nil
         }
-        return hour == 24 ? 0 : hour * 60 + minute
+        return hour == 24 ? 24 * 60 : hour * 60 + minute
     }
 
     mutating func toggleCustomWeekday(_ weekday: Int) {
@@ -167,13 +167,17 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
             try container.decodeIfPresent(Set<Int>.self, forKey: .customWeekdays)
                 ?? Self.defaultWeekdays(for: dayScope)
         )
-        startMinutes = Self.clampedMinutes(try container.decode(Int.self, forKey: .startMinutes))
-        endMinutes = Self.clampedMinutes(try container.decode(Int.self, forKey: .endMinutes))
+        startMinutes = Self.clampedStartMinutes(try container.decode(Int.self, forKey: .startMinutes))
+        endMinutes = Self.clampedEndMinutes(try container.decode(Int.self, forKey: .endMinutes))
         idleMinutes = min(1_440, max(1, try container.decode(Int.self, forKey: .idleMinutes)))
     }
 
-    private static func clampedMinutes(_ value: Int) -> Int {
+    private static func clampedStartMinutes(_ value: Int) -> Int {
         min(23 * 60 + 59, max(0, value))
+    }
+
+    private static func clampedEndMinutes(_ value: Int) -> Int {
+        min(24 * 60, max(0, value))
     }
 }
 

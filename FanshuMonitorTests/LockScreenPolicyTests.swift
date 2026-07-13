@@ -56,11 +56,31 @@ struct LockScreenPolicyTests {
 
     @Test func customTimeParserRequiresValidTwentyFourHourTime() {
         #expect(LockScreenPolicy.minutes(from: "00:00") == 0)
-        #expect(LockScreenPolicy.minutes(from: "24:00") == 0)
+        #expect(LockScreenPolicy.minutes(from: "24:00") == nil)
+        #expect(LockScreenPolicy.minutes(from: "24:00", allowsEndOfDay: true) == 1_440)
         #expect(LockScreenPolicy.minutes(from: "20:37") == 1_237)
-        #expect(LockScreenPolicy.minutes(from: "24:01") == nil)
+        #expect(LockScreenPolicy.minutes(from: "24:01", allowsEndOfDay: true) == nil)
         #expect(LockScreenPolicy.minutes(from: "08:60") == nil)
         #expect(LockScreenPolicy.minutes(from: "8pm") == nil)
+    }
+
+    @Test func endOfDayTimeKeepsSameDayScheduleActiveUntilMidnight() {
+        let policy = LockScreenPolicy(startMinutes: 12 * 60, endMinutes: 24 * 60, idleMinutes: 5)
+
+        #expect(policy.timeRangeText == "12:00 - 24:00")
+        #expect(policy.isActive(at: date(2026, 7, 13, 23, 59), calendar: calendar))
+        #expect(!policy.isActive(at: date(2026, 7, 14, 0, 0), calendar: calendar))
+    }
+
+    @Test @MainActor func legacyPolicyDataDecodesWithoutCustomWeekdays() throws {
+        let id = UUID()
+        let json = """
+        {"id":"\(id.uuidString)","isEnabled":true,"dayScope":"weekdays","startMinutes":720,"endMinutes":1440,"idleMinutes":15}
+        """
+
+        let policy = try JSONDecoder().decode(LockScreenPolicy.self, from: Data(json.utf8))
+        #expect(policy.customWeekdays == Set(2...6))
+        #expect(policy.endMinutes == 1_440)
     }
 
     @Test func settingsPersistLockScreenPolicies() {
