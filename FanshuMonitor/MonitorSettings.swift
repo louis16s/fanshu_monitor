@@ -265,10 +265,11 @@ final class MonitorSettings: ObservableObject {
         guard lockScreenPolicies.count < Self.maximumLockScreenPolicies else { return }
         let newPolicy: LockScreenPolicy
         if let last = lockScreenPolicies.last {
+            let startMinutes = last.endMinutes < 1_440 ? last.endMinutes : 0
             newPolicy = LockScreenPolicy(
                 dayScope: last.dayScope,
-                startMinutes: last.endMinutes,
-                endMinutes: min(23 * 60 + 59, last.endMinutes + 60),
+                startMinutes: startMinutes,
+                endMinutes: startMinutes == 0 ? 60 : 1_440,
                 idleMinutes: last.idleMinutes
             )
         } else {
@@ -290,6 +291,17 @@ final class MonitorSettings: ObservableObject {
 
     func updateLockScreenPolicy(_ policy: LockScreenPolicy) {
         guard let index = lockScreenPolicies.firstIndex(where: { $0.id == policy.id }) else { return }
+        lockScreenPolicies[index] = policy
+    }
+
+    func updateLockScreenPolicy(
+        id: LockScreenPolicy.ID,
+        _ update: (inout LockScreenPolicy) -> Void
+    ) {
+        guard let index = lockScreenPolicies.firstIndex(where: { $0.id == id }) else { return }
+        var policy = lockScreenPolicies[index]
+        update(&policy)
+        guard policy != lockScreenPolicies[index] else { return }
         lockScreenPolicies[index] = policy
     }
 

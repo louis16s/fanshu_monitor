@@ -43,6 +43,10 @@ enum ComputeLoadModel {
         }
     }
 
+    static func ringProgress(for value: Double) -> Double {
+        min(1, max(0, value / 100))
+    }
+
     static func smoothedDisplayValue(
         current: Double,
         target: Double,

@@ -256,15 +256,17 @@ struct CodexUsageClient: Sendable {
     static func parseUsage(_ data: Data) throws -> CodexQuotaReport {
         do {
             let response = try JSONDecoder().decode(CodexUsageResponse.self, from: data)
-            var periods: [CodexQuotaSnapshot] = []
-
-            if let primary = response.rateLimit?.primaryWindow {
-                periods.append(primary.snapshot(id: "5h", label: "5H"))
+            let windows = [
+                (response.rateLimit?.primaryWindow, "5h", "5H"),
+                (response.rateLimit?.secondaryWindow, "week", "一周")
+            ]
+            var snapshots: [String: CodexQuotaSnapshot] = [:]
+            for (window, fallbackID, fallbackLabel) in windows {
+                guard let window else { continue }
+                let identity = window.periodIdentity(fallbackID: fallbackID, fallbackLabel: fallbackLabel)
+                snapshots[identity.id] = window.snapshot(id: identity.id, label: identity.label)
             }
-
-            if let secondary = response.rateLimit?.secondaryWindow {
-                periods.append(secondary.snapshot(id: "week", label: "一周"))
-            }
+            let periods = ["5h", "week"].compactMap { snapshots[$0] }
 
             return CodexQuotaReport(
                 planType: response.planType,
@@ -348,10 +350,19 @@ private struct CodexUsageResponse: Decodable {
     struct Window: Decodable {
         var usedPercent: Double
         var resetAt: Double?
+        var limitWindowSeconds: Double?
 
         enum CodingKeys: String, CodingKey {
             case usedPercent = "used_percent"
             case resetAt = "reset_at"
+            case limitWindowSeconds = "limit_window_seconds"
+        }
+
+        func periodIdentity(fallbackID: String, fallbackLabel: String) -> (id: String, label: String) {
+            guard let limitWindowSeconds else { return (fallbackID, fallbackLabel) }
+            return limitWindowSeconds <= 24 * 60 * 60
+                ? ("5h", "5H")
+                : ("week", "一周")
         }
 
         func snapshot(id: String, label: String) -> CodexQuotaSnapshot {

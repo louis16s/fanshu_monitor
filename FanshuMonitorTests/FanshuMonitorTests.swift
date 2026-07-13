@@ -80,6 +80,12 @@ struct FanshuMonitorTests {
         #expect(ComputeLoadModel.shouldUpdateMenuBarTarget(currentTarget: 35, nextTarget: 30))
     }
 
+    @Test func menuBarRingUsesExactPercentage() {
+        #expect(ComputeLoadModel.ringProgress(for: 0) == 0)
+        #expect(ComputeLoadModel.ringProgress(for: 93) == 0.93)
+        #expect(ComputeLoadModel.ringProgress(for: 100) == 1)
+    }
+
     @Test func monitorRefreshScheduleTickInterval() {
         let schedule = MonitorRefreshSchedule()
         #expect(schedule.tickInterval == 1.0)
@@ -157,5 +163,29 @@ struct FanshuMonitorTests {
         #expect(module.metrics.first { $0.name == "weekly" }?.value == "60%")
         #expect(module.metrics.first { $0.name == "five-hour-reset" }?.value != nil)
         #expect(module.metrics.first { $0.name == "weekly-reset" }?.value != nil)
+    }
+
+    @Test func codexUsageClassifiesAWeeklyPrimaryWindowByDuration() throws {
+        let json = """
+        {
+          "plan_type": "plus",
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 9,
+              "reset_at": 1784505468,
+              "limit_window_seconds": 604800
+            },
+            "secondary_window": null
+          }
+        }
+        """
+
+        let report = try CodexUsageClient.parseUsage(Data(json.utf8))
+        let module = CodexQuotaSampler.module(from: report)
+
+        #expect(module.value == 0)
+        #expect(module.metrics.first { $0.name == "five-hour" }?.value == "--")
+        #expect(module.metrics.first { $0.name == "weekly" }?.value == "91%")
+        #expect(module.metrics.first { $0.name == "weekly-reset" }?.value != "--")
     }
 }

@@ -146,10 +146,11 @@ final class LockScreenPolicyController: ObservableObject {
 
     private func restoreBaseline(using settings: MonitorSettings, clear: Bool = true) {
         guard let baseline = settings.lockScreenBaseline else { return }
-        guard !baselineIsRestored else { return }
-        ScreenSaverLockPreferences.restore(baseline)
-        lastAppliedConfiguration = nil
-        baselineIsRestored = true
+        if !baselineIsRestored {
+            ScreenSaverLockPreferences.restore(baseline)
+            lastAppliedConfiguration = nil
+            baselineIsRestored = true
+        }
         if clear {
             settings.lockScreenBaseline = nil
         }

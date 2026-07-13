@@ -100,6 +100,15 @@ final class MonitorStore: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+        settings.$ringSource
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.refreshMenuBarLoad()
+                }
+            }
+            .store(in: &cancellables)
         settings.$visibleKinds
             .dropFirst()
             .receive(on: DispatchQueue.main)
@@ -234,6 +243,7 @@ final class MonitorStore: ObservableObject {
             }
             self.allModules = snapshot.modules
             self.modules = self.visibleModules(from: snapshot.modules)
+            self.refreshMenuBarLoad()
         }
     }
 
@@ -299,7 +309,7 @@ final class MonitorStore: ObservableObject {
 
         framesSinceLastMenuBarTargetUpdate = 0
         let currentLoad = combinedComputeLoad
-        guard ComputeLoadModel.shouldUpdateMenuBarTarget(
+        guard force || ComputeLoadModel.shouldUpdateMenuBarTarget(
             currentTarget: menuBarTargetComputeLoad,
             nextTarget: currentLoad
         ) else {
@@ -307,6 +317,12 @@ final class MonitorStore: ObservableObject {
         }
 
         menuBarTargetComputeLoad = currentLoad
+    }
+
+    private func refreshMenuBarLoad() {
+        updateMenuBarTargetComputeLoadIfNeeded(force: true)
+        displayedComputeLoad = menuBarTargetComputeLoad
+        updateMenuBarIcon(force: true)
     }
 
     private func updateMenuBarIcon(force: Bool = false) {

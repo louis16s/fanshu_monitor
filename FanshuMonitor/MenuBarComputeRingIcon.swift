@@ -94,7 +94,7 @@ private struct MenuBarComputeRingImageStyle {
     }
 
     var progress: Double {
-        min(0.98, max(0.08, 0.12 + normalizedLoad * 0.86))
+        ComputeLoadModel.ringProgress(for: load)
     }
 
     var tint: NSColor {

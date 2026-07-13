@@ -3,9 +3,11 @@ import SwiftUI
 struct LockScreenSettingsView: View {
     @ObservedObject var settings: MonitorSettings
     @ObservedObject var controller: LockScreenPolicyController
-    @State private var systemIdleMinutes = 10
+    @State private var systemIdleMinutesText = "10"
     @State private var systemRequirePassword = true
-    @State private var systemPasswordDelaySeconds = 0
+    @State private var systemPasswordDelayText = "0"
+    @State private var systemApplyTask: Task<Void, Never>?
+    @State private var isSyncingSystemSettings = false
 
     var body: some View {
         SettingsPage {
@@ -22,9 +24,9 @@ struct LockScreenSettingsView: View {
                 SettingsDivider()
 
                 HStack(spacing: 10) {
-                    Image(systemName: settings.lockScreenPoliciesEnabled ? "checkmark.circle.fill" : "circle")
+                    Image(systemName: settings.lockScreenPoliciesEnabled ? "clock.badge.checkmark.fill" : "clock")
                         .foregroundStyle(settings.lockScreenPoliciesEnabled ? Color.accentColor : .secondary)
-                    Text(controller.statusText)
+                    Text(settings.lockScreenPoliciesEnabled ? controller.statusText : "时间策略未启用")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -58,10 +60,12 @@ struct LockScreenSettingsView: View {
             SettingsGroup("系统锁屏设置") {
                 SettingsRow(title: "屏保启动时间", subtitle: "当前：\(systemIdleDescription)") {
                     HStack(spacing: 6) {
-                        TextField("分钟", value: $systemIdleMinutes, format: .number)
+                        TextField("分钟", text: $systemIdleMinutesText)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 58)
                             .multilineTextAlignment(.trailing)
+                            .monospacedDigit()
+                            .disabled(settings.lockScreenPoliciesEnabled)
                         Text("分钟")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -74,6 +78,7 @@ struct LockScreenSettingsView: View {
                     Toggle("", isOn: $systemRequirePassword)
                         .toggleStyle(.switch)
                         .labelsHidden()
+                        .disabled(settings.lockScreenPoliciesEnabled)
                 }
 
                 if systemRequirePassword {
@@ -81,10 +86,12 @@ struct LockScreenSettingsView: View {
 
                     SettingsRow(title: "密码延迟", subtitle: "屏保启动后多久要求密码") {
                         HStack(spacing: 6) {
-                            TextField("秒", value: $systemPasswordDelaySeconds, format: .number)
+                            TextField("秒", text: $systemPasswordDelayText)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 58)
                                 .multilineTextAlignment(.trailing)
+                                .monospacedDigit()
+                                .disabled(settings.lockScreenPoliciesEnabled)
                             Text("秒")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -95,7 +102,7 @@ struct LockScreenSettingsView: View {
                 SettingsDivider()
 
                 HStack {
-                    Text(settings.lockScreenPoliciesEnabled ? "时间策略启用时会覆盖系统设置" : "关闭时间策略后可直接修改系统设置")
+                    Text(settings.lockScreenPoliciesEnabled ? "时间策略启用时会覆盖系统设置" : "更改后自动保存到系统")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 12)
@@ -106,16 +113,6 @@ struct LockScreenSettingsView: View {
                     }
                     .buttonStyle(.borderless)
                     .help("重新读取系统设置")
-
-                    Button("保存到系统") {
-                        controller.applySystemSettings(
-                            idleMinutes: systemIdleMinutes,
-                            requirePassword: systemRequirePassword,
-                            passwordDelaySeconds: systemPasswordDelaySeconds
-                        )
-                    }
-                    .controlSize(.small)
-                    .disabled(settings.lockScreenPoliciesEnabled)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -165,8 +162,15 @@ struct LockScreenSettingsView: View {
             controller.refreshSystemSettings()
             syncSystemSettings(controller.systemSettings)
         }
-        .onChange(of: controller.systemSettings) { newValue in
+        .onChange(of: controller.systemSettings) { _, newValue in
             syncSystemSettings(newValue)
+        }
+        .onChange(of: systemIdleMinutesText) { scheduleSystemSettingsApply() }
+        .onChange(of: systemRequirePassword) { scheduleSystemSettingsApply() }
+        .onChange(of: systemPasswordDelayText) { scheduleSystemSettingsApply() }
+        .onDisappear {
+            systemApplyTask?.cancel()
+            applySystemSettingsIfValid()
         }
     }
 
@@ -187,15 +191,45 @@ struct LockScreenSettingsView: View {
     }
 
     private func syncSystemSettings(_ systemSettings: ScreenSaverLockBaseline) {
+        systemApplyTask?.cancel()
+        isSyncingSystemSettings = true
         if let minutes = systemSettings.idleMinutes {
-            systemIdleMinutes = minutes
+            systemIdleMinutesText = String(minutes)
         }
         if let requiresPassword = systemSettings.askForPassword {
             systemRequirePassword = requiresPassword
         }
         if let delay = systemSettings.askForPasswordDelay {
-            systemPasswordDelaySeconds = delay
+            systemPasswordDelayText = String(delay)
         }
+        DispatchQueue.main.async {
+            isSyncingSystemSettings = false
+        }
+    }
+
+    private func scheduleSystemSettingsApply() {
+        guard !isSyncingSystemSettings, !settings.lockScreenPoliciesEnabled else { return }
+        systemApplyTask?.cancel()
+        systemApplyTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            applySystemSettingsIfValid()
+        }
+    }
+
+    private func applySystemSettingsIfValid() {
+        guard !settings.lockScreenPoliciesEnabled,
+              let idleMinutes = Int(systemIdleMinutesText),
+              (1...1_440).contains(idleMinutes),
+              let passwordDelaySeconds = Int(systemPasswordDelayText),
+              (0...86_400).contains(passwordDelaySeconds) else {
+            return
+        }
+        controller.applySystemSettings(
+            idleMinutes: idleMinutes,
+            requirePassword: systemRequirePassword,
+            passwordDelaySeconds: passwordDelaySeconds
+        )
     }
 }
 
@@ -203,6 +237,7 @@ private struct LockScreenPolicyEditor: View {
     private enum EditorField: Hashable {
         case start
         case end
+        case idle
     }
 
     let policy: LockScreenPolicy
@@ -211,6 +246,7 @@ private struct LockScreenPolicyEditor: View {
     @State private var startTimeText = ""
     @State private var endTimeText = ""
     @FocusState private var focusedField: EditorField?
+    @State private var previousFocusedField: EditorField?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -237,23 +273,40 @@ private struct LockScreenPolicyEditor: View {
             SettingsDivider()
 
             SettingsRow(title: "开始时间", subtitle: "24 小时制") {
-                timeField(text: $startTimeText, field: .start, allowsEndOfDay: false)
+                timeField(text: $startTimeText, field: .start)
             }
 
             SettingsDivider()
 
             SettingsRow(title: "结束时间", subtitle: "可输入 24:00 表示当天结束") {
-                timeField(text: $endTimeText, field: .end, allowsEndOfDay: true)
+                timeField(text: $endTimeText, field: .end)
             }
 
             SettingsDivider()
 
-            SettingsRow(title: "闲置后锁屏") {
-                IdleMinutesControl(
-                    text: $idleMinutesText,
-                    commit: commitIdleMinutes,
-                    restore: syncEditorText
-                )
+            SettingsRow(title: "闲置后锁屏", subtitle: "1 至 1440 分钟，输入后自动生效") {
+                HStack(spacing: 6) {
+                    TextField("分钟", text: $idleMinutesText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 58)
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                        .focused($focusedField, equals: .idle)
+                        .onSubmit {
+                            normalize(.idle)
+                            focusedField = nil
+                        }
+                    Text("分钟")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        restore(.idle)
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("恢复已保存的闲置时间")
+                }
             }
 
             if policy.dayScope == .custom {
@@ -281,19 +334,26 @@ private struct LockScreenPolicyEditor: View {
             }
         }
         .onAppear { syncEditorText() }
-        .onChange(of: policy.idleMinutes) { newValue in
-            idleMinutesText = String(newValue)
+        .onChange(of: policy.idleMinutes) { _, newValue in
+            if focusedField != .idle { idleMinutesText = String(newValue) }
         }
-        .onChange(of: policy.startMinutes) { _ in startTimeText = LockScreenPolicy.clockText(policy.startMinutes) }
-        .onChange(of: policy.endMinutes) { _ in endTimeText = LockScreenPolicy.clockText(policy.endMinutes) }
-        .onChange(of: focusedField) { field in
-            if field != .start { commitStartTime() }
-            if field != .end { commitEndTime() }
+        .onChange(of: policy.startMinutes) {
+            if focusedField != .start { startTimeText = LockScreenPolicy.clockText(policy.startMinutes) }
+        }
+        .onChange(of: policy.endMinutes) {
+            if focusedField != .end { endTimeText = LockScreenPolicy.clockText(policy.endMinutes) }
+        }
+        .onChange(of: startTimeText) { applyStartTimeIfValid() }
+        .onChange(of: endTimeText) { applyEndTimeIfValid() }
+        .onChange(of: idleMinutesText) { applyIdleMinutesIfValid() }
+        .onChange(of: focusedField) { _, field in
+            if let previousFocusedField, previousFocusedField != field {
+                normalize(previousFocusedField)
+            }
+            previousFocusedField = field
         }
         .onDisappear {
-            commitStartTime()
-            commitEndTime()
-            commitIdleMinutes()
+            if let focusedField { normalize(focusedField) }
         }
     }
 
@@ -312,26 +372,18 @@ private struct LockScreenPolicyEditor: View {
     }
 
     private func update(_ mutate: (inout LockScreenPolicy) -> Void) {
-        var updated = policy
-        mutate(&updated)
-        settings.updateLockScreenPolicy(updated)
+        settings.updateLockScreenPolicy(id: policy.id, mutate)
     }
 
-    private func commitIdleMinutes() {
-        guard let minutes = Int(idleMinutesText) else {
-            idleMinutesText = String(policy.idleMinutes)
-            return
-        }
-        let clampedMinutes = min(1_440, max(1, minutes))
-        guard clampedMinutes != policy.idleMinutes else { return }
-        update { $0.idleMinutes = clampedMinutes }
+    private func applyIdleMinutesIfValid() {
+        guard let minutes = Int(idleMinutesText), (1...1_440).contains(minutes) else { return }
+        update { $0.idleMinutes = minutes }
     }
 
     @ViewBuilder
     private func timeField(
         text: Binding<String>,
-        field: EditorField,
-        allowsEndOfDay: Bool
+        field: EditorField
     ) -> some View {
         TextField("HH:mm", text: text)
             .textFieldStyle(.roundedBorder)
@@ -340,35 +392,43 @@ private struct LockScreenPolicyEditor: View {
             .monospacedDigit()
             .focused($focusedField, equals: field)
             .onSubmit {
-                if allowsEndOfDay {
-                    commitEndTime()
-                } else {
-                    commitStartTime()
-                }
+                normalize(field)
+                focusedField = nil
             }
     }
 
-    private func commitStartTime() {
-        commitTime(startTimeText, allowsEndOfDay: false) { $0.startMinutes = $1 }
+    private func applyStartTimeIfValid() {
+        guard let minutes = LockScreenPolicy.minutes(from: startTimeText) else { return }
+        update { $0.startMinutes = minutes }
     }
 
-    private func commitEndTime() {
-        commitTime(endTimeText, allowsEndOfDay: true) { $0.endMinutes = $1 }
+    private func applyEndTimeIfValid() {
+        guard let minutes = LockScreenPolicy.minutes(from: endTimeText, allowsEndOfDay: true) else { return }
+        update { $0.endMinutes = minutes }
     }
 
-    private func commitTime(
-        _ text: String,
-        allowsEndOfDay: Bool,
-        updateMinute: (inout LockScreenPolicy, Int) -> Void
-    ) {
-        guard let minutes = LockScreenPolicy.minutes(from: text, allowsEndOfDay: allowsEndOfDay) else {
-            syncEditorText()
-            return
+    private func normalize(_ field: EditorField) {
+        switch field {
+        case .start:
+            applyStartTimeIfValid()
+        case .end:
+            applyEndTimeIfValid()
+        case .idle:
+            applyIdleMinutesIfValid()
         }
-        var updated = policy
-        updateMinute(&updated, minutes)
-        guard updated != policy else { return }
-        settings.updateLockScreenPolicy(updated)
+        restore(field)
+    }
+
+    private func restore(_ field: EditorField) {
+        guard let current = settings.lockScreenPolicies.first(where: { $0.id == policy.id }) else { return }
+        switch field {
+        case .start:
+            startTimeText = LockScreenPolicy.clockText(current.startMinutes)
+        case .end:
+            endTimeText = LockScreenPolicy.clockText(current.endMinutes)
+        case .idle:
+            idleMinutesText = String(current.idleMinutes)
+        }
     }
 
     private func syncEditorText() {
@@ -403,36 +463,6 @@ private struct CustomWeekdayPicker: View {
         .controlSize(.small)
         .tint(selected.contains(weekday) ? Color.accentColor : .secondary)
         .help("星期\(title)")
-    }
-}
-
-private struct IdleMinutesControl: View {
-    @Binding var text: String
-    let commit: () -> Void
-    let restore: () -> Void
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            TextField("分钟", text: $text)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 58)
-                .multilineTextAlignment(.trailing)
-                .monospacedDigit()
-                .focused($isFocused)
-                .onSubmit(commit)
-                .onChange(of: isFocused) { focused in
-                    if !focused { commit() }
-                }
-            Text("分钟")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Button(action: restore) {
-                Image(systemName: "arrow.counterclockwise")
-            }
-            .buttonStyle(.borderless)
-            .help("恢复这条时间的已保存值")
-        }
     }
 }
 

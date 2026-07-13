@@ -115,6 +115,42 @@ struct LockScreenPolicyTests {
         #expect(settings.lockScreenPolicies.filter { !$0.isEnabled }.isEmpty)
     }
 
+    @Test func fieldUpdatesAlwaysMutateTheLatestStoredPolicy() {
+        let suite = "LockScreenPolicyTests.fieldUpdatesAlwaysMutateTheLatestStoredPolicy"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+        settings.addLockScreenPolicy()
+        let id = settings.lockScreenPolicies[0].id
+
+        settings.updateLockScreenPolicy(id: id) { $0.startMinutes = 20 * 60 }
+        settings.updateLockScreenPolicy(id: id) { $0.endMinutes = 24 * 60 }
+        settings.updateLockScreenPolicy(id: id) { $0.idleMinutes = 37 }
+
+        let policy = settings.lockScreenPolicies[0]
+        #expect(policy.startMinutes == 20 * 60)
+        #expect(policy.endMinutes == 24 * 60)
+        #expect(policy.idleMinutes == 37)
+    }
+
+    @Test func addedPolicyContinuesThroughEndOfDay() {
+        let suite = "LockScreenPolicyTests.addedPolicyContinuesThroughEndOfDay"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+        settings.addLockScreenPolicy()
+        let firstID = settings.lockScreenPolicies[0].id
+        settings.updateLockScreenPolicy(id: firstID) {
+            $0.startMinutes = 0
+            $0.endMinutes = 7 * 60
+        }
+
+        settings.addLockScreenPolicy()
+
+        #expect(settings.lockScreenPolicies[1].startMinutes == 7 * 60)
+        #expect(settings.lockScreenPolicies[1].endMinutes == 24 * 60)
+    }
+
     private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int) -> Date {
         var components = DateComponents()
         components.calendar = calendar
