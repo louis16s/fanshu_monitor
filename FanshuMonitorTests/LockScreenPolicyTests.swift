@@ -56,8 +56,9 @@ struct LockScreenPolicyTests {
 
     @Test func customTimeParserRequiresValidTwentyFourHourTime() {
         #expect(LockScreenPolicy.minutes(from: "00:00") == 0)
+        #expect(LockScreenPolicy.minutes(from: "24:00") == 0)
         #expect(LockScreenPolicy.minutes(from: "20:37") == 1_237)
-        #expect(LockScreenPolicy.minutes(from: "24:00") == nil)
+        #expect(LockScreenPolicy.minutes(from: "24:01") == nil)
         #expect(LockScreenPolicy.minutes(from: "08:60") == nil)
         #expect(LockScreenPolicy.minutes(from: "8pm") == nil)
     }
@@ -76,6 +77,22 @@ struct LockScreenPolicyTests {
         #expect(loaded.lockScreenPoliciesEnabled)
         #expect(loaded.lockScreenPolicies.count == 1)
         #expect(loaded.lockScreenPolicies.first?.idleMinutes == 10)
+    }
+
+    @Test func masterLockScreenSwitchEnablesExistingRules() {
+        let suite = "LockScreenPolicyTests.masterLockScreenSwitchEnablesExistingRules"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+        settings.addLockScreenPolicy()
+
+        var disabledPolicy = settings.lockScreenPolicies[0]
+        disabledPolicy.isEnabled = false
+        settings.updateLockScreenPolicy(disabledPolicy)
+        settings.setLockScreenPoliciesEnabled(true)
+
+        #expect(settings.lockScreenPoliciesEnabled)
+        #expect(settings.lockScreenPolicies.filter { !$0.isEnabled }.isEmpty)
     }
 
     private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int) -> Date {

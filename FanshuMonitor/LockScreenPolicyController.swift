@@ -81,7 +81,7 @@ final class LockScreenPolicyController: ObservableObject {
             restoreBaseline(using: settings)
             activePolicy = nil
             cancelTransitionTimer()
-            statusText = "未启用"
+            statusText = "已关闭"
             return
         }
 
@@ -90,7 +90,15 @@ final class LockScreenPolicyController: ObservableObject {
         guard let policy = settings.lockScreenPolicies.first(where: { $0.isActive(at: now) }) else {
             restoreBaseline(using: settings, clear: false)
             activePolicy = nil
-            statusText = settings.lockScreenPolicies.isEmpty ? "请添加至少一个时间策略" : "当前时段沿用系统设置"
+            if settings.lockScreenPolicies.isEmpty {
+                statusText = "已开启，还没有时间规则"
+            } else if let next = settings.lockScreenPolicies
+                .flatMap({ $0.transitionDates(after: now) })
+                .min() {
+                statusText = "已开启，下一次执行：\(next.formatted(date: .omitted, time: .shortened))"
+            } else {
+                statusText = "已开启，等待下一个时间段"
+            }
             scheduleNextTransition(after: now, policies: settings.lockScreenPolicies)
             return
         }
@@ -110,7 +118,7 @@ final class LockScreenPolicyController: ObservableObject {
         }
         baselineIsRestored = false
         activePolicy = policy
-        statusText = "当前策略：\(policy.dayScope.title) \(policy.timeRangeText)，\(policy.idleMinutes) 分钟后锁屏"
+        statusText = "已开启，正在执行：\(policy.timeRangeText)，闲置 \(policy.idleMinutes) 分钟后锁屏"
         scheduleNextTransition(after: now, policies: settings.lockScreenPolicies)
     }
 

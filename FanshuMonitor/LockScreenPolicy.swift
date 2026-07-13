@@ -111,11 +111,12 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         guard parts.count == 2,
               let hour = Int(parts[0]),
               let minute = Int(parts[1]),
-              (0...23).contains(hour),
-              (0...59).contains(minute) else {
+              (0...24).contains(hour),
+              (0...59).contains(minute),
+              hour < 24 || minute == 0 else {
             return nil
         }
-        return hour * 60 + minute
+        return hour == 24 ? 0 : hour * 60 + minute
     }
 
     mutating func toggleCustomWeekday(_ weekday: Int) {

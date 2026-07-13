@@ -158,6 +158,13 @@ final class MonitorSettings: ObservableObject {
            let policies = try? JSONDecoder().decode([LockScreenPolicy].self, from: data) {
             lockScreenPolicies = Array(policies.prefix(Self.maximumLockScreenPolicies))
         }
+        if lockScreenPoliciesEnabled {
+            lockScreenPolicies = lockScreenPolicies.map { policy in
+                var policy = policy
+                policy.isEnabled = true
+                return policy
+            }
+        }
 
         if let storedKinds = defaults.array(forKey: Keys.visibleKinds) as? [String] {
             let kinds = storedKinds.compactMap(MonitorKind.init(rawValue:))
@@ -268,6 +275,17 @@ final class MonitorSettings: ObservableObject {
             newPolicy = LockScreenPolicy()
         }
         lockScreenPolicies.append(newPolicy)
+    }
+
+    func setLockScreenPoliciesEnabled(_ enabled: Bool) {
+        if enabled {
+            lockScreenPolicies = lockScreenPolicies.map { policy in
+                var policy = policy
+                policy.isEnabled = true
+                return policy
+            }
+        }
+        lockScreenPoliciesEnabled = enabled
     }
 
     func updateLockScreenPolicy(_ policy: LockScreenPolicy) {
