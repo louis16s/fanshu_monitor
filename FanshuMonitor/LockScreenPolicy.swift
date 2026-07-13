@@ -48,7 +48,7 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         self.dayScope = dayScope
         self.startMinutes = Self.clampedMinutes(startMinutes)
         self.endMinutes = Self.clampedMinutes(endMinutes)
-        self.idleMinutes = min(120, max(1, idleMinutes))
+        self.idleMinutes = min(1_440, max(1, idleMinutes))
     }
 
     var crossesMidnight: Bool {
@@ -121,4 +121,17 @@ struct ScreenSaverLockBaseline: Codable, Equatable, Sendable {
     var idleTime: Int?
     var askForPassword: Bool?
     var askForPasswordDelay: Int?
+}
+
+extension ScreenSaverLockBaseline {
+    var idleMinutes: Int? {
+        idleTime.map { max(1, Int((Double($0) / 60).rounded(.up))) }
+    }
+
+    var passwordDelayText: String {
+        guard let askForPassword else { return "系统默认" }
+        guard askForPassword else { return "不要求密码" }
+        guard let askForPasswordDelay else { return "系统默认" }
+        return askForPasswordDelay == 0 ? "立即" : "\(askForPasswordDelay) 秒后"
+    }
 }

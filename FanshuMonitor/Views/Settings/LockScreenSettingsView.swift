@@ -3,6 +3,9 @@ import SwiftUI
 struct LockScreenSettingsView: View {
     @ObservedObject var settings: MonitorSettings
     @ObservedObject var controller: LockScreenPolicyController
+    @State private var systemIdleMinutes = 10
+    @State private var systemRequirePassword = true
+    @State private var systemPasswordDelaySeconds = 0
 
     var body: some View {
         SettingsPage {
@@ -52,6 +55,72 @@ struct LockScreenSettingsView: View {
                 }
             }
 
+            SettingsGroup("系统锁屏设置") {
+                SettingsRow(title: "屏保启动时间", subtitle: "当前：\(systemIdleDescription)") {
+                    HStack(spacing: 6) {
+                        TextField("分钟", value: $systemIdleMinutes, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 58)
+                            .multilineTextAlignment(.trailing)
+                        Text("分钟")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                SettingsDivider()
+
+                SettingsRow(title: "要求密码", subtitle: "当前：\(systemPasswordDescription)") {
+                    Toggle("", isOn: $systemRequirePassword)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+
+                if systemRequirePassword {
+                    SettingsDivider()
+
+                    SettingsRow(title: "密码延迟", subtitle: "屏保启动后多久要求密码") {
+                        HStack(spacing: 6) {
+                            TextField("秒", value: $systemPasswordDelaySeconds, format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 58)
+                                .multilineTextAlignment(.trailing)
+                            Text("秒")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                SettingsDivider()
+
+                HStack {
+                    Text(settings.lockScreenPoliciesEnabled ? "时间策略启用时会覆盖系统设置" : "关闭时间策略后可直接修改系统设置")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 12)
+                    Button {
+                        controller.refreshSystemSettings()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("重新读取系统设置")
+
+                    Button("保存到系统") {
+                        controller.applySystemSettings(
+                            idleMinutes: systemIdleMinutes,
+                            requirePassword: systemRequirePassword,
+                            passwordDelaySeconds: systemPasswordDelaySeconds
+                        )
+                    }
+                    .controlSize(.small)
+                    .disabled(settings.lockScreenPoliciesEnabled)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+            }
+
             SettingsGroup("时间策略") {
                 if settings.lockScreenPolicies.isEmpty {
                     ContentUnavailableView {
@@ -92,12 +161,41 @@ struct LockScreenSettingsView: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 2)
         }
+        .onAppear {
+            controller.refreshSystemSettings()
+            syncSystemSettings(controller.systemSettings)
+        }
+        .onChange(of: controller.systemSettings) { newValue in
+            syncSystemSettings(newValue)
+        }
+    }
+
+    private var systemIdleDescription: String {
+        guard let minutes = controller.systemSettings.idleMinutes else { return "系统默认" }
+        return "\(minutes) 分钟"
+    }
+
+    private var systemPasswordDescription: String {
+        controller.systemSettings.passwordDelayText
+    }
+
+    private func syncSystemSettings(_ systemSettings: ScreenSaverLockBaseline) {
+        if let minutes = systemSettings.idleMinutes {
+            systemIdleMinutes = minutes
+        }
+        if let requiresPassword = systemSettings.askForPassword {
+            systemRequirePassword = requiresPassword
+        }
+        if let delay = systemSettings.askForPasswordDelay {
+            systemPasswordDelaySeconds = delay
+        }
     }
 }
 
 private struct LockScreenPolicyEditor: View {
     let policy: LockScreenPolicy
     @ObservedObject var settings: MonitorSettings
+    @State private var idleMinutesText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -138,14 +236,17 @@ private struct LockScreenPolicyEditor: View {
 
                 Spacer(minLength: 8)
 
-                Picker("闲置", selection: idleMinutesBinding) {
-                    ForEach([1, 2, 5, 10, 15, 30, 60, 120], id: \.self) { minutes in
-                        Text("\(minutes) 分钟").tag(minutes)
-                    }
+                HStack(spacing: 6) {
+                    TextField("闲置", text: $idleMinutesText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 58)
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                        .onSubmit(commitIdleMinutes)
+                    Text("分钟")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .fixedSize()
             }
 
             if !policy.hasValidTimeRange {
@@ -161,6 +262,10 @@ private struct LockScreenPolicyEditor: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .opacity(policy.isEnabled ? 1 : 0.52)
+        .onAppear { idleMinutesText = String(policy.idleMinutes) }
+        .onChange(of: policy.idleMinutes) { newValue in
+            idleMinutesText = String(newValue)
+        }
     }
 
     private var enabledBinding: Binding<Bool> {
@@ -174,13 +279,6 @@ private struct LockScreenPolicyEditor: View {
         Binding(
             get: { policy.dayScope },
             set: { value in update { $0.dayScope = value } }
-        )
-    }
-
-    private var idleMinutesBinding: Binding<Int> {
-        Binding(
-            get: { policy.idleMinutes },
-            set: { value in update { $0.idleMinutes = value } }
         )
     }
 
@@ -200,5 +298,13 @@ private struct LockScreenPolicyEditor: View {
         var updated = policy
         mutate(&updated)
         settings.updateLockScreenPolicy(updated)
+    }
+
+    private func commitIdleMinutes() {
+        guard let minutes = Int(idleMinutesText) else {
+            idleMinutesText = String(policy.idleMinutes)
+            return
+        }
+        update { $0.idleMinutes = min(1_440, max(1, minutes)) }
     }
 }

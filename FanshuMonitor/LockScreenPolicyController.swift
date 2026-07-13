@@ -7,6 +7,7 @@ final class LockScreenPolicyController: ObservableObject {
     @Published private(set) var activePolicy: LockScreenPolicy?
     @Published private(set) var nextTransition: Date?
     @Published private(set) var statusText = "未启用"
+    @Published private(set) var systemSettings = ScreenSaverLockPreferences.read()
 
     private weak var settings: MonitorSettings?
     private var cancellables = Set<AnyCancellable>()
@@ -45,6 +46,32 @@ final class LockScreenPolicyController: ObservableObject {
         activePolicy = nil
         nextTransition = nil
         statusText = "已恢复系统原设置"
+        refreshSystemSettings()
+    }
+
+    func refreshSystemSettings() {
+        systemSettings = ScreenSaverLockPreferences.read()
+    }
+
+    func applySystemSettings(
+        idleMinutes: Int,
+        requirePassword: Bool,
+        passwordDelaySeconds: Int
+    ) {
+        guard let settings else { return }
+        guard !settings.lockScreenPoliciesEnabled else {
+            statusText = "请先关闭时间策略再修改系统设置"
+            return
+        }
+
+        ScreenSaverLockPreferences.apply(
+            idleSeconds: min(1_440, max(1, idleMinutes)) * 60,
+            requirePassword: requirePassword,
+            passwordDelaySeconds: min(86_400, max(0, passwordDelaySeconds))
+        )
+        settings.lockScreenBaseline = nil
+        refreshSystemSettings()
+        statusText = "已修改系统锁屏设置"
     }
 
     func reevaluate(now: Date = Date()) {
@@ -129,11 +156,15 @@ private enum ScreenSaverLockPreferences {
         )
     }
 
-    static func apply(idleSeconds: Int, requirePassword: Bool) {
+    static func apply(
+        idleSeconds: Int,
+        requirePassword: Bool,
+        passwordDelaySeconds: Int = 0
+    ) {
         set(idleSeconds, for: "idleTime", host: true)
         if requirePassword {
             set(true, for: "askForPassword", host: false)
-            set(0, for: "askForPasswordDelay", host: false)
+            set(passwordDelaySeconds, for: "askForPasswordDelay", host: false)
         } else {
             set(false, for: "askForPassword", host: false)
         }

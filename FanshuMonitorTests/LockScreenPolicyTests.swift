@@ -33,6 +33,14 @@ struct LockScreenPolicyTests {
         #expect(!policy.isActive(at: date(2026, 7, 13, 8, 0), calendar: calendar))
     }
 
+    @Test func policyAcceptsCustomIdleTime() {
+        let policy = LockScreenPolicy(idleMinutes: 347)
+        let cappedPolicy = LockScreenPolicy(idleMinutes: 9_999)
+
+        #expect(policy.idleMinutes == 347)
+        #expect(cappedPolicy.idleMinutes == 1_440)
+    }
+
     @Test func settingsPersistLockScreenPolicies() {
         let suite = "LockScreenPolicyTests.settingsPersistLockScreenPolicies"
         let defaults = UserDefaults(suiteName: suite)!
