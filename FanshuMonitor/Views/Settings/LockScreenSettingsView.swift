@@ -8,13 +8,105 @@ struct LockScreenSettingsView: View {
     @State private var systemPasswordDelayText = "0"
     @State private var systemApplyTask: Task<Void, Never>?
     @State private var isSyncingSystemSettings = false
+    @State private var systemSettingsExpanded = false
+    @State private var showsRestoreConfirmation = false
 
     var body: some View {
         SettingsPage {
+            SettingsGroup("系统锁屏设置") {
+                SettingsRow(
+                    title: "直接锁定",
+                    subtitle: "到达闲置时间后立即进入登录锁定界面"
+                ) {
+                    Image(systemName: "lock.fill")
+                        .foregroundStyle(Color.accentColor)
+                }
+
+                SettingsDivider()
+
+                SettingsRow(
+                    title: "当前设置",
+                    subtitle: "屏保 \(systemIdleDescription) · 密码 \(systemPasswordDescription)"
+                ) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            systemSettingsExpanded.toggle()
+                        }
+                    } label: {
+                        Image(systemName: systemSettingsExpanded ? "chevron.up" : "chevron.down")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(systemSettingsExpanded ? "收起系统锁屏设置" : "展开系统锁屏设置")
+                }
+
+                if systemSettingsExpanded {
+                    SettingsDivider()
+
+                    SettingsRow(title: "屏保启动时间", subtitle: "与关闭显示器时间分开") {
+                        HStack(spacing: 6) {
+                            TextField("分钟", text: $systemIdleMinutesText)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 58)
+                                .multilineTextAlignment(.trailing)
+                                .monospacedDigit()
+                                .disabled(settings.lockScreenPoliciesEnabled)
+                            Text("分钟")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    SettingsDivider()
+
+                    SettingsRow(title: "要求密码") {
+                        Toggle("", isOn: $systemRequirePassword)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .disabled(settings.lockScreenPoliciesEnabled)
+                    }
+
+                    if systemRequirePassword {
+                        SettingsDivider()
+
+                        SettingsRow(title: "密码延迟", subtitle: "屏保启动后多久要求密码") {
+                            HStack(spacing: 6) {
+                                TextField("秒", text: $systemPasswordDelayText)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 58)
+                                    .multilineTextAlignment(.trailing)
+                                    .monospacedDigit()
+                                    .disabled(settings.lockScreenPoliciesEnabled)
+                                Text("秒")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    SettingsDivider()
+
+                    HStack {
+                        Text(settings.lockScreenPoliciesEnabled ? "时间策略启用时会覆盖系统设置" : "更改后自动保存到系统")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 12)
+                        Button {
+                            controller.refreshSystemSettings()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("重新读取系统设置")
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                }
+            }
+
             SettingsGroup("自动锁屏") {
                 SettingsRow(
                     title: "自动锁屏",
-                    subtitle: "打开后，下方所有时间规则都会生效"
+                    subtitle: "按时间直接锁定，不启动屏保"
                 ) {
                     Toggle("", isOn: policyMasterBinding)
                         .toggleStyle(.switch)
@@ -24,9 +116,9 @@ struct LockScreenSettingsView: View {
                 SettingsDivider()
 
                 HStack(spacing: 10) {
-                    Image(systemName: settings.lockScreenPoliciesEnabled ? "clock.badge.checkmark.fill" : "clock")
-                        .foregroundStyle(settings.lockScreenPoliciesEnabled ? Color.accentColor : .secondary)
-                    Text(settings.lockScreenPoliciesEnabled ? controller.statusText : "时间策略未启用")
+                    Image(systemName: lockStatusIcon)
+                        .foregroundStyle(lockStatusColor)
+                    Text(controller.statusText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -34,7 +126,7 @@ struct LockScreenSettingsView: View {
                     Spacer(minLength: 8)
                     if settings.lockScreenPoliciesEnabled {
                         Button {
-                            controller.restoreOriginalSettings()
+                            showsRestoreConfirmation = true
                         } label: {
                             Image(systemName: "arrow.uturn.backward")
                         }
@@ -46,117 +138,8 @@ struct LockScreenSettingsView: View {
                 .padding(.vertical, 11)
             }
 
-            SettingsGroup("安全") {
-                SettingsRow(
-                    title: "立即需要密码",
-                    subtitle: "策略生效时，屏保启动后立即要求密码"
-                ) {
-                    Toggle("", isOn: $settings.lockScreenRequirePassword)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                }
-            }
+            lockScreenPolicySection
 
-            SettingsGroup("系统锁屏设置") {
-                SettingsRow(title: "屏保启动时间", subtitle: "当前：\(systemIdleDescription)") {
-                    HStack(spacing: 6) {
-                        TextField("分钟", text: $systemIdleMinutesText)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 58)
-                            .multilineTextAlignment(.trailing)
-                            .monospacedDigit()
-                            .disabled(settings.lockScreenPoliciesEnabled)
-                        Text("分钟")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                SettingsDivider()
-
-                SettingsRow(title: "要求密码", subtitle: "当前：\(systemPasswordDescription)") {
-                    Toggle("", isOn: $systemRequirePassword)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                        .disabled(settings.lockScreenPoliciesEnabled)
-                }
-
-                if systemRequirePassword {
-                    SettingsDivider()
-
-                    SettingsRow(title: "密码延迟", subtitle: "屏保启动后多久要求密码") {
-                        HStack(spacing: 6) {
-                            TextField("秒", text: $systemPasswordDelayText)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 58)
-                                .multilineTextAlignment(.trailing)
-                                .monospacedDigit()
-                                .disabled(settings.lockScreenPoliciesEnabled)
-                            Text("秒")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                SettingsDivider()
-
-                HStack {
-                    Text(settings.lockScreenPoliciesEnabled ? "时间策略启用时会覆盖系统设置" : "更改后自动保存到系统")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 12)
-                    Button {
-                        controller.refreshSystemSettings()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("重新读取系统设置")
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-            }
-
-            SettingsGroup("锁屏时间") {
-                if settings.lockScreenPolicies.isEmpty {
-                    ContentUnavailableView {
-                        Label("还没有锁屏时间", systemImage: "clock.badge.plus")
-                    } description: {
-                        Text("添加一条时间后，打开上方自动锁屏即可生效")
-                    } actions: {
-                        Button("添加锁屏时间") {
-                            settings.addLockScreenPolicy()
-                        }
-                        .controlSize(.small)
-                    }
-                    .padding(.vertical, 20)
-                } else {
-                    ForEach(Array(settings.lockScreenPolicies.enumerated()), id: \.element.id) { index, policy in
-                        LockScreenPolicyEditor(policy: policy, settings: settings)
-                        if index < settings.lockScreenPolicies.count - 1 {
-                            SettingsDivider()
-                        }
-                    }
-
-                    if settings.lockScreenPolicies.count < MonitorSettings.maximumLockScreenPolicies {
-                        SettingsDivider()
-                        Button {
-                            settings.addLockScreenPolicy()
-                        } label: {
-                            Label("添加锁屏时间", systemImage: "plus")
-                                .frame(maxWidth: .infinity, alignment: .center)
-                        }
-                        .buttonStyle(.borderless)
-                        .padding(.vertical, 10)
-                    }
-                }
-            }
-
-            Text("时段以本机时间为准，未覆盖的时间沿用系统的原设置")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 2)
         }
         .onAppear {
             controller.refreshSystemSettings()
@@ -168,15 +151,117 @@ struct LockScreenSettingsView: View {
         .onChange(of: systemIdleMinutesText) { scheduleSystemSettingsApply() }
         .onChange(of: systemRequirePassword) { scheduleSystemSettingsApply() }
         .onChange(of: systemPasswordDelayText) { scheduleSystemSettingsApply() }
+        .confirmationDialog(
+            "恢复系统锁屏设置",
+            isPresented: $showsRestoreConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("恢复并关闭自动锁屏", role: .destructive) {
+                controller.restoreOriginalSettings()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将关闭所有时间策略，并恢复启用前的系统屏保设置")
+        }
         .onDisappear {
             systemApplyTask?.cancel()
             applySystemSettingsIfValid()
         }
     }
 
+    @ViewBuilder
+    private var lockScreenPolicySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("锁屏时间")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 2)
+
+            if settings.lockScreenPolicies.isEmpty {
+                SettingsGroup {
+                    ContentUnavailableView {
+                        Label("还没有锁屏时间", systemImage: "clock.badge.plus")
+                    } description: {
+                        Text("添加一条时间后，打开上方自动锁屏即可生效")
+                    } actions: {
+                        Button("添加锁屏时间") {
+                            settings.addLockScreenPolicy()
+                        }
+                        .controlSize(.small)
+                    }
+                    .padding(.vertical, 20)
+                }
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(Array(settings.lockScreenPolicies.enumerated()), id: \.element.id) { index, policy in
+                        LockScreenPolicyEditor(
+                            index: index,
+                            policy: policy,
+                            settings: settings,
+                            isActive: controller.activePolicy?.id == policy.id
+                        )
+                        .background(
+                            .quaternary.opacity(0.48),
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(.separator.opacity(0.22), lineWidth: 1)
+                        }
+                    }
+
+                    if settings.lockScreenPolicies.count < MonitorSettings.maximumLockScreenPolicies {
+                        Button {
+                            settings.addLockScreenPolicy()
+                        } label: {
+                            Label("添加锁屏时间", systemImage: "plus")
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                        .buttonStyle(.borderless)
+                        .padding(.vertical, 6)
+                    }
+                }
+
+                Text("输入后自动保存 · 25:00 表示次日 01:00 · 最晚 40:00")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 2)
+            }
+        }
+    }
+
     private var systemIdleDescription: String {
         guard let minutes = controller.systemSettings.idleMinutes else { return "系统默认" }
+        guard minutes > 0 else { return "已关闭" }
         return "\(minutes) 分钟"
+    }
+
+    private var lockStatusIcon: String {
+        switch controller.status {
+        case .locking, .locked:
+            "lock.fill"
+        case .lockFailed, .systemSettingsBlocked, .environmentFailed:
+            "exclamationmark.triangle.fill"
+        case .active:
+            "clock.badge.checkmark.fill"
+        case .restored:
+            "arrow.uturn.backward.circle.fill"
+        case .systemSettingsChanged:
+            "checkmark.circle.fill"
+        case .disabled, .noRules, .waiting:
+            "clock"
+        }
+    }
+
+    private var lockStatusColor: Color {
+        switch controller.status {
+        case .lockFailed, .systemSettingsBlocked, .environmentFailed:
+            .orange
+        case .active, .locking, .locked, .restored, .systemSettingsChanged:
+            Color.accentColor
+        case .disabled, .noRules, .waiting:
+            .secondary
+        }
     }
 
     private var policyMasterBinding: Binding<Bool> {
@@ -240,18 +325,21 @@ private struct LockScreenPolicyEditor: View {
         case idle
     }
 
+    let index: Int
     let policy: LockScreenPolicy
     @ObservedObject var settings: MonitorSettings
+    let isActive: Bool
     @State private var idleMinutesText = ""
     @State private var startTimeText = ""
     @State private var endTimeText = ""
+    @State private var idleSaveTask: Task<Void, Never>?
     @FocusState private var focusedField: EditorField?
     @State private var previousFocusedField: EditorField?
 
     var body: some View {
         VStack(spacing: 0) {
-            SettingsRow(title: "生效日期") {
-                HStack(spacing: 8) {
+            SettingsRow(title: "时间段 \(index + 1)") {
+                HStack(spacing: 7) {
                     Picker("日期", selection: dayScopeBinding) {
                         ForEach(LockScreenDayScope.allCases) { scope in
                             Text(scope.title).tag(scope)
@@ -259,6 +347,15 @@ private struct LockScreenPolicyEditor: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
+                    .frame(width: 72)
+
+                    timeField(text: $startTimeText, field: .start)
+
+                    Text("至")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    timeField(text: $endTimeText, field: .end)
 
                     Button(role: .destructive) {
                         settings.removeLockScreenPolicy(id: policy.id)
@@ -272,19 +369,7 @@ private struct LockScreenPolicyEditor: View {
 
             SettingsDivider()
 
-            SettingsRow(title: "开始时间", subtitle: "24 小时制") {
-                timeField(text: $startTimeText, field: .start)
-            }
-
-            SettingsDivider()
-
-            SettingsRow(title: "结束时间", subtitle: "可输入 24:00 表示当天结束") {
-                timeField(text: $endTimeText, field: .end)
-            }
-
-            SettingsDivider()
-
-            SettingsRow(title: "闲置后锁屏", subtitle: "1 至 1440 分钟，输入后自动生效") {
+            SettingsRow(title: "闲置后锁屏") {
                 HStack(spacing: 6) {
                     TextField("分钟", text: $idleMinutesText)
                         .textFieldStyle(.roundedBorder)
@@ -293,19 +378,15 @@ private struct LockScreenPolicyEditor: View {
                         .monospacedDigit()
                         .focused($focusedField, equals: .idle)
                         .onSubmit {
-                            normalize(.idle)
+                            saveIdleMinutes()
                             focusedField = nil
                         }
                     Text("分钟")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button {
-                        restore(.idle)
-                    } label: {
-                        Image(systemName: "arrow.counterclockwise")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("恢复已保存的闲置时间")
+                    Image(systemName: idleStatusIcon)
+                        .foregroundStyle(idleStatusColor)
+                        .help(idleStatusText)
                 }
             }
 
@@ -323,14 +404,6 @@ private struct LockScreenPolicyEditor: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
                     .frame(maxWidth: .infinity, alignment: .leading)
-            } else if policy.crossesMidnight {
-                SettingsDivider()
-                Text("跨日时段按开始当天归类")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .onAppear { syncEditorText() }
@@ -345,15 +418,16 @@ private struct LockScreenPolicyEditor: View {
         }
         .onChange(of: startTimeText) { applyStartTimeIfValid() }
         .onChange(of: endTimeText) { applyEndTimeIfValid() }
-        .onChange(of: idleMinutesText) { applyIdleMinutesIfValid() }
+        .onChange(of: idleMinutesText) { scheduleIdleMinutesSave() }
         .onChange(of: focusedField) { _, field in
             if let previousFocusedField, previousFocusedField != field {
-                normalize(previousFocusedField)
+                finishEditing(previousFocusedField)
             }
             previousFocusedField = field
         }
         .onDisappear {
-            if let focusedField { normalize(focusedField) }
+            idleSaveTask?.cancel()
+            if let focusedField { finishEditing(focusedField) }
         }
     }
 
@@ -375,8 +449,46 @@ private struct LockScreenPolicyEditor: View {
         settings.updateLockScreenPolicy(id: policy.id, mutate)
     }
 
-    private func applyIdleMinutesIfValid() {
-        guard let minutes = Int(idleMinutesText), (1...1_440).contains(minutes) else { return }
+    private var parsedIdleMinutes: Int? {
+        guard let minutes = Int(idleMinutesText), (1...1_440).contains(minutes) else { return nil }
+        return minutes
+    }
+
+    private var idleStatusText: String {
+        guard let minutes = parsedIdleMinutes else { return "请输入 1 至 1440 分钟，当前内容未保存" }
+        guard minutes == policy.idleMinutes else { return "正在自动保存 \(minutes) 分钟" }
+        if isActive {
+            return "已保存并应用到系统：\(minutes) 分钟"
+        }
+        if settings.lockScreenPoliciesEnabled {
+            return "已保存：\(minutes) 分钟，等待生效时段"
+        }
+        return "已保存：\(minutes) 分钟，开启自动锁屏后生效"
+    }
+
+    private var idleStatusIcon: String {
+        guard let minutes = parsedIdleMinutes else { return "exclamationmark.circle.fill" }
+        return minutes == policy.idleMinutes ? "checkmark.circle.fill" : "clock"
+    }
+
+    private var idleStatusColor: Color {
+        guard let minutes = parsedIdleMinutes else { return .red }
+        return minutes == policy.idleMinutes ? .green : .secondary
+    }
+
+    private func scheduleIdleMinutesSave() {
+        idleSaveTask?.cancel()
+        guard parsedIdleMinutes != nil else { return }
+        idleSaveTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            saveIdleMinutes()
+        }
+    }
+
+    private func saveIdleMinutes() {
+        idleSaveTask?.cancel()
+        guard let minutes = parsedIdleMinutes else { return }
         update { $0.idleMinutes = minutes }
     }
 
@@ -392,7 +504,7 @@ private struct LockScreenPolicyEditor: View {
             .monospacedDigit()
             .focused($focusedField, equals: field)
             .onSubmit {
-                normalize(field)
+                finishEditing(field)
                 focusedField = nil
             }
     }
@@ -403,20 +515,24 @@ private struct LockScreenPolicyEditor: View {
     }
 
     private func applyEndTimeIfValid() {
-        guard let minutes = LockScreenPolicy.minutes(from: endTimeText, allowsEndOfDay: true) else { return }
+        guard let minutes = LockScreenPolicy.minutes(
+            from: endTimeText,
+            maximumHour: LockScreenPolicy.maximumExtendedHour
+        ) else { return }
         update { $0.endMinutes = minutes }
     }
 
-    private func normalize(_ field: EditorField) {
+    private func finishEditing(_ field: EditorField) {
         switch field {
         case .start:
             applyStartTimeIfValid()
+            restore(field)
         case .end:
             applyEndTimeIfValid()
+            restore(field)
         case .idle:
-            applyIdleMinutesIfValid()
+            saveIdleMinutes()
         }
-        restore(field)
     }
 
     private func restore(_ field: EditorField) {

@@ -1,18 +1,18 @@
 import Foundation
 
-func percent(_ value: Double) -> String {
+nonisolated func percent(_ value: Double) -> String {
     "\(Int(value.rounded()))%"
 }
 
-func bytes(_ value: Double) -> String {
+nonisolated func bytes(_ value: Double) -> String {
     byteFormatter.string(fromByteCount: Int64(max(0, value)))
 }
 
-func memoryBytes(_ value: Double) -> String {
+nonisolated func memoryBytes(_ value: Double) -> String {
     memoryByteFormatter.string(fromByteCount: Int64(max(0, value)))
 }
 
-func wattString(_ value: Double?, rounded: Bool = false) -> String {
+nonisolated func wattString(_ value: Double?, rounded: Bool = false) -> String {
     guard let value else {
         return "--"
     }
@@ -22,35 +22,35 @@ func wattString(_ value: Double?, rounded: Bool = false) -> String {
     return "\(String(format: "%.1f", value)) W"
 }
 
-func wattStringAllowZero(_ value: Double?) -> String {
+nonisolated func wattStringAllowZero(_ value: Double?) -> String {
     guard let value else {
         return "--"
     }
     return value == 0 ? "0 W" : "\(String(format: "%.1f", value)) W"
 }
 
-func nonZeroWatts(_ value: Double?) -> Double? {
+nonisolated func nonZeroWatts(_ value: Double?) -> Double? {
     guard let value, value >= 0.05 else {
         return nil
     }
     return value
 }
 
-private let byteFormatter: ByteCountFormatter = {
+nonisolated(unsafe) private let byteFormatter: ByteCountFormatter = {
     let formatter = ByteCountFormatter()
     formatter.allowedUnits = [.useGB, .useMB]
     formatter.countStyle = .file
     return formatter
 }()
 
-private let memoryByteFormatter: ByteCountFormatter = {
+nonisolated(unsafe) private let memoryByteFormatter: ByteCountFormatter = {
     let formatter = ByteCountFormatter()
     formatter.allowedUnits = [.useGB, .useMB]
     formatter.countStyle = .memory
     return formatter
 }()
 
-func bytesPerSecond(_ value: Double) -> String {
+nonisolated func bytesPerSecond(_ value: Double) -> String {
     let safeValue = max(0, value)
     let units = ["B/s", "KB/s", "MB/s", "GB/s"]
     var scaled = safeValue
@@ -67,7 +67,7 @@ func bytesPerSecond(_ value: Double) -> String {
     return "\(String(format: scaled >= 10 ? "%.0f" : "%.1f", scaled)) \(units[unitIndex])"
 }
 
-func doubleValue(_ value: Any?) -> Double? {
+nonisolated func doubleValue(_ value: Any?) -> Double? {
     switch value {
     case let value as Double:
         value
@@ -86,7 +86,7 @@ func doubleValue(_ value: Any?) -> Double? {
     }
 }
 
-func signedDoubleValue(_ value: Any?) -> Double? {
+nonisolated func signedDoubleValue(_ value: Any?) -> Double? {
     switch value {
     case let value as Int:
         return Double(value)
@@ -108,7 +108,7 @@ func signedDoubleValue(_ value: Any?) -> Double? {
     }
 }
 
-func intValue(_ value: Any?) -> Int? {
+nonisolated func intValue(_ value: Any?) -> Int? {
     switch value {
     case let value as Int:
         value
@@ -123,7 +123,7 @@ func intValue(_ value: Any?) -> Int? {
     }
 }
 
-func placeholderModule(_ kind: MonitorKind, summary: String) -> MonitorModule {
+nonisolated func placeholderModule(_ kind: MonitorKind, summary: String) -> MonitorModule {
     MonitorModule(
         kind: kind,
         value: 0,
@@ -137,6 +137,6 @@ func placeholderModule(_ kind: MonitorKind, summary: String) -> MonitorModule {
     )
 }
 
-func seedSamples(_ value: Double) -> [Double] {
+nonisolated func seedSamples(_ value: Double) -> [Double] {
     Array(repeating: min(100, max(0, value)), count: 28)
 }

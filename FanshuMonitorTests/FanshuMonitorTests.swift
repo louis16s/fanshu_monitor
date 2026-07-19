@@ -91,6 +91,22 @@ struct FanshuMonitorTests {
         #expect(schedule.tickInterval == 1.0)
     }
 
+    @Test func codexRefreshScheduleUsesConfiguredInterval() {
+        let schedule = MonitorRefreshSchedule()
+        let start = Date(timeIntervalSinceReferenceDate: 1_000)
+        schedule.setInterval(600, for: .codex)
+
+        #expect(schedule.dueKinds(at: start, visibleKinds: [.codex]).contains(.codex))
+        #expect(!schedule.dueKinds(
+            at: start.addingTimeInterval(599),
+            visibleKinds: [.codex]
+        ).contains(.codex))
+        #expect(schedule.dueKinds(
+            at: start.addingTimeInterval(600),
+            visibleKinds: [.codex]
+        ).contains(.codex))
+    }
+
     @Test func networkAddressSummaryFormatsAddresses() {
         #expect(networkAddressSummary(["192.168.1.8"]) == "192.168.1.8")
         #expect(networkAddressSummary(["192.168.1.8", "2001:db8::8"]) == "192.168.1.8, 2001:db8::8")
@@ -187,5 +203,29 @@ struct FanshuMonitorTests {
         #expect(module.metrics.first { $0.name == "five-hour" }?.value == "--")
         #expect(module.metrics.first { $0.name == "weekly" }?.value == "91%")
         #expect(module.metrics.first { $0.name == "weekly-reset" }?.value != "--")
+    }
+
+    @Test func codexQuotaPresentationUsesWeeklyFallbackWhenFiveHourIsMissing() {
+        let presentation = CodexQuotaPresentation(metrics: [
+            MonitorMetric(name: "five-hour", value: "--"),
+            MonitorMetric(name: "weekly", value: "80%"),
+            MonitorMetric(name: "weekly-reset", value: "2026.7.18")
+        ])
+
+        #expect(!presentation.hasFiveHourQuota)
+        #expect(presentation.progressValue == 80)
+        #expect(presentation.weeklyText == "80%")
+        #expect(presentation.weeklyResetText == "2026.7.18")
+    }
+
+    @Test func codexQuotaPresentationRestoresFiveHourLayoutAutomatically() {
+        let presentation = CodexQuotaPresentation(metrics: [
+            MonitorMetric(name: "five-hour", value: "47%"),
+            MonitorMetric(name: "weekly", value: "80%"),
+            MonitorMetric(name: "weekly-reset", value: "2026.7.18")
+        ])
+
+        #expect(presentation.hasFiveHourQuota)
+        #expect(presentation.progressValue == 47)
     }
 }

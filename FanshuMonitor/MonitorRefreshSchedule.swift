@@ -3,7 +3,7 @@ import Foundation
 final class MonitorRefreshSchedule {
     let tickInterval: TimeInterval
 
-    private let intervals: [MonitorKind: TimeInterval]
+    private var intervals: [MonitorKind: TimeInterval]
     private var lastRefreshDates: [MonitorKind: Date] = [:]
 
     init(
@@ -40,6 +40,10 @@ final class MonitorRefreshSchedule {
         for kind in kinds {
             lastRefreshDates[kind] = date
         }
+    }
+
+    func setInterval(_ interval: TimeInterval, for kind: MonitorKind) {
+        intervals[kind] = max(tickInterval, interval)
     }
 
     private func effectiveInterval(for kind: MonitorKind, panelVisible: Bool) -> TimeInterval {

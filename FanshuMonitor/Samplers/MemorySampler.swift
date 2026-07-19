@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import OSLog
 
-final class MemorySampler: MonitorSampler {
+nonisolated final class MemorySampler: MonitorSampler {
     var kind: MonitorKind { .memory }
 
     private let totalMemorySize = MemorySampler.memoryTotalSize()
@@ -102,7 +102,7 @@ final class MemorySampler: MonitorSampler {
     }
 }
 
-private enum MemoryPressureState {
+nonisolated private enum MemoryPressureState {
     case normal
     case warning
     case critical

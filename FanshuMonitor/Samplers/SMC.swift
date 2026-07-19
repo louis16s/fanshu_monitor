@@ -1,7 +1,7 @@
 import Foundation
 import IOKit
 
-final class SMCReader {
+nonisolated final class SMCReader {
     private var conn: io_connect_t = 0
     private static let temperatureKeys = [
         "Tp09", "Tp0T", "Tp01", "Tp05", "Tp0D", "Tp0H", "Tp0L", "Tp0P", "Tp0X", "Tp0b"
@@ -129,7 +129,7 @@ final class SMCReader {
     }
 }
 
-private struct SMCKeyData_t {
+nonisolated private struct SMCKeyData_t {
     typealias SMCBytes_t = (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
                             UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
                             UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,

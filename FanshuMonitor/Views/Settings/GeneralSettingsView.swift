@@ -6,6 +6,7 @@ struct GeneralSettingsView: View {
     @ObservedObject var settings: MonitorSettings
     @State private var accessibilityTrusted = AXIsProcessTrusted()
     @State private var inputMonitoringTrusted = CGPreflightListenEventAccess()
+    @State private var showsResetConfirmation = false
 
     var body: some View {
         SettingsPage {
@@ -96,13 +97,13 @@ struct GeneralSettingsView: View {
                 Spacer()
                 if #available(macOS 26, *) {
                     Button(String(localized: "settings.reset-settings")) {
-                        settings.resetAll()
+                        showsResetConfirmation = true
                     }
                     .controlSize(.small)
                     .buttonStyle(.glass)
                 } else {
                     Button(String(localized: "settings.reset-settings")) {
-                        settings.resetAll()
+                        showsResetConfirmation = true
                     }
                     .controlSize(.small)
                 }
@@ -113,8 +114,20 @@ struct GeneralSettingsView: View {
         .onAppear {
             refreshPermissionState()
         }
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshPermissionState()
+        }
+        .confirmationDialog(
+            "重置所有设置",
+            isPresented: $showsResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("重置所有设置", role: .destructive) {
+                settings.resetAll()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("所有模块、外观、显示器、鼠标和锁屏设置都会恢复默认值")
         }
     }
 

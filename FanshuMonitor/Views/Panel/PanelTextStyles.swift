@@ -1,5 +1,10 @@
 import SwiftUI
 
+enum PanelTypography {
+    static let moduleHeaderSize: CGFloat = 12
+    static let moduleHeaderWeight: Font.Weight = .semibold
+}
+
 extension Text {
     func panelLabelFont(size: CGFloat, tracking: CGFloat) -> some View {
         self
@@ -9,13 +14,18 @@ extension Text {
 
     func panelMetricLabelFont() -> some View {
         self
-            .font(.system(size: 12, weight: .medium))
-            .kerning(0.15)
+            .font(.system(
+                size: PanelTypography.moduleHeaderSize,
+                weight: PanelTypography.moduleHeaderWeight
+            ))
     }
 
     func panelTitleValueFont() -> some View {
         self
-            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+            .font(.system(
+                size: PanelTypography.moduleHeaderSize,
+                weight: PanelTypography.moduleHeaderWeight
+            ))
             .monospacedDigit()
     }
 

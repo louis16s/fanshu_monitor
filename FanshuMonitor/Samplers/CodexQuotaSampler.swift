@@ -1,84 +1,65 @@
 import Foundation
 
-final class CodexQuotaSampler: MonitorSampler {
-    var kind: MonitorKind { .codex }
-
+actor CodexQuotaSampler {
     private let client = CodexUsageClient()
     private var refreshInterval: TimeInterval = 300
     private var cachedModule: MonitorModule?
     private var lastRefreshDate: Date?
-    private var isRefreshing = false
+    private var inFlightRefresh: (id: UUID, task: Task<MonitorModule, Never>)?
 
-    func sample(previous: MonitorModule?) -> MonitorModule {
-        if shouldRefresh {
-            startRefresh()
+    func sample(previous: MonitorModule?, force: Bool = false) async -> MonitorModule {
+        if let inFlightRefresh {
+            return moduleWithHistory(await inFlightRefresh.task.value, previous: previous)
         }
 
-        if let cachedModule {
-            return cachedModule
+        if !force, !shouldRefresh {
+            return cachedModule ?? previous ?? Self.placeholderModule
         }
 
-        if let previous, previous.kind == .codex {
-            return previous
+        let refreshID = UUID()
+        let cachedModule = cachedModule
+        let client = client
+        let task = Task {
+            await Self.loadModule(client: client, cachedModule: cachedModule)
         }
+        inFlightRefresh = (refreshID, task)
 
-        return MonitorModule(
-            kind: .codex,
-            value: 0,
-            summary: "刷新中",
-            metrics: [
-                MonitorMetric(name: "plan", value: "--"),
-                MonitorMetric(name: "five-hour", value: "--"),
-                MonitorMetric(name: "weekly", value: "--"),
-                MonitorMetric(name: "five-hour-reset", value: "--"),
-                MonitorMetric(name: "weekly-reset", value: "--")
-            ],
-            samples: seedSamples(0)
-        )
+        let module = await task.value
+        if inFlightRefresh?.id == refreshID {
+            self.cachedModule = module
+            lastRefreshDate = Date()
+            inFlightRefresh = nil
+        }
+        return moduleWithHistory(module, previous: previous)
     }
 
     func setRefreshInterval(_ interval: TimeInterval) {
         refreshInterval = min(3600, max(60, interval))
     }
 
-    func forceRefresh(previous: MonitorModule?, completion: @escaping (MonitorModule) -> Void) {
-        startRefresh(previous: previous, completion: completion)
+    func release() {
+        inFlightRefresh?.task.cancel()
+        inFlightRefresh = nil
+        cachedModule = nil
+        lastRefreshDate = nil
     }
 
     private var shouldRefresh: Bool {
-        guard !isRefreshing else { return false }
         guard let lastRefreshDate else { return true }
         return Date().timeIntervalSince(lastRefreshDate) >= refreshInterval
     }
 
-    private func startRefresh() {
-        startRefresh(previous: nil, completion: nil)
+    private func moduleWithHistory(_ module: MonitorModule, previous: MonitorModule?) -> MonitorModule {
+        guard let previous else { return module }
+        var updated = module
+        updated.samples = Array((previous.samples + [module.value]).suffix(MonitorConstants.sparklineMaxPoints))
+        return updated
     }
 
-    private func startRefresh(previous: MonitorModule?, completion: ((MonitorModule) -> Void)?) {
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        Task { [weak self] in
-            guard let self else { return }
-            let module = await self.loadModule()
-            self.cachedModule = module
-            self.lastRefreshDate = Date()
-            self.isRefreshing = false
-            let completedModule: MonitorModule
-            if let previous {
-                var updated = module
-                updated.samples = Array((previous.samples + [module.value]).suffix(MonitorConstants.sparklineMaxPoints))
-                completedModule = updated
-            } else {
-                completedModule = module
-            }
-            await MainActor.run {
-                completion?(completedModule)
-            }
-        }
-    }
-
-    private func loadModule() async -> MonitorModule {
+    private static func loadModule(
+        client: CodexUsageClient,
+        cachedModule: MonitorModule?
+    ) async -> MonitorModule {
         do {
             let report = try await client.load()
             return Self.module(from: report)
@@ -88,11 +69,11 @@ final class CodexQuotaSampler: MonitorSampler {
                 value: cachedModule?.value ?? 0,
                 summary: "--",
                 metrics: [
-                    MonitorMetric(name: "plan", value: cachedMetric("plan")),
-                    MonitorMetric(name: "five-hour", value: cachedMetric("five-hour")),
-                    MonitorMetric(name: "weekly", value: cachedMetric("weekly")),
-                    MonitorMetric(name: "five-hour-reset", value: cachedMetric("five-hour-reset")),
-                    MonitorMetric(name: "weekly-reset", value: cachedMetric("weekly-reset")),
+                    MonitorMetric(name: "plan", value: cachedMetric("plan", in: cachedModule)),
+                    MonitorMetric(name: "five-hour", value: cachedMetric("five-hour", in: cachedModule)),
+                    MonitorMetric(name: "weekly", value: cachedMetric("weekly", in: cachedModule)),
+                    MonitorMetric(name: "five-hour-reset", value: cachedMetric("five-hour-reset", in: cachedModule)),
+                    MonitorMetric(name: "weekly-reset", value: cachedMetric("weekly-reset", in: cachedModule)),
                     MonitorMetric(name: "status", value: error.localizedDescription)
                 ],
                 samples: cachedModule?.samples ?? seedSamples(0)
@@ -100,9 +81,23 @@ final class CodexQuotaSampler: MonitorSampler {
         }
     }
 
-    private func cachedMetric(_ name: String) -> String {
-        cachedModule?.metrics.first { $0.name == name }?.value ?? "--"
+    private static func cachedMetric(_ name: String, in module: MonitorModule?) -> String {
+        module?.metrics.first { $0.name == name }?.value ?? "--"
     }
+
+    private static let placeholderModule = MonitorModule(
+        kind: .codex,
+        value: 0,
+        summary: "刷新中",
+        metrics: [
+            MonitorMetric(name: "plan", value: "--"),
+            MonitorMetric(name: "five-hour", value: "--"),
+            MonitorMetric(name: "weekly", value: "--"),
+            MonitorMetric(name: "five-hour-reset", value: "--"),
+            MonitorMetric(name: "weekly-reset", value: "--")
+        ],
+        samples: seedSamples(0)
+    )
 
     static func module(from report: CodexQuotaReport) -> MonitorModule {
         let fiveHour = report.periods.first { $0.id == "5h" }
@@ -110,8 +105,8 @@ final class CodexQuotaSampler: MonitorSampler {
         let fiveHourRemainingValue = (fiveHour?.remainingRatio).map { $0 * 100 } ?? 0
         let fiveHourRemaining = percentText(fiveHour?.remainingRatio)
         let weeklyRemaining = percentText(weekly?.remainingRatio)
-        let fiveHourResetText = resetText(fiveHour?.resetAt)
-        let weeklyResetText = resetText(weekly?.resetAt)
+        let fiveHourResetText = formattedFiveHourReset(fiveHour?.resetAt)
+        let weeklyResetText = formattedWeeklyReset(weekly?.resetAt)
         let planName = normalizedPlanName(report.planType)
 
         return MonitorModule(
@@ -139,7 +134,11 @@ final class CodexQuotaSampler: MonitorSampler {
         return "\(Int((ratio * 100).rounded()))%"
     }
 
-    private static func resetText(_ date: Date?) -> String {
+    private static func formattedFiveHourReset(_ date: Date?) -> String {
+        date.map { quotaTimeFormatter.string(from: $0) } ?? "--"
+    }
+
+    private static func formattedWeeklyReset(_ date: Date?) -> String {
         date.map { quotaDateFormatter.string(from: $0) } ?? "--"
     }
 
@@ -158,14 +157,21 @@ final class CodexQuotaSampler: MonitorSampler {
     }
 }
 
-private let quotaDateFormatter: DateFormatter = {
+nonisolated private let quotaTimeFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "zh_CN")
     formatter.dateFormat = "MM/dd HH:mm"
     return formatter
 }()
 
-enum CodexUsageError: LocalizedError, Equatable {
+nonisolated private let quotaDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "zh_CN")
+    formatter.dateFormat = "yyyy.M.d"
+    return formatter
+}()
+
+nonisolated enum CodexUsageError: LocalizedError, Equatable {
     case missingAuthFile(String)
     case missingAccessToken
     case invalidAuthFile
@@ -191,7 +197,7 @@ enum CodexUsageError: LocalizedError, Equatable {
     }
 }
 
-struct CodexUsageClient: Sendable {
+nonisolated struct CodexUsageClient: Sendable {
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, HTTPURLResponse)
 
     static let liveTransport: Transport = { request in
@@ -297,12 +303,12 @@ struct CodexUsageClient: Sendable {
     }
 }
 
-struct CodexQuotaReport: Equatable, Sendable {
+nonisolated struct CodexQuotaReport: Equatable, Sendable {
     var planType: String?
     var periods: [CodexQuotaSnapshot]
 }
 
-struct CodexQuotaSnapshot: Equatable, Sendable {
+nonisolated struct CodexQuotaSnapshot: Equatable, Sendable {
     var id: String
     var label: String
     var remaining: Double
@@ -316,7 +322,7 @@ struct CodexQuotaSnapshot: Equatable, Sendable {
     }
 }
 
-private struct CodexAuth: Decodable {
+nonisolated private struct CodexAuth: Decodable {
     var tokens: Tokens?
 
     struct Tokens: Decodable {
@@ -328,7 +334,7 @@ private struct CodexAuth: Decodable {
     }
 }
 
-private struct CodexUsageResponse: Decodable {
+nonisolated private struct CodexUsageResponse: Decodable {
     var planType: String?
     var rateLimit: RateLimit?
 

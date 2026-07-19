@@ -309,6 +309,11 @@ enum DisplayDimmingCalibration {
     static let maximumOverlayOpacity: Double = 0.70
 }
 
+enum DisplaySoftwareDimmingWindowPolicy {
+    // A later-created screen saver window can cover windows at the same level.
+    static let level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+}
+
 private final class DisplaySoftwareDimmingService {
     private let dimmingThreshold: Double = DisplayDimmingCalibration.hardwareZeroUserBrightness
     private let maximumOverlayOpacity: Double = DisplayDimmingCalibration.maximumOverlayOpacity
@@ -446,7 +451,7 @@ private final class DisplaySoftwareDimmingService {
         window.isOpaque = false
         window.hasShadow = false
         window.ignoresMouseEvents = true
-        window.level = .screenSaver
+        window.level = DisplaySoftwareDimmingWindowPolicy.level
         window.animationBehavior = .none
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         window.contentView = NSView(frame: screen.frame)

@@ -1,6 +1,6 @@
 import Foundation
 
-enum UpdateCheckState: Equatable {
+nonisolated enum UpdateCheckState: Equatable {
     case idle
     case checking
     case upToDate
@@ -13,7 +13,7 @@ enum UpdateCheckState: Equatable {
     }
 }
 
-struct GitHubRelease: Decodable {
+nonisolated struct GitHubRelease: Decodable {
     let tagName: String
     let htmlURL: URL
     let publishedAt: String?
@@ -29,7 +29,7 @@ struct GitHubRelease: Decodable {
     }
 }
 
-struct GitHubAsset: Decodable {
+nonisolated struct GitHubAsset: Decodable {
     let name: String
     let browserDownloadURL: URL
 
@@ -39,6 +39,6 @@ struct GitHubAsset: Decodable {
     }
 }
 
-struct GitHubErrorResponse: Decodable {
+nonisolated struct GitHubErrorResponse: Decodable {
     let message: String?
 }

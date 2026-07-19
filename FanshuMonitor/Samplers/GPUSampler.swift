@@ -3,7 +3,7 @@ import Foundation
 import IOKit
 import OSLog
 
-final class GPUSampler: MonitorSampler {
+nonisolated final class GPUSampler: MonitorSampler {
     var kind: MonitorKind { .gpu }
     private let smcReader = SMCReader()
 
@@ -110,7 +110,7 @@ final class GPUSampler: MonitorSampler {
     }
 }
 
-private struct GPUReading {
+nonisolated private struct GPUReading {
     let model: String
     let utilization: Double
     let renderUtilization: Double?

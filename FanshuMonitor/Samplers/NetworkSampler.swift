@@ -3,7 +3,7 @@ import CoreWLAN
 import Foundation
 import OSLog
 
-final class NetworkSampler: MonitorSampler {
+nonisolated final class NetworkSampler: MonitorSampler {
     var kind: MonitorKind { .network }
 
     private var previousNetworkBytes: (input: UInt64, output: UInt64, timestamp: Date)?
@@ -214,7 +214,7 @@ final class NetworkSampler: MonitorSampler {
     }
 }
 
-struct NetworkInterfaceSnapshot {
+nonisolated struct NetworkInterfaceSnapshot {
     let input: UInt64
     let output: UInt64
     let interface: String
@@ -222,7 +222,7 @@ struct NetworkInterfaceSnapshot {
     let ipv6Addresses: [String]
 }
 
-func networkAddressSummary(_ addresses: [String]) -> String {
+nonisolated func networkAddressSummary(_ addresses: [String]) -> String {
     guard !addresses.isEmpty else {
         return "--"
     }

@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import Testing
@@ -145,5 +146,11 @@ struct DisplayClassifierTests {
             isBuiltInDisplay: { _ in isBuiltIn },
             infoProvider: { _ in info }
         )
+    }
+}
+
+struct DisplaySoftwareDimmingWindowPolicyTests {
+    @Test func overlayStaysAboveScreenSaverWindows() {
+        #expect(DisplaySoftwareDimmingWindowPolicy.level.rawValue > NSWindow.Level.screenSaver.rawValue)
     }
 }

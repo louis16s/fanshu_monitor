@@ -16,38 +16,27 @@ struct MetricGlassRow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                // 图标：保持原版紧凑 18px
-                Image(systemName: module.kind.symbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(tint)
-                    .frame(width: 18)
-
-                Text(titleText)
-                    .panelMetricLabelFont()
-                    .foregroundStyle(theme.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-
-                Text(detail)
-                    .panelTitleValueFont()
-                    .foregroundStyle(theme.valueText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-
-                Spacer(minLength: 8)
-
-                // 右侧：趋势图 / 进度条
+            PanelModuleHeader(
+                title: titleText,
+                value: detail,
+                titleColor: theme.primaryText,
+                valueColor: theme.valueText
+            ) {
+                PanelModuleIcon(systemName: module.kind.symbol, color: tint)
+            } trailing: {
                 trailingView(theme: theme)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
 
             if isExpanded, !details.isEmpty {
                 Group {
                     if let storageVolumes {
                         StorageVolumeDetailList(volumes: storageVolumes, kind: module.kind, tint: tint, theme: theme)
+                    } else if module.kind == .codex {
+                        CodexMetricDetailGrid(
+                            metrics: details,
+                            presentation: CodexQuotaPresentation(metrics: module.metrics),
+                            theme: theme
+                        )
                     } else {
                         MetricDetailGrid(metrics: details, kind: module.kind, theme: theme)
                     }
@@ -101,7 +90,11 @@ struct MetricGlassRow: View {
         case .network, .battery:
             EmptyView()
         case .codex:
-            ProgressMeter(value: module.value, tint: tint, theme: theme)
+            ProgressMeter(
+                value: CodexQuotaPresentation(metrics: module.metrics).progressValue,
+                tint: tint,
+                theme: theme
+            )
                 .frame(width: 72, height: 3)
         }
     }
@@ -182,6 +175,27 @@ private struct MetricDetailGrid: View {
                 .onTapGesture {
                     copyToPasteboard(metric.value)
                 }
+        }
+    }
+}
+
+private struct CodexMetricDetailGrid: View {
+    let metrics: [MonitorMetric]
+    let presentation: CodexQuotaPresentation
+    let theme: MonitorPanelTheme
+
+    var body: some View {
+        if presentation.hasFiveHourQuota {
+            MetricDetailGrid(metrics: metrics, kind: .codex, theme: theme)
+        } else {
+            MetricDetailGrid(
+                metrics: [
+                    MonitorMetric(name: "weekly", value: presentation.weeklyText),
+                    MonitorMetric(name: "weekly-reset", value: presentation.weeklyResetText)
+                ],
+                kind: .codex,
+                theme: theme
+            )
         }
     }
 }
@@ -371,41 +385,19 @@ struct NetworkGlassRow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: "wifi")
-                    .font(.system(size: 13, weight: .semibold))
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(tint)
-                    .frame(width: 18)
-
+            PanelModuleHeader(
+                title: "Network:",
+                value: module.summary,
+                titleColor: theme.primaryText,
+                valueColor: theme.valueText
+            ) {
+                PanelModuleIcon(systemName: "wifi", color: tint)
+            } trailing: {
                 HStack(spacing: 6) {
-                    HStack(spacing: 6) {
-                        Text("Network:")
-                            .panelMetricLabelFont()
-                            .foregroundStyle(theme.primaryText)
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-
-                        Text(module.summary)
-                            .panelTitleValueFont()
-                            .foregroundStyle(theme.valueText)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.82)
-                    }
-                    .fixedSize(horizontal: true, vertical: false)
-                    .layoutPriority(2)
-
-                    Spacer(minLength: 2)
-
-                    HStack(spacing: 6) {
-                        NetworkRatePill(systemImage: "arrow.up", text: value("upload"), theme: theme)
-                        NetworkRatePill(systemImage: "arrow.down", text: value("download"), theme: theme)
-                    }
-                    .layoutPriority(1)
+                    NetworkRatePill(systemImage: "arrow.up", text: value("upload"), theme: theme)
+                    NetworkRatePill(systemImage: "arrow.down", text: value("download"), theme: theme)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
 
             if isExpanded {
                 MetricDetailGrid(metrics: detailMetrics, kind: module.kind, theme: theme)
@@ -451,12 +443,13 @@ struct BatteryGlassRow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: powerSymbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(tint)
-                    .frame(width: 18)
+            PanelModuleHeader(
+                title: "Power:",
+                value: summaryText,
+                titleColor: theme.primaryText,
+                valueColor: theme.valueText
+            ) {
+                PanelModuleIcon(systemName: powerSymbol, color: tint)
                     .opacity(isActivelyCharging && batteryBreathIsDimmed ? 0.46 : 1)
                     .animation(
                         isActivelyCharging
@@ -464,35 +457,16 @@ struct BatteryGlassRow: View {
                             : .easeInOut(duration: 0.18),
                         value: batteryBreathIsDimmed
                     )
-
-                Text("Power:")
-                    .panelMetricLabelFont()
-                    .foregroundStyle(theme.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                    .layoutPriority(2)
-
-                Text(summaryText)
-                    .panelTitleValueFont()
-                    .foregroundStyle(theme.valueText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .layoutPriority(3)
-
-                Spacer(minLength: 4)
-
+            } trailing: {
                 if hasBattery {
                     MetricPill(systemImage: powerPillIcon, text: powerPillValue, theme: theme)
-                        .layoutPriority(0)
                 } else {
-                    MetricPill(systemImage: "powerplug", text: value("adapter"), theme: theme)
-                        .layoutPriority(0)
-                    MetricPill(systemImage: "gauge.with.dots.needle.33percent", text: value("power"), theme: theme)
-                        .layoutPriority(0)
+                    HStack(spacing: 6) {
+                        MetricPill(systemImage: "powerplug", text: value("adapter"), theme: theme)
+                        MetricPill(systemImage: "gauge.with.dots.needle.33percent", text: value("power"), theme: theme)
+                    }
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
 
             if canExpand && isExpanded {
                 MetricDetailGrid(metrics: detailMetrics, kind: module.kind, theme: theme)

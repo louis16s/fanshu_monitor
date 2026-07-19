@@ -3,7 +3,7 @@ import Foundation
 import OSLog
 import IOKit
 
-final class CPUSampler: MonitorSampler {
+nonisolated final class CPUSampler: MonitorSampler {
     var kind: MonitorKind { .cpu }
 
     private var previousCPUInfo: host_cpu_load_info?

@@ -1,6 +1,6 @@
 import Foundation
 
-enum HaloRingSource: String, CaseIterable, Identifiable {
+nonisolated enum HaloRingSource: String, CaseIterable, Identifiable {
     case combined
     case cpu
     case gpu
@@ -28,14 +28,14 @@ enum HaloRingSource: String, CaseIterable, Identifiable {
     }
 }
 
-enum MemoryPressureLevel: Sendable {
+nonisolated enum MemoryPressureLevel: Sendable {
     case normal
     case warning
     case critical
     case unknown
 }
 
-enum MonitorSeverity {
+nonisolated enum MonitorSeverity {
     case calm
     case warning
     case critical
@@ -52,7 +52,7 @@ enum MonitorSeverity {
     }
 }
 
-enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
+nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
     case cpu
     case gpu
     case memory
@@ -161,20 +161,20 @@ enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-struct MetricSwitch: Identifiable, Hashable {
+nonisolated struct MetricSwitch: Identifiable, Hashable {
     let id: String
     let title: String
     let isDefault: Bool
 }
 
-struct MonitorMetric: Identifiable, Sendable {
+nonisolated struct MonitorMetric: Identifiable, Sendable {
     let name: String
     let value: String
 
     var id: String { name }
 }
 
-struct MonitorModule: Identifiable, Sendable {
+nonisolated struct MonitorModule: Identifiable, Sendable {
     let kind: MonitorKind
     var context: String? = nil
     var value: Double

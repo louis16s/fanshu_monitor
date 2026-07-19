@@ -26,25 +26,14 @@ struct DisplayControlsSection: View {
             || settings.displayContrastControlEnabled
 
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: "display")
-                    .font(.system(size: 13, weight: .semibold))
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(tint)
-                    .frame(width: 18)
-
-                Text("Display:")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(palette.primaryText)
-                    .lineLimit(1)
-
-                Text(summary(for: visibleDisplays, hasControls: hasControls))
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(palette.valueText)
-                    .lineLimit(1)
-
-                Spacer(minLength: 8)
-
+            PanelModuleHeader(
+                title: "Display:",
+                value: summary(for: visibleDisplays, hasControls: hasControls),
+                titleColor: palette.primaryText,
+                valueColor: palette.valueText
+            ) {
+                PanelModuleIcon(systemName: "display", color: tint)
+            } trailing: {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(palette.captionText)
@@ -52,8 +41,6 @@ struct DisplayControlsSection: View {
                     .rotationEffect(.degrees(isExpanded ? 0 : -90))
                     .animation(expansionAnimation, value: isExpanded)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
             .contentShape(Rectangle())
             .onTapGesture {
                 withAnimation(expansionAnimation) {

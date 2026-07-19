@@ -30,6 +30,7 @@ final class MonitorStore: ObservableObject {
     private var animationTimerCancellable: AnyCancellable?
     private let samplingCoordinator = SamplingCoordinator()
     private var samplingTask: Task<Void, Never>?
+    private var codexRefreshTask: Task<Void, Never>?
     private var samplingGeneration = 0
     private var cancellables: Set<AnyCancellable> = []
     private var menuBarTargetComputeLoad = 0.0
@@ -41,6 +42,7 @@ final class MonitorStore: ObservableObject {
         let settings = MonitorSettings()
         let initialModules = MonitorKind.allCases.map(MonitorModule.placeholder)
         self.settings = settings
+        refreshSchedule.setInterval(settings.codexRefreshIntervalMinutes * 60, for: .codex)
         allModules = initialModules
         modules = initialModules.filter { settings.isVisible($0.kind) }
         Task { [samplingCoordinator, settings] in
@@ -61,9 +63,7 @@ final class MonitorStore: ObservableObject {
         settings.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                guard let self else { return }
-                self.modules = self.visibleModules(from: self.allModules)
-                self.objectWillChange.send()
+                self?.objectWillChange.send()
             }
             .store(in: &cancellables)
         #if DISPLAY_CONTROL
@@ -95,6 +95,7 @@ final class MonitorStore: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] minutes in
                 guard let self else { return }
+                self.refreshSchedule.setInterval(minutes * 60, for: .codex)
                 Task { [samplingCoordinator = self.samplingCoordinator] in
                     await samplingCoordinator.setCodexRefreshInterval(minutes * 60)
                 }
@@ -126,8 +127,12 @@ final class MonitorStore: ObservableObject {
             .autoconnect()
             .sink { [weak self] _ in
                 self?.advance()
-                self?.retryBrightnessKeyTapIfNeeded()
             }
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                self?.refreshInputServicesAfterActivation()
+            }
+            .store(in: &cancellables)
         animationTimerCancellable = Timer.publish(every: MonitorConstants.animationInterval, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
@@ -137,6 +142,7 @@ final class MonitorStore: ObservableObject {
 
     deinit {
         samplingTask?.cancel()
+        codexRefreshTask?.cancel()
         timerCancellable?.cancel()
         animationTimerCancellable?.cancel()
         cancellables.removeAll()
@@ -220,7 +226,11 @@ final class MonitorStore: ObservableObject {
     }
 
     private func advance(kinds: some Sequence<MonitorKind>) {
-        let requestedKinds = Array(kinds)
+        var requestedKinds = Array(Set(kinds))
+        if requestedKinds.contains(.codex) {
+            requestedKinds.removeAll { $0 == .codex }
+            refreshCodexUsage(force: false)
+        }
         guard !requestedKinds.isEmpty else { return }
 
         samplingTask?.cancel()
@@ -261,10 +271,11 @@ final class MonitorStore: ObservableObject {
         updateMenuBarIcon()
     }
 
-    private func retryBrightnessKeyTapIfNeeded() {
+    private func refreshInputServicesAfterActivation() {
         #if DISPLAY_CONTROL
         brightnessKeyEventTap?.refreshPermissionState()
         #endif
+        mouseController.refreshButtonTapIfPossible()
     }
 
     #if DISPLAY_CONTROL
@@ -356,12 +367,20 @@ final class MonitorStore: ObservableObject {
     }
 
     func refreshCodexUsageNow() {
+        refreshCodexUsage(force: true)
+    }
+
+    private func refreshCodexUsage(force: Bool) {
         guard settings.isVisible(.codex) else { return }
         refreshSchedule.markRefreshed([MonitorKind.codex], at: Date())
         let previousModules = allModules
         let coordinator = samplingCoordinator
-        Task { [weak self] in
-            guard let snapshot = await coordinator.refreshCodex(previousModules: previousModules),
+        codexRefreshTask?.cancel()
+        codexRefreshTask = Task { [weak self] in
+            guard let snapshot = await coordinator.refreshCodex(
+                previousModules: previousModules,
+                force: force
+            ),
                   let self,
                   !Task.isCancelled
             else {

@@ -4,7 +4,7 @@ import IOKit
 import IOKit.ps
 import OSLog
 
-final class BatterySampler: MonitorSampler {
+nonisolated final class BatterySampler: MonitorSampler {
     var kind: MonitorKind { .battery }
 
     private var powerTelemetryService: io_service_t = IO_OBJECT_NULL
@@ -249,7 +249,7 @@ final class BatterySampler: MonitorSampler {
     }
 }
 
-private struct SmartBatteryInfo {
+nonisolated private struct SmartBatteryInfo {
     var cycleCount: Int?
     var healthPercent: Double?
     var batteryPowerWatts: Double?

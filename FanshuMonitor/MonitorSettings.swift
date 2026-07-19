@@ -106,7 +106,6 @@ final class MonitorSettings: ObservableObject {
     @Published var mouseForwardAction: MouseButtonAction = .launchpad
     @Published var mouseGestureAction: MouseButtonAction = .passThrough
     @Published var lockScreenPoliciesEnabled: Bool = false
-    @Published var lockScreenRequirePassword: Bool = true
     @Published private(set) var lockScreenPolicies: [LockScreenPolicy] = []
     @Published private(set) var visibleKinds: Set<MonitorKind> = []
     @Published private(set) var enabledMetrics: [MonitorKind: Set<String>] = [:]
@@ -153,7 +152,6 @@ final class MonitorSettings: ObservableObject {
         mouseForwardAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseForwardAction) ?? "") ?? .launchpad
         mouseGestureAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseGestureAction) ?? "") ?? .passThrough
         lockScreenPoliciesEnabled = defaults.object(forKey: Keys.lockScreenPoliciesEnabled) as? Bool ?? false
-        lockScreenRequirePassword = defaults.object(forKey: Keys.lockScreenRequirePassword) as? Bool ?? true
         if let data = defaults.data(forKey: Keys.lockScreenPolicies),
            let policies = try? JSONDecoder().decode([LockScreenPolicy].self, from: data) {
             lockScreenPolicies = Array(policies.prefix(Self.maximumLockScreenPolicies))
@@ -551,13 +549,6 @@ final class MonitorSettings: ObservableObject {
             }
             .store(in: &cancellables)
 
-        $lockScreenRequirePassword
-            .dropFirst()
-            .sink { [weak self] newValue in
-                self?.persist(newValue, forKey: Keys.lockScreenRequirePassword)
-            }
-            .store(in: &cancellables)
-
         $lockScreenPolicies
             .dropFirst()
             .sink { [weak self] newValue in
@@ -635,7 +626,6 @@ final class MonitorSettings: ObservableObject {
         mouseForwardAction = .launchpad
         mouseGestureAction = .passThrough
         lockScreenPoliciesEnabled = false
-        lockScreenRequirePassword = true
         lockScreenPolicies = []
         visibleKinds = Set(MonitorKind.allCases).subtracting([.storage, .network])
         enabledMetrics = [:]
@@ -667,7 +657,6 @@ private enum Keys {
     static let mouseForwardAction = "settings.mouse.action.forward"
     static let mouseGestureAction = "settings.mouse.action.gesture"
     static let lockScreenPoliciesEnabled = "settings.lockScreen.policiesEnabled"
-    static let lockScreenRequirePassword = "settings.lockScreen.requirePassword"
     static let lockScreenPolicies = "settings.lockScreen.policies"
     static let lockScreenBaseline = "settings.lockScreen.baseline"
     static let visibleKinds = "settings.visibleKinds"

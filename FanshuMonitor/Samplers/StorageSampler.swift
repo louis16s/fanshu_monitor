@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-final class StorageSampler: MonitorSampler {
+nonisolated final class StorageSampler: MonitorSampler {
     var kind: MonitorKind { .storage }
 
     func sample(previous: MonitorModule?) -> MonitorModule {
@@ -87,14 +87,14 @@ final class StorageSampler: MonitorSampler {
     }
 }
 
-private struct ExternalVolume {
+nonisolated private struct ExternalVolume {
     let name: String
     let used: Double
     let free: Double
     let total: Double
 }
 
-private struct ExternalVolumePayload: Encodable {
+nonisolated private struct ExternalVolumePayload: Encodable {
     let name: String
     let used: String
     let free: String
