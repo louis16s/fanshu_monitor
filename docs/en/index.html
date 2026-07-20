@@ -1,15 +1,17 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fanshu Monitor - macOS menu bar monitor and external display control</title>
-  <meta name="description" content="Fanshu Monitor is a menu bar system monitor and external display control utility for Apple Silicon and macOS 26+.">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07171d">
+  <title>Fanshu Monitor - Your Mac, in one place</title>
+  <meta name="description" content="Fanshu Monitor brings system monitoring, external display control, scheduled locking, mouse tools, and Codex usage to the macOS menu bar.">
   <meta property="og:title" content="Fanshu Monitor">
-  <meta property="og:description" content="Low-overhead system monitoring, external display brightness control, Codex quota, and mouse DPI tools.">
+  <meta property="og:description" content="System health, display brightness, scheduled locking, mouse tools, and Codex usage in one quiet menu bar panel.">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="../images/current-panel.png">
+  <meta property="og:image" content="../images/site-preview.png">
   <link rel="icon" type="image/png" href="../images/icon-128.png" sizes="128x128">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
   <link rel="stylesheet" href="../assets/site.css">
   <script type="application/ld+json">
   {
@@ -19,10 +21,10 @@
     "applicationCategory": "UtilitiesApplication",
     "operatingSystem": "macOS 26+",
     "processorRequirements": "Apple Silicon",
-    "softwareVersion": "0.2.6",
+    "softwareVersion": "0.2.8",
     "url": "https://louis16s.github.io/fanshu_monitor/",
     "downloadUrl": "https://github.com/louis16s/fanshu_monitor/releases",
-    "description": "A macOS menu bar system monitor and external display control utility.",
+    "description": "A menu bar system monitor, external display controller, and scheduled lock utility for macOS",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
   }
   </script>
@@ -30,172 +32,66 @@
 <body>
   <header class="site-header">
     <nav class="nav" aria-label="Main navigation">
-      <a class="brand" href="#top" aria-label="Fanshu Monitor home">
-        <img src="../images/icon-128.png" alt="">
-        <span>Fanshu Monitor</span>
-      </a>
-      <button class="menu-button" type="button" data-menu aria-label="Open menu">☰</button>
+      <a class="brand" href="#top" aria-label="Fanshu Monitor home"><img src="../images/icon-128.png" alt=""><span>Fanshu Monitor</span></a>
+      <button class="icon-button menu-button" type="button" data-menu aria-label="Open navigation" aria-expanded="false">☰</button>
       <div class="nav-links" data-nav>
-        <a href="#display">Displays</a>
-        <a href="#monitoring">Monitoring</a>
-        <a href="#settings">Settings</a>
-        <a href="#performance">Overhead</a>
-        <a href="#download">Download</a>
-        <a href="../zh/" data-lang="zh">中文</a>
-        <button class="theme-toggle" type="button" data-theme-toggle>Theme</button>
-        <a class="github-link" href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">GitHub</a>
+        <a href="#experience">Live demo</a><a href="#features">Features</a><a href="#faq">Q&amp;A</a><a href="../zh/" data-lang="zh">中文</a>
+        <button class="icon-button theme-toggle" type="button" data-theme-toggle aria-label="Toggle appearance" title="Toggle appearance">◐</button>
+        <a class="nav-download" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">Download</a>
       </div>
     </nav>
   </header>
 
   <main id="top">
-    <section class="hero">
-      <div>
-        <p class="eyebrow"><span class="status-dot"></span> Fanshu Monitor · v0.2.6</p>
-        <h1>A system dashboard for your menu bar.</h1>
-        <p class="hero-lead">Watch CPU, GPU, memory, battery, and Codex quota, then use F1/F2 to control the external display under your pointer.</p>
-        <div class="hero-actions">
-          <a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">Download latest</a>
-          <a class="button secondary" href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">View source</a>
-        </div>
-        <div class="hero-facts reveal">
-          <div class="fact"><strong>Apple Silicon</strong><span>Built for M-series Macs</span></div>
-          <div class="fact"><strong>macOS 26+</strong><span>Modern SwiftUI and system APIs</span></div>
-          <div class="fact"><strong>DDC / OSD</strong><span>External brightness and native overlays</span></div>
-          <div class="fact"><strong>Low overhead</strong><span>Hidden modules stop sampling</span></div>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-scene" aria-hidden="true"><div class="desktop-menubar"><span>●</span><span>Fanshu Monitor</span><span class="desktop-time">9:41</span></div><div class="desktop-horizon"></div></div>
+      <div class="hero-copy">
+        <img class="hero-logo" src="../images/icon-128.png" alt="Fanshu Monitor icon">
+        <h1 id="hero-title">Your Mac<br>in one place</h1>
+        <p>System health, external brightness, scheduled locking, mouse tools, and Codex usage in one quiet menu bar panel.</p>
+        <div class="hero-actions"><a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">Download v0.2.8</a><a class="button quiet" href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">View on GitHub</a></div>
+        <span class="requirement">Apple Silicon · macOS 26+</span>
+      </div>
+
+      <div class="hero-product" aria-label="Interactive Fanshu Monitor panel">
+        <div class="app-panel" data-live-panel>
+          <div class="panel-topbar"><span class="live-dot"></span><strong>Fanshu Monitor · v0.2.8</strong><span class="panel-spacer"></span><span>⚙︎</span><span>⏻</span><time>9:41</time></div>
+          <div class="monitor-module cpu-module"><div class="module-title"><span class="module-icon">▣</span><strong>CPU: <span data-live-value="cpu">14</span>%</strong><span class="sparkline orange"></span></div><div class="module-data"><span>System <b>7%</b></span><span>User <b>7%</b></span><span>Idle <b>86%</b></span><span>Temp <b>48°C</b></span></div></div>
+          <div class="monitor-module memory-module"><div class="module-title"><span class="module-icon">▤</span><strong>Memory: <span data-live-value="memory">58</span>%</strong><span class="mini-meter"><i data-live-bar="memory"></i></span></div><div class="module-data"><span>Used <b>13.8 GB</b></span><span>Pressure <b>Normal</b></span><span>Compressed <b>1.42 GB</b></span><span>App <b>108 MB</b></span></div></div>
+          <div class="monitor-module codex-module"><div class="module-title"><span class="module-icon">›_</span><strong>Codex Usage: Plus</strong><span class="mini-meter blue"><i style="width:72%"></i></span></div><div class="module-data compact"><span>5H <b>76%</b></span><span>Week <b>81%</b></span></div></div>
+          <div class="monitor-module display-module"><div class="module-title"><span class="module-icon">▰</span><strong>Display: External 1</strong><span>⌄</span></div><div class="display-row"><span>▱</span><b>Retina Display</b><em>Built-in</em><label>Brightness <input type="range" min="0" max="100" value="46" aria-label="Simulated built-in display brightness"><output>46%</output></label></div><div class="display-row active"><span>▭</span><b>PG271Q</b><em>External</em><label>Brightness <input type="range" min="0" max="100" value="20" aria-label="Simulated external display brightness"><output>20%</output></label><small>DDC 0 · 15%</small></div></div>
         </div>
       </div>
-      <div class="hero-visual reveal" aria-label="Fanshu Monitor product screenshots">
-        <div class="glass-card panel-shot">
-          <img src="../images/current-panel.png" alt="Fanshu Monitor panel screenshot">
-        </div>
-        <div class="glass-card settings-shot">
-          <img src="../images/settings-about.png" alt="Fanshu Monitor settings screenshot">
-        </div>
-        <div class="floating-chip"><span></span> F1/F2 follows the pointer</div>
+      <a class="scroll-cue" href="#experience">Explore <span>↓</span></a>
+    </section>
+
+    <section class="intro-band reveal" id="experience"><p>More than metrics</p><h2>Make the little things you do every day feel natural</h2></section>
+
+    <section class="interactive-showcase" aria-labelledby="showcase-title">
+      <div class="showcase-nav reveal"><p class="section-label">Interactive demo</p><h2 id="showcase-title">Tap a feature and see it work</h2><div class="feature-tabs" role="tablist" aria-label="Feature demos"><button type="button" role="tab" aria-selected="true" data-demo-tab="display">Displays</button><button type="button" role="tab" aria-selected="false" data-demo-tab="lock">Lock</button><button type="button" role="tab" aria-selected="false" data-demo-tab="mouse">Mouse</button><button type="button" role="tab" aria-selected="false" data-demo-tab="codex">Codex</button></div></div>
+      <div class="demo-stage reveal">
+        <div class="demo-copy is-active" data-demo-copy="display"><span class="demo-index">01</span><h3>Brightness keys follow your pointer</h3><p>F1/F2 targets the controllable display under the pointer and passes back to macOS on the built-in display.</p><ul><li>Per-display DDC circuit breaker</li><li>Automatic hot-plug refresh</li><li>Native brightness OSD</li></ul></div>
+        <div class="demo-copy" data-demo-copy="lock"><span class="demo-index">02</span><h3>Lock directly, right on time</h3><p>Give different parts of the day their own idle limits, including schedules that cross midnight, without starting a screen saver first.</p><ul><li>Reads system lock settings</li><li>Supports next-day times such as 25:00</li><li>Continues after sleep and wake</li></ul></div>
+        <div class="demo-copy" data-demo-copy="mouse"><span class="demo-index">03</span><h3>Mouse tools load only when needed</h3><p>Read MX Anywhere 3S DPI, battery, and buttons without keeping HID++ busy in the background.</p><ul><li>DPI input and presets</li><li>Custom function buttons</li><li>Power-saving reads</li></ul></div>
+        <div class="demo-copy" data-demo-copy="codex"><span class="demo-index">04</span><h3>Usage at a glance</h3><p>Refresh Codex usage when the panel opens, then follow your chosen interval for 5H and weekly limits.</p><ul><li>Plan and remaining quota</li><li>Separate reset times</li><li>No requests while hidden</li></ul></div>
+
+        <div class="demo-canvas" data-demo-canvas="display"><div class="screen-layout"><button class="demo-screen built-in" type="button" data-screen="built-in"><span>Retina Display</span><i></i><small>macOS</small></button><button class="demo-screen external selected" type="button" data-screen="external"><span>PG271Q</span><i></i><small>DDC 20%</small></button><div class="pointer" data-pointer>↖</div></div><div class="brightness-control"><button type="button" data-brightness-step="-5" aria-label="Lower brightness">−</button><div><span>Current target</span><strong data-screen-name>PG271Q</strong></div><input type="range" min="0" max="100" value="20" data-demo-brightness aria-label="Simulated display brightness"><output data-demo-brightness-output>20%</output><button type="button" data-brightness-step="5" aria-label="Raise brightness">＋</button></div></div>
+        <div class="demo-canvas" data-demo-canvas="lock" hidden><div class="lock-clock"><time data-demo-clock>23:40</time><span>Sunday</span></div><div class="schedule-line"><b>00:00 — 07:00</b><span>Lock after 5 idle minutes</span><i class="active"></i></div><div class="schedule-line"><b>07:00 — 24:00</b><span>Lock after 20 idle minutes</span><i></i></div><div class="lock-status"><span>✓</span><div><b>Policy saved</b><small>The active rule locks directly to the login screen</small></div></div></div>
+        <div class="demo-canvas" data-demo-canvas="mouse" hidden><div class="mouse-device"><div class="mouse-shape"><i></i></div><div><b>MX Anywhere 3S</b><span>Connected · Battery 95%</span></div></div><label class="dpi-control"><span><b>DPI</b><output data-dpi-output>1600</output></span><input type="range" min="400" max="8000" step="100" value="1600" data-dpi-range></label><div class="dpi-presets"><button data-dpi="800">800</button><button class="selected" data-dpi="1600">1.6k</button><button data-dpi="2400">2.4k</button><button data-dpi="4000">4k</button><button data-dpi="8000">8k</button></div></div>
+        <div class="demo-canvas" data-demo-canvas="codex" hidden><div class="quota-heading"><span>›_</span><div><b>Codex Usage: Plus</b><small>Updated just now</small></div></div><div class="quota-row"><div><span>5H remaining</span><b>76%</b></div><meter min="0" max="100" value="76">76%</meter><small>Resets 07/20 18:30</small></div><div class="quota-row"><div><span>Weekly remaining</span><b>81%</b></div><meter min="0" max="100" value="81">81%</meter><small>Resets 07/24 08:00</small></div></div>
       </div>
     </section>
 
-    <section class="section" id="display">
-      <div class="section-head reveal">
-        <div>
-          <p class="section-kicker">External Display</p>
-          <h2>Make external brightness feel built in.</h2>
-        </div>
-        <p class="section-copy">When the pointer is on a controllable external display, brightness keys target that display. Built-in and unsupported displays pass back to macOS.</p>
-      </div>
-      <div class="feature-grid">
-        <article class="feature wide reveal">
-          <div class="feature-icon">F1</div>
-          <h3>Pointer-based targeting</h3>
-          <p>The app resolves the screen under the pointer and only consumes brightness key events when the external display is DDC controllable.</p>
-        </article>
-        <article class="feature reveal">
-          <div class="feature-icon">OSD</div>
-          <h3>Native overlay</h3>
-          <p>Brightness changes use the native macOS OSD whenever possible and target the display being adjusted.</p>
-        </article>
-        <article class="feature reveal">
-          <div class="feature-icon">DDC</div>
-          <h3>Clear reasons</h3>
-          <p>Each display reports control state, DDC read/write status, and why a control is unavailable.</p>
-        </article>
-        <article class="feature reveal">
-          <div class="feature-icon">↻</div>
-          <h3>Auto refresh</h3>
-          <p>Display connect, disconnect, and parameter changes trigger a display capability rescan.</p>
-        </article>
-      </div>
-    </section>
+    <section class="feature-section" id="features" aria-labelledby="features-title"><div class="section-heading reveal"><p class="section-label">Features</p><h2 id="features-title">One panel, less interruption</h2><p>Do the necessary work by default. Load heavier data only when its feature is visible or enabled.</p></div><div class="feature-list"><article class="feature-row reveal"><span class="feature-number">01</span><div><h3>System monitoring</h3><p>CPU, GPU, memory, power, temperatures, and the app's own memory footprint.</p></div><span class="feature-accent orange"></span></article><article class="feature-row reveal"><span class="feature-number">02</span><div><h3>External displays</h3><p>Pointer-aware F1/F2, DDC hardware zero, capability status, and clear failure reasons.</p></div><span class="feature-accent violet"></span></article><article class="feature-row reveal"><span class="feature-number">03</span><div><h3>Scheduled locking</h3><p>Switch idle limits throughout the day, lock directly, and support schedules across midnight.</p></div><span class="feature-accent green"></span></article><article class="feature-row reveal"><span class="feature-number">04</span><div><h3>On-demand work</h3><p>Network, SSID, DDC, HID, battery telemetry, and Codex only run when needed.</p></div><span class="feature-accent blue"></span></article></div></section>
 
-    <section class="section" id="monitoring">
-      <div class="showcase">
-        <div class="screenshot-stack reveal">
-          <img src="../images/current-panel.png" alt="Fanshu Monitor panel screenshot">
-          <img src="../images/settings-mouse.png" alt="Mouse DPI settings screenshot">
-        </div>
-        <div>
-          <p class="section-kicker">System Monitoring</p>
-          <h2>Always visible, carefully sampled.</h2>
-          <div class="timeline">
-            <article class="step reveal">
-              <span class="step-number">01</span>
-              <div><h3>Core metrics first</h3><p>CPU, GPU, memory, battery, Codex quota, and display state are arranged for fast scanning.</p></div>
-            </article>
-            <article class="step reveal">
-              <span class="step-number">02</span>
-              <div><h3>Overhead is visible</h3><p>The memory panel shows the app's own footprint so long-running cost stays easy to judge.</p></div>
-            </article>
-            <article class="step reveal">
-              <span class="step-number">03</span>
-              <div><h3>Expensive data loads on demand</h3><p>DDC, SSID, battery telemetry, and mouse DPI data are sampled only when useful.</p></div>
-            </article>
-          </div>
-        </div>
-      </div>
-    </section>
+    <section class="principles-band"><div class="principle reveal"><strong>Hidden means paused</strong><span>Disabled modules stop sampling</span></div><div class="principle reveal"><strong>Device isolation</strong><span>One DDC failure does not block other displays</span></div><div class="principle reveal"><strong>Visible overhead</strong><span>See the app's memory footprint in the panel</span></div></section>
 
-    <section class="section" id="settings">
-      <div class="section-head reveal">
-        <div>
-          <p class="section-kicker">Settings</p>
-          <h2>Short paths, clear controls.</h2>
-        </div>
-        <p class="section-copy">Update checks live in About. Codex owns its refresh interval. Mouse settings group button mapping, DPI, and power-saving reads.</p>
-      </div>
-      <div class="settings-gallery reveal">
-        <img src="../images/settings-about.png" alt="About settings screenshot">
-        <img src="../images/settings-mouse.png" alt="Mouse settings screenshot">
-      </div>
-    </section>
+    <section class="faq-section" id="faq" aria-labelledby="faq-title"><div class="faq-heading reveal"><p class="section-label">Q&amp;A</p><h2 id="faq-title">Common questions</h2><p>The things people usually ask before installing</p></div><div class="faq-list reveal"><details><summary>Why does it need Accessibility permission?<span>＋</span></summary><p>F1/F2 takeover and mouse button mapping need access to system input events. Fanshu Monitor only uses this access while those features are enabled and does not record keyboard content.</p></details><details><summary>Can it control every external display?<span>＋</span></summary><p>The display, cable, and connection must support DDC/CI. Each display is classified independently, with a clear reason when control is unavailable.</p></details><details><summary>Will it use a lot of CPU in the background?<span>＋</span></summary><p>Hidden modules stop sampling. Expensive reads such as SSID, DDC, HID, and battery telemetry run on demand and use caches.</p></details><details><summary>Does scheduled locking start the screen saver first?<span>＋</span></summary><p>No. When a schedule is active, the app requests the system login lock directly and resumes policy evaluation after login.</p></details><details><summary>Which Macs are supported?<span>＋</span></summary><p>The current release targets Apple Silicon Macs running macOS 26.0 or later.</p></details><details><summary>Is it free?<span>＋</span></summary><p>Fanshu Monitor is free and open source under the MIT License.</p></details></div></section>
 
-    <section class="section" id="performance">
-      <div class="section-head reveal">
-        <div>
-          <p class="section-kicker">Performance</p>
-          <h2>Rich enough to help. Quiet enough to stay.</h2>
-        </div>
-        <p class="section-copy">Hidden modules stop sampling, panel-closed refresh slows down, and heavier data is cached until needed.</p>
-      </div>
-      <div class="metrics-strip reveal">
-        <div class="metric"><strong>0</strong><span>Reasons for hidden modules to keep sampling</span></div>
-        <div class="metric"><strong>5s</strong><span>Low-frequency menu refresh target</span></div>
-        <div class="metric"><strong>On demand</strong><span>DDC, SSID, mouse DPI</span></div>
-        <div class="metric"><strong>Visible</strong><span>App memory footprint</span></div>
-      </div>
-    </section>
-
-    <section class="section" id="download">
-      <div class="download-panel reveal">
-        <div class="download-layout">
-          <div>
-            <p class="section-kicker">Download</p>
-            <h2>Unzip it, then put it in your menu bar.</h2>
-            <p class="section-copy">Current builds target Apple Silicon and macOS 26+. External brightness depends on DDC/CI support, and F1/F2 takeover requires Accessibility permission.</p>
-            <div class="hero-actions">
-              <a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">Open Releases</a>
-              <a class="button secondary" href="https://github.com/louis16s/fanshu_monitor/issues" target="_blank" rel="noopener">Report an issue</a>
-            </div>
-          </div>
-          <div class="download-card">
-            <h3>System requirements</h3>
-            <ol class="install-list">
-              <li>Apple Silicon Mac</li>
-              <li>macOS 26 or later</li>
-              <li>Accessibility permission for F1/F2 and mouse mapping</li>
-              <li>DDC/CI display for external brightness control</li>
-            </ol>
-          </div>
-        </div>
-      </div>
-    </section>
+    <section class="download-section" id="download"><img src="../images/icon-128.png" alt="" class="download-logo reveal"><div class="reveal"><h2>Let your menu bar handle the details</h2><p>Free and open source. Requires Apple Silicon and macOS 26 or later.</p></div><div class="hero-actions reveal"><a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">Open Releases</a><a class="button quiet" href="https://github.com/louis16s/fanshu_monitor/issues" target="_blank" rel="noopener">Report an issue</a></div></section>
   </main>
 
-  <footer class="site-footer">
-    <span>© 2026 Fanshu Monitor contributors · MIT</span>
-    <span><a href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">github.com/louis16s/fanshu_monitor</a></span>
-  </footer>
-
+  <footer class="site-footer"><a class="brand" href="#top"><img src="../images/icon-128.png" alt=""><span>Fanshu Monitor</span></a><p>Made for Apple Silicon Macs · v0.2.8</p><div><a href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/louis16s/fanshu_monitor/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a><a href="../zh/" data-lang="zh">中文</a></div></footer>
   <script src="../assets/site.js"></script>
 </body>
 </html>

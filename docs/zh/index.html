@@ -1,15 +1,17 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>番薯Monitor - macOS 菜单栏监控与外接屏亮度控制</title>
-  <meta name="description" content="番薯Monitor 是面向 Apple Silicon 和 macOS 26+ 的菜单栏系统监控与外接显示器控制工具。">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07171d">
+  <title>番薯Monitor - 一处掌控你的 Mac</title>
+  <meta name="description" content="番薯Monitor 是面向 Apple Silicon 和 macOS 26+ 的菜单栏系统监控、外接显示器控制与自动锁屏工具。">
   <meta property="og:title" content="番薯Monitor">
-  <meta property="og:description" content="低开销系统监控，外接显示器亮度控制，Codex 额度与鼠标 DPI 管理。">
+  <meta property="og:description" content="系统状态、外接屏亮度、自动锁屏、鼠标与 Codex 额度，一处掌控。">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="../images/current-panel.png">
+  <meta property="og:image" content="../images/site-preview.png">
   <link rel="icon" type="image/png" href="../images/icon-128.png" sizes="128x128">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
   <link rel="stylesheet" href="../assets/site.css">
   <script type="application/ld+json">
   {
@@ -19,10 +21,10 @@
     "applicationCategory": "UtilitiesApplication",
     "operatingSystem": "macOS 26+",
     "processorRequirements": "Apple Silicon",
-    "softwareVersion": "0.2.6",
+    "softwareVersion": "0.2.8",
     "url": "https://louis16s.github.io/fanshu_monitor/",
     "downloadUrl": "https://github.com/louis16s/fanshu_monitor/releases",
-    "description": "macOS 菜单栏系统监控与外接显示器控制工具。",
+    "description": "macOS 菜单栏系统监控、外接显示器控制与自动锁屏工具",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CNY" }
   }
   </script>
@@ -34,166 +36,175 @@
         <img src="../images/icon-128.png" alt="">
         <span>番薯Monitor</span>
       </a>
-      <button class="menu-button" type="button" data-menu aria-label="打开菜单">☰</button>
+      <button class="icon-button menu-button" type="button" data-menu aria-label="打开导航" aria-expanded="false">☰</button>
       <div class="nav-links" data-nav>
-        <a href="#display">外接屏</a>
-        <a href="#monitoring">监控</a>
-        <a href="#settings">设置</a>
-        <a href="#performance">开销</a>
-        <a href="#download">下载</a>
+        <a href="#experience">功能演示</a>
+        <a href="#features">主要功能</a>
+        <a href="#faq">常见问题</a>
         <a href="../en/" data-lang="en">EN</a>
-        <button class="theme-toggle" type="button" data-theme-toggle>明暗</button>
-        <a class="github-link" href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">GitHub</a>
+        <button class="icon-button theme-toggle" type="button" data-theme-toggle aria-label="切换明暗外观" title="切换明暗外观">◐</button>
+        <a class="nav-download" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">下载</a>
       </div>
     </nav>
   </header>
 
   <main id="top">
-    <section class="hero">
-      <div>
-        <p class="eyebrow"><span class="status-dot"></span> 番薯Monitor · v0.2.6</p>
-        <h1>菜单栏里的系统仪表盘。</h1>
-        <p class="hero-lead">看 CPU、GPU、内存、电池和 Codex 额度，也让 F1/F2 根据鼠标位置控制外接显示器亮度。</p>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-scene" aria-hidden="true">
+        <div class="desktop-menubar"><span>●</span><span>番薯Monitor</span><span class="desktop-time">9:41</span></div>
+        <div class="desktop-horizon"></div>
+      </div>
+      <div class="hero-copy">
+        <img class="hero-logo" src="../images/icon-128.png" alt="番薯Monitor 图标">
+        <h1 id="hero-title">一处掌控<br>你的 Mac</h1>
+        <p>把系统状态、外接屏亮度、自动锁屏、鼠标与 Codex 额度，放进一个安静的菜单栏面板</p>
         <div class="hero-actions">
-          <a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">下载最新版</a>
-          <a class="button secondary" href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">查看源码</a>
+          <a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">下载 v0.2.8</a>
+          <a class="button quiet" href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">在 GitHub 查看</a>
         </div>
-        <div class="hero-facts reveal">
-          <div class="fact"><strong>Apple Silicon</strong><span>面向 M 系列 Mac</span></div>
-          <div class="fact"><strong>macOS 26+</strong><span>使用现代 SwiftUI 与系统能力</span></div>
-          <div class="fact"><strong>DDC / OSD</strong><span>外接屏亮度与系统浮层</span></div>
-          <div class="fact"><strong>低开销</strong><span>隐藏模块停止采样</span></div>
-        </div>
+        <span class="requirement">Apple Silicon · macOS 26+</span>
       </div>
-      <div class="hero-visual reveal" aria-label="番薯Monitor 产品截图">
-        <div class="glass-card panel-shot">
-          <img src="../images/current-panel.png" alt="番薯Monitor 面板截图">
-        </div>
-        <div class="glass-card settings-shot">
-          <img src="../images/settings-about.png" alt="番薯Monitor 设置截图">
-        </div>
-        <div class="floating-chip"><span></span> F1/F2 跟随鼠标所在屏幕</div>
-      </div>
-    </section>
 
-    <section class="section" id="display">
-      <div class="section-head reveal">
-        <div>
-          <p class="section-kicker">External Display</p>
-          <h2>外接屏亮度，终于像内建屏一样顺手。</h2>
-        </div>
-        <p class="section-copy">鼠标在哪块可控外接屏上，亮度键就调哪块屏。内建屏和不可控外接屏会交回 macOS。</p>
-      </div>
-      <div class="feature-grid">
-        <article class="feature wide reveal">
-          <div class="feature-icon">F1</div>
-          <h3>目标跟随鼠标</h3>
-          <p>通过屏幕位置匹配当前鼠标所在显示器，只在可 DDC 控制的外接屏上消费亮度键事件。</p>
-        </article>
-        <article class="feature reveal">
-          <div class="feature-icon">OSD</div>
-          <h3>系统浮层</h3>
-          <p>调整亮度时尽量调用 macOS 原生亮度 OSD，并显示在正在调整的屏幕上。</p>
-        </article>
-        <article class="feature reveal">
-          <div class="feature-icon">DDC</div>
-          <h3>原因透明</h3>
-          <p>显示每台屏幕的控制状态、DDC 读写状态，以及不可控原因。</p>
-        </article>
-        <article class="feature reveal">
-          <div class="feature-icon">↻</div>
-          <h3>自动刷新</h3>
-          <p>监听显示器插拔和屏幕参数变化，自动重扫显示器能力。</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="section" id="monitoring">
-      <div class="showcase">
-        <div class="screenshot-stack reveal">
-          <img src="../images/current-panel.png" alt="番薯Monitor 面板截图">
-          <img src="../images/settings-mouse.png" alt="鼠标 DPI 设置截图">
-        </div>
-        <div>
-          <p class="section-kicker">System Monitoring</p>
-          <h2>常驻监控，但不把机器吵醒。</h2>
-          <div class="timeline">
-            <article class="step reveal">
-              <span class="step-number">01</span>
-              <div><h3>核心指标优先</h3><p>CPU、GPU、内存、电池和显示器状态放在主面板，标题和数字便于快速扫读。</p></div>
-            </article>
-            <article class="step reveal">
-              <span class="step-number">02</span>
-              <div><h3>开销可见</h3><p>内存面板显示 App 自身占用，方便判断常驻成本是否合理。</p></div>
-            </article>
-            <article class="step reveal">
-              <span class="step-number">03</span>
-              <div><h3>重数据按需加载</h3><p>DDC、SSID、电池遥测、鼠标 DPI 等数据按可见性和需要读取。</p></div>
-            </article>
+      <div class="hero-product" aria-label="番薯Monitor 动态面板演示">
+        <div class="app-panel" data-live-panel>
+          <div class="panel-topbar">
+            <span class="live-dot"></span><strong>番薯monitor · v0.2.8</strong>
+            <span class="panel-spacer"></span><span aria-hidden="true">⚙︎</span><span aria-hidden="true">⏻</span><time>9:41</time>
+          </div>
+          <div class="monitor-module cpu-module">
+            <div class="module-title"><span class="module-icon">▣</span><strong>CPU: <span data-live-value="cpu">14</span>%</strong><span class="sparkline orange"></span></div>
+            <div class="module-data"><span>系统 <b>7%</b></span><span>用户 <b>7%</b></span><span>闲置 <b>86%</b></span><span>温度 <b>48°C</b></span></div>
+          </div>
+          <div class="monitor-module memory-module">
+            <div class="module-title"><span class="module-icon">▤</span><strong>Memory: <span data-live-value="memory">58</span>%</strong><span class="mini-meter"><i data-live-bar="memory"></i></span></div>
+            <div class="module-data"><span>已用 <b>13.8 GB</b></span><span>压力 <b>正常</b></span><span>已压缩 <b>1.42 GB</b></span><span>应用占用 <b>108 MB</b></span></div>
+          </div>
+          <div class="monitor-module codex-module">
+            <div class="module-title"><span class="module-icon">›_</span><strong>Codex Usage: Plus</strong><span class="mini-meter blue"><i style="width: 72%"></i></span></div>
+            <div class="module-data compact"><span>5H <b>76%</b></span><span>一周 <b>81%</b></span></div>
+          </div>
+          <div class="monitor-module display-module">
+            <div class="module-title"><span class="module-icon">▰</span><strong>Display: 外接 1</strong><span>⌄</span></div>
+            <div class="display-row"><span>▱</span><b>视网膜显示器</b><em>内置</em><label>亮度 <input type="range" min="0" max="100" value="46" aria-label="内建显示器模拟亮度"><output>46%</output></label></div>
+            <div class="display-row active"><span>▭</span><b>PG271Q</b><em>外接</em><label>亮度 <input type="range" min="0" max="100" value="20" aria-label="外接显示器模拟亮度"><output>20%</output></label><small>DDC 0 · 15%</small></div>
           </div>
         </div>
       </div>
+      <a class="scroll-cue" href="#experience">向下探索 <span>↓</span></a>
     </section>
 
-    <section class="section" id="settings">
-      <div class="section-head reveal">
-        <div>
-          <p class="section-kicker">Settings</p>
-          <h2>设置也保持清楚、短路径。</h2>
+    <section class="intro-band reveal" id="experience">
+      <p>不只是看数据</p>
+      <h2>把每天都会碰到的小事，做得更自然</h2>
+    </section>
+
+    <section class="interactive-showcase" aria-labelledby="showcase-title">
+      <div class="showcase-nav reveal">
+        <p class="section-label">互动演示</p>
+        <h2 id="showcase-title">点一下，看看它怎么工作</h2>
+        <div class="feature-tabs" role="tablist" aria-label="功能演示">
+          <button type="button" role="tab" aria-selected="true" data-demo-tab="display">显示器</button>
+          <button type="button" role="tab" aria-selected="false" data-demo-tab="lock">锁屏</button>
+          <button type="button" role="tab" aria-selected="false" data-demo-tab="mouse">鼠标</button>
+          <button type="button" role="tab" aria-selected="false" data-demo-tab="codex">Codex</button>
         </div>
-        <p class="section-copy">关于里检查更新，Codex 管理刷新间隔，鼠标页集中管理按键、DPI 和省电读取策略。</p>
       </div>
-      <div class="settings-gallery reveal">
-        <img src="../images/settings-about.png" alt="关于设置截图">
-        <img src="../images/settings-mouse.png" alt="鼠标设置截图">
-      </div>
-    </section>
 
-    <section class="section" id="performance">
-      <div class="section-head reveal">
-        <div>
-          <p class="section-kicker">Performance</p>
-          <h2>功能丰富，但采样克制。</h2>
+      <div class="demo-stage reveal">
+        <div class="demo-copy is-active" data-demo-copy="display">
+          <span class="demo-index">01</span>
+          <h3>亮度键跟着鼠标走</h3>
+          <p>鼠标在可控外接屏上时接管 F1/F2，只调整当前屏幕；回到内建屏时把事件交还 macOS</p>
+          <ul><li>DDC 超时按屏熔断</li><li>插拔后自动刷新</li><li>原生亮度 OSD</li></ul>
         </div>
-        <p class="section-copy">隐藏模块停止采样，面板关闭后降低刷新频率，较重数据缓存并按需刷新。</p>
-      </div>
-      <div class="metrics-strip reveal">
-        <div class="metric"><strong>0</strong><span>隐藏模块继续采样的理由</span></div>
-        <div class="metric"><strong>5s</strong><span>低频菜单栏刷新目标</span></div>
-        <div class="metric"><strong>按需</strong><span>DDC、SSID、鼠标 DPI</span></div>
-        <div class="metric"><strong>透明</strong><span>App 自身内存占用</span></div>
-      </div>
-    </section>
+        <div class="demo-copy" data-demo-copy="lock">
+          <span class="demo-index">02</span>
+          <h3>到点直接锁定</h3>
+          <p>为不同时间段设置独立闲置时长，跨天规则也能自然表达，不必先进入屏幕保护</p>
+          <ul><li>读取系统锁屏设置</li><li>支持 25:00 等跨天时间</li><li>睡眠唤醒后继续生效</li></ul>
+        </div>
+        <div class="demo-copy" data-demo-copy="mouse">
+          <span class="demo-index">03</span>
+          <h3>鼠标设置，需要时再加载</h3>
+          <p>读取 MX Anywhere 3S 的 DPI、电量与按键，平时不访问 HID++，减少后台开销</p>
+          <ul><li>DPI 输入与预设</li><li>自定义功能键</li><li>省电读取模式</li></ul>
+        </div>
+        <div class="demo-copy" data-demo-copy="codex">
+          <span class="demo-index">04</span>
+          <h3>额度变化，一眼看到</h3>
+          <p>面板打开时立即刷新 Codex 用量，按设定间隔更新 5H 与一周额度</p>
+          <ul><li>套餐与剩余额度</li><li>独立刷新时间</li><li>隐藏后停止请求</li></ul>
+        </div>
 
-    <section class="section" id="download">
-      <div class="download-panel reveal">
-        <div class="download-layout">
-          <div>
-            <p class="section-kicker">Download</p>
-            <h2>下载，解压，放进菜单栏。</h2>
-            <p class="section-copy">当前版本面向 Apple Silicon 和 macOS 26+。外接屏亮度控制依赖 DDC/CI 支持，F1/F2 接管需要辅助功能权限。</p>
-            <div class="hero-actions">
-              <a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">前往 Releases</a>
-              <a class="button secondary" href="https://github.com/louis16s/fanshu_monitor/issues" target="_blank" rel="noopener">反馈问题</a>
-            </div>
+        <div class="demo-canvas" data-demo-canvas="display">
+          <div class="screen-layout">
+            <button class="demo-screen built-in" type="button" data-screen="built-in"><span>视网膜显示器</span><i></i><small>macOS</small></button>
+            <button class="demo-screen external selected" type="button" data-screen="external"><span>PG271Q</span><i></i><small>DDC 20%</small></button>
+            <div class="pointer" data-pointer>↖</div>
           </div>
-          <div class="download-card">
-            <h3>系统要求</h3>
-            <ol class="install-list">
-              <li>Apple Silicon Mac</li>
-              <li>macOS 26 或更高版本</li>
-              <li>辅助功能权限用于 F1/F2 和鼠标映射</li>
-              <li>DDC/CI 显示器用于外接屏亮度控制</li>
-            </ol>
-          </div>
+          <div class="brightness-control"><button type="button" data-brightness-step="-5" aria-label="降低亮度">−</button><div><span>当前目标</span><strong data-screen-name>PG271Q</strong></div><input type="range" min="0" max="100" value="20" data-demo-brightness aria-label="模拟显示器亮度"><output data-demo-brightness-output>20%</output><button type="button" data-brightness-step="5" aria-label="提高亮度">＋</button></div>
+        </div>
+
+        <div class="demo-canvas" data-demo-canvas="lock" hidden>
+          <div class="lock-clock"><time data-demo-clock>23:40</time><span>星期日</span></div>
+          <div class="schedule-line"><b>00:00 — 07:00</b><span>闲置 5 分钟后锁定</span><i class="active"></i></div>
+          <div class="schedule-line"><b>07:00 — 24:00</b><span>闲置 20 分钟后锁定</span><i></i></div>
+          <div class="lock-status"><span>✓</span><div><b>策略已保存</b><small>当前规则会直接进入登录锁定界面</small></div></div>
+        </div>
+
+        <div class="demo-canvas" data-demo-canvas="mouse" hidden>
+          <div class="mouse-device"><div class="mouse-shape"><i></i></div><div><b>MX Anywhere 3S</b><span>已连接 · 电量 95%</span></div></div>
+          <label class="dpi-control"><span><b>DPI</b><output data-dpi-output>1600</output></span><input type="range" min="400" max="8000" step="100" value="1600" data-dpi-range></label>
+          <div class="dpi-presets"><button data-dpi="800">800</button><button class="selected" data-dpi="1600">1.6k</button><button data-dpi="2400">2.4k</button><button data-dpi="4000">4k</button><button data-dpi="8000">8k</button></div>
+        </div>
+
+        <div class="demo-canvas" data-demo-canvas="codex" hidden>
+          <div class="quota-heading"><span>›_</span><div><b>Codex Usage: Plus</b><small>刚刚更新</small></div></div>
+          <div class="quota-row"><div><span>5H 剩余</span><b>76%</b></div><meter min="0" max="100" value="76">76%</meter><small>07/20 18:30 刷新</small></div>
+          <div class="quota-row"><div><span>一周剩余</span><b>81%</b></div><meter min="0" max="100" value="81">81%</meter><small>07/24 08:00 刷新</small></div>
         </div>
       </div>
+    </section>
+
+    <section class="feature-section" id="features" aria-labelledby="features-title">
+      <div class="section-heading reveal"><p class="section-label">主要功能</p><h2 id="features-title">一个面板，少一点打扰</h2><p>默认只做必要的事，重数据在功能开启或界面可见时加载</p></div>
+      <div class="feature-list">
+        <article class="feature-row reveal"><span class="feature-number">01</span><div><h3>系统监控</h3><p>CPU、GPU、内存、电源和温度，连同 App 自身内存占用一起呈现</p></div><span class="feature-accent orange"></span></article>
+        <article class="feature-row reveal"><span class="feature-number">02</span><div><h3>外接显示器</h3><p>按鼠标位置分配 F1/F2，显示 DDC 硬件零点、能力状态与不可控原因</p></div><span class="feature-accent violet"></span></article>
+        <article class="feature-row reveal"><span class="feature-number">03</span><div><h3>自动锁屏</h3><p>按日程切换闲置时长，直接进入锁定界面，支持跨天时间段</p></div><span class="feature-accent green"></span></article>
+        <article class="feature-row reveal"><span class="feature-number">04</span><div><h3>按需加载</h3><p>网络、SSID、DDC、HID、电池重遥测和 Codex 只在需要时工作</p></div><span class="feature-accent blue"></span></article>
+      </div>
+    </section>
+
+    <section class="principles-band">
+      <div class="principle reveal"><strong>隐藏即暂停</strong><span>关闭模块后停止对应采样</span></div>
+      <div class="principle reveal"><strong>设备级隔离</strong><span>单台 DDC 失败不拖累其他屏幕</span></div>
+      <div class="principle reveal"><strong>开销看得见</strong><span>面板直接显示 App 内存占用</span></div>
+    </section>
+
+    <section class="faq-section" id="faq" aria-labelledby="faq-title">
+      <div class="faq-heading reveal"><p class="section-label">Q&amp;A</p><h2 id="faq-title">常见问题</h2><p>安装前最常被问到的几件事</p></div>
+      <div class="faq-list reveal">
+        <details><summary>为什么需要辅助功能权限？<span>＋</span></summary><p>F1/F2 接管和鼠标按键映射需要监听系统输入事件。番薯Monitor 只在相关功能开启时使用这项权限，不会记录键盘输入内容。</p></details>
+        <details><summary>所有外接显示器都能控制亮度吗？<span>＋</span></summary><p>显示器、线缆和连接方式需要支持 DDC/CI。应用会逐台检测，并明确显示不可控原因；不可控时亮度键会交还 macOS。</p></details>
+        <details><summary>会不会一直占用很多 CPU？<span>＋</span></summary><p>隐藏模块停止对应采样，面板关闭后降低非必要刷新频率，SSID、DDC、HID 和电池重遥测等数据按需读取并缓存。</p></details>
+        <details><summary>自动锁屏会先进入屏幕保护吗？<span>＋</span></summary><p>不会。启用番薯Monitor 的时间策略后，到达闲置时间会直接请求系统锁定，登录后策略会继续运行。</p></details>
+        <details><summary>支持哪些 Mac？<span>＋</span></summary><p>当前版本面向 Apple Silicon Mac，最低系统版本为 macOS 26.0。</p></details>
+        <details><summary>软件收费吗？<span>＋</span></summary><p>番薯Monitor 以 MIT License 开源发布，可免费下载、使用和审查源码。</p></details>
+      </div>
+    </section>
+
+    <section class="download-section" id="download">
+      <img src="../images/icon-128.png" alt="" class="download-logo reveal">
+      <div class="reveal"><h2>让菜单栏替你照看这些细节</h2><p>免费下载，开放源码。需要 Apple Silicon 与 macOS 26 或更高版本。</p></div>
+      <div class="hero-actions reveal"><a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">前往 Releases</a><a class="button quiet" href="https://github.com/louis16s/fanshu_monitor/issues" target="_blank" rel="noopener">反馈问题</a></div>
     </section>
   </main>
 
   <footer class="site-footer">
-    <span>© 2026 番薯Monitor contributors · MIT</span>
-    <span><a href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">github.com/louis16s/fanshu_monitor</a></span>
+    <a class="brand" href="#top"><img src="../images/icon-128.png" alt=""><span>番薯Monitor</span></a>
+    <p>为 Apple Silicon Mac 而做 · v0.2.8</p>
+    <div><a href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/louis16s/fanshu_monitor/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a><a href="../en/" data-lang="en">English</a></div>
   </footer>
 
   <script src="../assets/site.js"></script>
