@@ -1,6 +1,6 @@
 # Fanshu Monitor
 
-A macOS menu bar system monitor and external display control utility for Apple Silicon.
+A macOS menu bar system monitor, external display controller, and scheduled lock utility for Apple Silicon.
 
 <p align="center">
   <img src="images/icon-128.png" width="112" alt="Fanshu Monitor logo">
@@ -21,9 +21,9 @@ A macOS menu bar system monitor and external display control utility for Apple S
 
 ## Overview
 
-Fanshu Monitor is a lightweight menu bar app for CPU, GPU, memory, battery, Codex quota, mouse, and display status. The direct distribution build can take over F1/F2 brightness keys based on the screen under your pointer, adjust DDC brightness for controllable external displays, and show the native macOS brightness overlay whenever possible.
+Fanshu Monitor is a lightweight menu bar app for CPU, GPU, memory, power, Codex quota, mouse, and display status. It routes F1/F2 brightness keys to the display under your pointer, controls compatible external displays through DDC, and can lock macOS directly on different schedules throughout the day.
 
-Current version: `0.2.6`
+Current version: `0.2.8`
 
 ## Highlights
 
@@ -31,25 +31,21 @@ Current version: `0.2.6`
 - External display brightness target follows the pointer
 - Built-in and unsupported displays pass F1/F2 back to macOS
 - Display capability, DDC state, and unsupported reasons are shown per display
+- DDC failures are isolated per display with timeout circuit breaking and backoff
+- Scheduled locking supports custom ranges, next-day times, and independent idle limits
 - Hidden modules stop sampling, and panel-closed refresh slows down
+- Network, SSID, display discovery, heavy battery telemetry, and HID data load on demand
 - Memory panel shows the app's own memory footprint
 - Mouse settings support MX Anywhere 3S DPI reads, DPI apply, and button mapping
+- Codex shows plan, 5H and weekly quota, plus separate reset times
 - About settings include update checks, project links, and reference project notes
 
 ## Screenshots
 
-If GitHub image caching is temporarily unavailable, open the [website](https://louis16s.github.io/fanshu_monitor/) for the full showcase.
+This is the current `0.2.8` website and live panel preview. Open the [website](https://louis16s.github.io/fanshu_monitor/) to interact with the display, lock, mouse, and Codex demos.
 
 <p align="center">
-  <img src="images/current-panel.png" width="390" alt="Fanshu Monitor panel screenshot">
-</p>
-
-<p align="center">
-  <img src="images/settings-about.png" width="680" alt="Fanshu Monitor about settings screenshot">
-</p>
-
-<p align="center">
-  <img src="images/settings-mouse.png" width="680" alt="Fanshu Monitor mouse settings screenshot">
+  <img src="images/site-preview.png" width="900" alt="Fanshu Monitor website and live panel preview">
 </p>
 
 ## Install
@@ -88,6 +84,10 @@ Deployed URL:
 ```text
 https://louis16s.github.io/fanshu_monitor/
 ```
+
+## Brand Assets
+
+The editable logo source is [`scripts/logo.html`](../scripts/logo.html), drawn entirely with HTML and CSS. App icons, website icons, and README assets are rendered from this single source.
 
 ## License
 

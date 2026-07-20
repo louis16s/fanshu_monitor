@@ -1,6 +1,6 @@
 # 番薯Monitor
 
-面向 Apple Silicon 的 macOS 菜单栏系统监控与外接显示器控制工具。
+面向 Apple Silicon 的 macOS 菜单栏系统监控、外接显示器控制与自动锁屏工具。
 
 <p align="center">
   <img src="docs/images/icon-128.png" width="112" alt="番薯Monitor logo">
@@ -21,9 +21,9 @@
 
 ## 简介
 
-番薯Monitor 是一个轻量常驻的菜单栏应用，用来观察 CPU、GPU、内存、电池、Codex 额度、鼠标和显示器状态。直发版本支持根据鼠标所在屏幕接管 F1/F2 亮度键，在可控外接屏上调整 DDC 亮度，并尽量显示系统原生亮度浮层。
+番薯Monitor 是一个轻量常驻的菜单栏应用，用来观察 CPU、GPU、内存、电源、Codex 额度、鼠标和显示器状态。它会根据鼠标所在屏幕分配 F1/F2 亮度键，在可控外接屏上调整 DDC 亮度，也能按不同时间段直接锁定系统。
 
-当前版本：`0.2.6`
+当前版本：`0.2.8`
 
 ## 主要功能
 
@@ -31,25 +31,21 @@
 - 根据鼠标所在屏幕控制外接显示器亮度
 - 内建屏和不可控外接屏会把 F1/F2 交回 macOS
 - 显示每台屏幕的控制能力、DDC 状态和不可控原因
+- DDC 故障按屏隔离，超时后自动熔断并退避重试
+- 自动锁屏支持自定义时间段、跨天时间和独立闲置时长
 - 隐藏模块停止对应采样，面板关闭后降低采样频率
+- 网络、SSID、显示器探测、电池重遥测和 HID 数据按需加载
 - 内存面板显示 App 自身内存占用，便于观察常驻开销
 - 鼠标页支持 MX Anywhere 3S DPI 读取、设定和按键映射
+- Codex 模块显示套餐、5H 与一周剩余额度和刷新时间
 - 关于页提供更新检查、项目链接和参考项目说明
 
 ## 截图
 
-如果 GitHub 图片缓存暂时不可用，可以直接访问 [官网](https://louis16s.github.io/fanshu_monitor/) 查看完整展示。
+下面是当前 `0.2.8` 官网与动态面板预览。可以直接访问 [官网](https://louis16s.github.io/fanshu_monitor/) 操作显示器、锁屏、鼠标和 Codex 演示。
 
 <p align="center">
-  <img src="docs/images/current-panel.png" width="390" alt="番薯Monitor 面板截图">
-</p>
-
-<p align="center">
-  <img src="docs/images/settings-about.png" width="680" alt="番薯Monitor 关于设置截图">
-</p>
-
-<p align="center">
-  <img src="docs/images/settings-mouse.png" width="680" alt="番薯Monitor 鼠标设置截图">
+  <img src="docs/images/site-preview.png" width="900" alt="番薯Monitor 官网与动态面板预览">
 </p>
 
 ## 安装
@@ -88,6 +84,10 @@ xcodebuild -project 番薯monitor.xcodeproj -scheme 番薯Monitor -configuration
 ```text
 https://louis16s.github.io/fanshu_monitor/
 ```
+
+## 品牌资源
+
+Logo 的可编辑源稿位于 [`scripts/logo.html`](scripts/logo.html)，完全使用 HTML 与 CSS 绘制。App Icon、网站图标和 README 图标都由这份源稿统一渲染。
 
 ## 许可证
 

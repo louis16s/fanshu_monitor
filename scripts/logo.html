@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>番薯Monitor Logo Source</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 1024px; height: 1024px; margin: 0; overflow: hidden; background: transparent; }
+    .app-icon {
+      position: relative;
+      width: 1024px;
+      height: 1024px;
+      overflow: hidden;
+      border: 7px solid rgba(222, 249, 246, 0.55);
+      border-radius: 224px;
+      background:
+        radial-gradient(circle at 50% 42%, #0b4146 0 28%, transparent 56%),
+        linear-gradient(145deg, #07343a 0%, #061c29 58%, #050d17 100%);
+      box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.05);
+    }
+    .halo {
+      position: absolute;
+      left: 180px;
+      top: 145px;
+      width: 664px;
+      height: 664px;
+      border: 2px solid rgba(75, 235, 197, 0.08);
+      border-radius: 50%;
+      box-shadow: 0 0 100px rgba(42, 223, 186, 0.08);
+    }
+    .sun-disc {
+      position: absolute;
+      left: 236px;
+      top: 190px;
+      width: 552px;
+      height: 552px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ffb35b 7%, #ff6e73 48%, #c55acb 100%);
+      box-shadow: 0 34px 72px rgba(2, 10, 18, 0.36), 0 0 54px rgba(255, 102, 125, 0.15);
+    }
+    .sun-disc::before {
+      position: absolute;
+      left: 110px;
+      top: 92px;
+      width: 136px;
+      height: 76px;
+      content: "";
+      border-top: 22px solid rgba(255, 255, 255, 0.48);
+      border-radius: 50%;
+      transform: rotate(-28deg);
+    }
+    .track-shadow,
+    .track {
+      position: absolute;
+      left: 176px;
+      top: 584px;
+      width: 672px;
+      height: 64px;
+      border-radius: 34px;
+    }
+    .track-shadow { background: rgba(1, 20, 26, 0.35); transform: translateY(12px); filter: blur(12px); }
+    .track { background: #2de0bc; box-shadow: 0 0 30px rgba(45, 224, 188, 0.48); }
+    .track::before {
+      position: absolute;
+      inset: 20px 26px;
+      content: "";
+      border-radius: 12px;
+      background: rgba(228, 255, 249, 0.23);
+    }
+    .control {
+      position: absolute;
+      left: 676px;
+      top: 542px;
+      width: 148px;
+      height: 148px;
+      border: 14px solid rgba(45, 224, 188, 0.92);
+      border-radius: 50%;
+      background: #f4fff8;
+      box-shadow: 0 0 0 8px rgba(4, 38, 42, 0.23), 0 12px 32px rgba(0, 0, 0, 0.28), 0 0 34px rgba(160, 255, 200, 0.42);
+    }
+    .control::after {
+      position: absolute;
+      inset: 28px;
+      content: "";
+      border-radius: 50%;
+      background: #baffb6;
+    }
+    .ray { position: absolute; left: 745px; top: 470px; width: 10px; height: 52px; border-radius: 6px; background: rgba(188, 255, 188, 0.76); transform-origin: 5px 146px; }
+    .r1 { transform: rotate(-54deg); }
+    .r2 { transform: rotate(-27deg); }
+    .r3 { transform: rotate(0deg); }
+    .r4 { transform: rotate(27deg); }
+    .r5 { transform: rotate(54deg); }
+  </style>
+</head>
+<body>
+  <div class="app-icon" role="img" aria-label="番薯Monitor 标志">
+    <div class="halo"></div>
+    <div class="sun-disc"></div>
+    <div class="track-shadow"></div>
+    <div class="track"></div>
+    <span class="ray r1"></span><span class="ray r2"></span><span class="ray r3"></span><span class="ray r4"></span><span class="ray r5"></span>
+    <div class="control"></div>
+  </div>
+</body>
+</html>
