@@ -1,19 +1,49 @@
 const root = document.documentElement;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+const systemDarkMode = window.matchMedia("(prefers-color-scheme: dark)");
 const storedTheme = localStorage.getItem("fanshu-theme");
 
 if (storedTheme === "light" || storedTheme === "dark") {
   root.dataset.theme = storedTheme;
 }
 
+function resolvedTheme() {
+  return root.dataset.theme || (systemDarkMode.matches ? "dark" : "light");
+}
+
+function updateThemeControls() {
+  const theme = resolvedTheme();
+  const isEnglish = root.lang === "en";
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    button.textContent = theme === "dark" ? "☀︎" : "☾";
+    button.setAttribute("aria-label", theme === "dark"
+      ? (isEnglish ? "Use light appearance" : "切换到浅色外观")
+      : (isEnglish ? "Use dark appearance" : "切换到深色外观"));
+  });
+}
+
 document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
   button.addEventListener("click", () => {
-    const current = root.dataset.theme || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const current = resolvedTheme();
     const next = current === "dark" ? "light" : "dark";
     root.dataset.theme = next;
     localStorage.setItem("fanshu-theme", next);
+    updateThemeControls();
   });
 });
+updateThemeControls();
+systemDarkMode.addEventListener?.("change", () => {
+  if (!root.dataset.theme) updateThemeControls();
+});
+
+const header = document.querySelector(".site-header");
+const hero = document.querySelector(".hero");
+if (header && hero && "IntersectionObserver" in window) {
+  const headerObserver = new IntersectionObserver(([entry]) => {
+    header.classList.toggle("is-past-hero", !entry.isIntersecting);
+  }, { threshold: 0.01, rootMargin: "-64px 0px 0px" });
+  headerObserver.observe(hero);
+}
 
 document.querySelectorAll("[data-lang]").forEach((link) => {
   link.addEventListener("click", () => localStorage.setItem("fanshu-lang", link.dataset.lang));
