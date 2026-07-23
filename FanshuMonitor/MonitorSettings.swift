@@ -261,17 +261,19 @@ final class MonitorSettings: ObservableObject {
 
     func addLockScreenPolicy() {
         guard lockScreenPolicies.count < Self.maximumLockScreenPolicies else { return }
+        let defaultName = nextLockScreenPolicyName()
         let newPolicy: LockScreenPolicy
         if let last = lockScreenPolicies.last {
             let startMinutes = last.endMinutes < 1_440 ? last.endMinutes : 0
             newPolicy = LockScreenPolicy(
+                name: defaultName,
                 dayScope: last.dayScope,
                 startMinutes: startMinutes,
                 endMinutes: startMinutes == 0 ? 60 : 1_440,
                 idleMinutes: last.idleMinutes
             )
         } else {
-            newPolicy = LockScreenPolicy()
+            newPolicy = LockScreenPolicy(name: defaultName)
         }
         lockScreenPolicies.append(newPolicy)
     }
@@ -289,7 +291,9 @@ final class MonitorSettings: ObservableObject {
 
     func updateLockScreenPolicy(_ policy: LockScreenPolicy) {
         guard let index = lockScreenPolicies.firstIndex(where: { $0.id == policy.id }) else { return }
-        lockScreenPolicies[index] = policy
+        var normalizedPolicy = policy
+        normalizedPolicy.name = LockScreenPolicy.normalizedName(policy.name)
+        lockScreenPolicies[index] = normalizedPolicy
     }
 
     func updateLockScreenPolicy(
@@ -299,12 +303,25 @@ final class MonitorSettings: ObservableObject {
         guard let index = lockScreenPolicies.firstIndex(where: { $0.id == id }) else { return }
         var policy = lockScreenPolicies[index]
         update(&policy)
+        policy.name = LockScreenPolicy.normalizedName(policy.name)
         guard policy != lockScreenPolicies[index] else { return }
         lockScreenPolicies[index] = policy
     }
 
     func removeLockScreenPolicy(id: LockScreenPolicy.ID) {
         lockScreenPolicies.removeAll { $0.id == id }
+    }
+
+    private func nextLockScreenPolicyName() -> String {
+        let existingNames = Set(
+            lockScreenPolicies.enumerated().map { index, policy in
+                policy.name.isEmpty ? "时间段 \(index + 1)" : policy.name
+            }
+        )
+        let availableNumber = (1...Self.maximumLockScreenPolicies).first {
+            !existingNames.contains("时间段 \($0)")
+        } ?? (lockScreenPolicies.count + 1)
+        return "时间段 \(availableNumber)"
     }
 
     var lockScreenBaseline: ScreenSaverLockBaseline? {

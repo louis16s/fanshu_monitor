@@ -12,7 +12,12 @@ struct LockScreenSettingsView: View {
     @State private var showsRestoreConfirmation = false
 
     var body: some View {
-        SettingsPage {
+        SettingsPage(
+            showsScrollIndicators: needsScrollIndicators,
+            sectionSpacing: 14,
+            topPadding: 18,
+            bottomPadding: 18
+        ) {
             SettingsGroup("系统锁屏设置") {
                 SettingsRow(
                     title: "直接锁定",
@@ -236,6 +241,14 @@ struct LockScreenSettingsView: View {
         return "\(minutes) 分钟"
     }
 
+    private var needsScrollIndicators: Bool {
+        systemSettingsExpanded
+            || settings.lockScreenPolicies.count > 2
+            || settings.lockScreenPolicies.contains {
+                $0.dayScope == .custom || !$0.hasValidTimeRange
+            }
+    }
+
     private var lockStatusIcon: String {
         switch controller.status {
         case .locking, .locked:
@@ -320,6 +333,7 @@ struct LockScreenSettingsView: View {
 
 private struct LockScreenPolicyEditor: View {
     private enum EditorField: Hashable {
+        case name
         case start
         case end
         case idle
@@ -329,16 +343,31 @@ private struct LockScreenPolicyEditor: View {
     let policy: LockScreenPolicy
     @ObservedObject var settings: MonitorSettings
     let isActive: Bool
+    @State private var nameText = ""
     @State private var idleMinutesText = ""
     @State private var startTimeText = ""
     @State private var endTimeText = ""
+    @State private var nameSaveTask: Task<Void, Never>?
     @State private var idleSaveTask: Task<Void, Never>?
     @FocusState private var focusedField: EditorField?
     @State private var previousFocusedField: EditorField?
 
     var body: some View {
         VStack(spacing: 0) {
-            SettingsRow(title: "时间段 \(index + 1)") {
+            HStack(spacing: 12) {
+                TextField("时间段名称", text: $nameText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body.weight(.medium))
+                    .frame(width: 112)
+                    .focused($focusedField, equals: .name)
+                    .onSubmit {
+                        saveName()
+                        focusedField = nil
+                    }
+                    .help("自定义时间段名称")
+
+                Spacer(minLength: 4)
+
                 HStack(spacing: 7) {
                     Picker("日期", selection: dayScopeBinding) {
                         ForEach(LockScreenDayScope.allCases) { scope in
@@ -366,6 +395,9 @@ private struct LockScreenPolicyEditor: View {
                     .help("删除这条锁屏时间")
                 }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .frame(minHeight: 44)
 
             SettingsDivider()
 
@@ -407,6 +439,16 @@ private struct LockScreenPolicyEditor: View {
             }
         }
         .onAppear { syncEditorText() }
+        .onChange(of: policy.name) { _, newValue in
+            if focusedField != .name {
+                nameText = newValue.isEmpty ? fallbackName : newValue
+            }
+        }
+        .onChange(of: index) {
+            if policy.name.isEmpty, focusedField != .name {
+                nameText = fallbackName
+            }
+        }
         .onChange(of: policy.idleMinutes) { _, newValue in
             if focusedField != .idle { idleMinutesText = String(newValue) }
         }
@@ -418,6 +460,12 @@ private struct LockScreenPolicyEditor: View {
         }
         .onChange(of: startTimeText) { applyStartTimeIfValid() }
         .onChange(of: endTimeText) { applyEndTimeIfValid() }
+        .onChange(of: nameText) {
+            if nameText.count > LockScreenPolicy.maximumNameLength {
+                nameText = String(nameText.prefix(LockScreenPolicy.maximumNameLength))
+            }
+            scheduleNameSave()
+        }
         .onChange(of: idleMinutesText) { scheduleIdleMinutesSave() }
         .onChange(of: focusedField) { _, field in
             if let previousFocusedField, previousFocusedField != field {
@@ -426,6 +474,7 @@ private struct LockScreenPolicyEditor: View {
             previousFocusedField = field
         }
         .onDisappear {
+            nameSaveTask?.cancel()
             idleSaveTask?.cancel()
             if let focusedField { finishEditing(focusedField) }
         }
@@ -492,6 +541,31 @@ private struct LockScreenPolicyEditor: View {
         update { $0.idleMinutes = minutes }
     }
 
+    private var fallbackName: String {
+        "时间段 \(index + 1)"
+    }
+
+    private func saveName() {
+        nameSaveTask?.cancel()
+        let normalized = LockScreenPolicy.normalizedName(nameText)
+        update { $0.name = normalized }
+        if !normalized.isEmpty {
+            nameText = normalized
+        } else if focusedField != .name {
+            nameText = fallbackName
+        }
+    }
+
+    private func scheduleNameSave() {
+        nameSaveTask?.cancel()
+        guard focusedField == .name else { return }
+        nameSaveTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            saveName()
+        }
+    }
+
     @ViewBuilder
     private func timeField(
         text: Binding<String>,
@@ -524,6 +598,8 @@ private struct LockScreenPolicyEditor: View {
 
     private func finishEditing(_ field: EditorField) {
         switch field {
+        case .name:
+            saveName()
         case .start:
             applyStartTimeIfValid()
             restore(field)
@@ -538,6 +614,8 @@ private struct LockScreenPolicyEditor: View {
     private func restore(_ field: EditorField) {
         guard let current = settings.lockScreenPolicies.first(where: { $0.id == policy.id }) else { return }
         switch field {
+        case .name:
+            nameText = current.name.isEmpty ? fallbackName : current.name
         case .start:
             startTimeText = LockScreenPolicy.clockText(current.startMinutes)
         case .end:
@@ -548,6 +626,7 @@ private struct LockScreenPolicyEditor: View {
     }
 
     private func syncEditorText() {
+        nameText = policy.name.isEmpty ? fallbackName : policy.name
         idleMinutesText = String(policy.idleMinutes)
         startTimeText = LockScreenPolicy.clockText(policy.startMinutes)
         endTimeText = LockScreenPolicy.clockText(policy.endMinutes)

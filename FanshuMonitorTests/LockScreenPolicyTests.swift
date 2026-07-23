@@ -466,6 +466,7 @@ struct LockScreenPolicyTests {
         """
 
         let policy = try JSONDecoder().decode(LockScreenPolicy.self, from: Data(json.utf8))
+        #expect(policy.name.isEmpty)
         #expect(policy.customWeekdays == Set(2...6))
         #expect(policy.endMinutes == 1_440)
     }
@@ -489,11 +490,14 @@ struct LockScreenPolicyTests {
 
         #expect(!settings.lockScreenPoliciesEnabled)
         settings.addLockScreenPolicy()
+        let id = settings.lockScreenPolicies[0].id
+        settings.updateLockScreenPolicy(id: id) { $0.name = "深夜专注" }
         settings.lockScreenPoliciesEnabled = true
 
         let loaded = MonitorSettings(defaults: defaults)
         #expect(loaded.lockScreenPoliciesEnabled)
         #expect(loaded.lockScreenPolicies.count == 1)
+        #expect(loaded.lockScreenPolicies.first?.name == "深夜专注")
         #expect(loaded.lockScreenPolicies.first?.idleMinutes == 10)
     }
 
@@ -524,11 +528,13 @@ struct LockScreenPolicyTests {
         settings.updateLockScreenPolicy(id: id) { $0.startMinutes = 20 * 60 }
         settings.updateLockScreenPolicy(id: id) { $0.endMinutes = 24 * 60 }
         settings.updateLockScreenPolicy(id: id) { $0.idleMinutes = 37 }
+        settings.updateLockScreenPolicy(id: id) { $0.name = "工作时间" }
 
         let policy = settings.lockScreenPolicies[0]
         #expect(policy.startMinutes == 20 * 60)
         #expect(policy.endMinutes == 24 * 60)
         #expect(policy.idleMinutes == 37)
+        #expect(policy.name == "工作时间")
     }
 
     @Test func addedPolicyContinuesThroughEndOfDay() {
@@ -547,6 +553,57 @@ struct LockScreenPolicyTests {
 
         #expect(settings.lockScreenPolicies[1].startMinutes == 7 * 60)
         #expect(settings.lockScreenPolicies[1].endMinutes == 24 * 60)
+    }
+
+    @Test func addedPolicyUsesTheFirstAvailableDefaultName() {
+        let suite = "LockScreenPolicyTests.addedPolicyUsesTheFirstAvailableDefaultName"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+        settings.addLockScreenPolicy()
+        settings.addLockScreenPolicy()
+        settings.addLockScreenPolicy()
+
+        settings.removeLockScreenPolicy(id: settings.lockScreenPolicies[1].id)
+        settings.addLockScreenPolicy()
+
+        #expect(settings.lockScreenPolicies.map(\.name) == ["时间段 1", "时间段 3", "时间段 2"])
+    }
+
+    @Test func addedPolicyReservesFallbackNamesFromLegacyRules() throws {
+        let suite = "LockScreenPolicyTests.addedPolicyReservesFallbackNamesFromLegacyRules"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let firstID = UUID()
+        let secondID = UUID()
+        let legacyJSON = """
+        [
+          {"id":"\(firstID.uuidString)","isEnabled":true,"dayScope":"everyDay","startMinutes":0,"endMinutes":420,"idleMinutes":5},
+          {"id":"\(secondID.uuidString)","isEnabled":true,"dayScope":"everyDay","startMinutes":420,"endMinutes":1440,"idleMinutes":20}
+        ]
+        """
+        defaults.set(Data(legacyJSON.utf8), forKey: "settings.lockScreen.policies")
+        let settings = MonitorSettings(defaults: defaults)
+
+        settings.addLockScreenPolicy()
+
+        #expect(settings.lockScreenPolicies.map(\.name) == ["", "", "时间段 3"])
+    }
+
+    @Test func policyNameIsNormalizedAtTheSettingsBoundary() {
+        let suite = "LockScreenPolicyTests.policyNameIsNormalizedAtTheSettingsBoundary"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+        settings.addLockScreenPolicy()
+        let id = settings.lockScreenPolicies[0].id
+
+        settings.updateLockScreenPolicy(id: id) {
+            $0.name = "  这是一个超过十六个字符的自定义锁屏时间段名称  "
+        }
+
+        #expect(settings.lockScreenPolicies[0].name == "这是一个超过十六个字符的自定义锁")
+        #expect(settings.lockScreenPolicies[0].name.count == LockScreenPolicy.maximumNameLength)
     }
 
     private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int) -> Date {

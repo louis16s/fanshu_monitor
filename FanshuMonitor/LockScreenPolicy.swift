@@ -70,8 +70,10 @@ enum LockScreenPolicyStatus: Equatable, Sendable {
 
 struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
     static let maximumExtendedHour = 40
+    static let maximumNameLength = 16
 
     var id: UUID
+    var name: String
     var isEnabled: Bool
     var dayScope: LockScreenDayScope
     var customWeekdays: Set<Int>
@@ -81,6 +83,7 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
 
     init(
         id: UUID = UUID(),
+        name: String = "",
         isEnabled: Bool = true,
         dayScope: LockScreenDayScope = .everyDay,
         customWeekdays: Set<Int>? = nil,
@@ -89,6 +92,7 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         idleMinutes: Int = 10
     ) {
         self.id = id
+        self.name = Self.normalizedName(name)
         self.isEnabled = isEnabled
         self.dayScope = dayScope
         self.customWeekdays = Self.validWeekdays(customWeekdays ?? Self.defaultWeekdays(for: dayScope))
@@ -170,6 +174,11 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         return hour * 60 + minute
     }
 
+    static func normalizedName(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(trimmed.prefix(maximumNameLength))
+    }
+
     mutating func toggleCustomWeekday(_ weekday: Int) {
         guard (1...7).contains(weekday) else { return }
         if customWeekdays.contains(weekday) {
@@ -206,12 +215,13 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, isEnabled, dayScope, customWeekdays, startMinutes, endMinutes, idleMinutes
+        case id, name, isEnabled, dayScope, customWeekdays, startMinutes, endMinutes, idleMinutes
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
+        name = Self.normalizedName(try container.decodeIfPresent(String.self, forKey: .name) ?? "")
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
         dayScope = try container.decode(LockScreenDayScope.self, forKey: .dayScope)
         customWeekdays = Self.validWeekdays(

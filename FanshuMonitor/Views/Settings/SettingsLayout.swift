@@ -4,16 +4,31 @@ import SwiftUI
 struct SettingsPage<Content: View>: View {
     let content: Content
     let scrolls: Bool
+    let showsScrollIndicators: Bool
+    let sectionSpacing: CGFloat
+    let topPadding: CGFloat
+    let bottomPadding: CGFloat
 
-    init(scrolls: Bool = true, @ViewBuilder content: () -> Content) {
+    init(
+        scrolls: Bool = true,
+        showsScrollIndicators: Bool = true,
+        sectionSpacing: CGFloat = 18,
+        topPadding: CGFloat = 26,
+        bottomPadding: CGFloat = 30,
+        @ViewBuilder content: () -> Content
+    ) {
         self.scrolls = scrolls
+        self.showsScrollIndicators = showsScrollIndicators
+        self.sectionSpacing = sectionSpacing
+        self.topPadding = topPadding
+        self.bottomPadding = bottomPadding
         self.content = content()
     }
 
     var body: some View {
         Group {
             if scrolls {
-                ScrollView {
+                ScrollView(.vertical, showsIndicators: showsScrollIndicators) {
                     pageContent
                 }
             } else {
@@ -25,12 +40,12 @@ struct SettingsPage<Content: View>: View {
     }
 
     private var pageContent: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: sectionSpacing) {
             content
         }
-        .padding(.top, 26)
+        .padding(.top, topPadding)
         .padding(.horizontal, 34)
-        .padding(.bottom, 30)
+        .padding(.bottom, bottomPadding)
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
