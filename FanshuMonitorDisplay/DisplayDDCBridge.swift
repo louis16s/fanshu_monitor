@@ -15,27 +15,68 @@ final class DisplayDDCBridge {
     private var controlCodes: [ControlKey: DDCVCPCode] = [:]
     private let maxDetectLimit: UInt16 = 100
     private let registry = DDCFaultRegistry()
+    private let stateLock = NSLock()
 
     func refresh(displayIDs: [CGDirectDisplayID]) {
-        let knownDisplayIDs = Set(servicesByDisplayID.keys)
+        let matchedServices = Arm64DDCMatcher().matchedServices(for: displayIDs)
+        let (knownDisplayIDs, changedDisplayIDs) = stateLock.withLock {
+            let previousServices = servicesByDisplayID
+            let changedDisplayIDs = Set(displayIDs.filter {
+                previousServices[$0]?.serviceLocation != matchedServices[$0]?.serviceLocation
+            })
+            return (Set(previousServices.keys), changedDisplayIDs)
+        }
         for displayID in knownDisplayIDs.subtracting(displayIDs) {
             registry.reset(displayID: displayID)
         }
-        servicesByDisplayID = Arm64DDCMatcher().matchedServices(for: displayIDs)
-        valueRanges = valueRanges.filter { displayIDs.contains($0.key.displayID) }
-        controlCodes = controlCodes.filter { displayIDs.contains($0.key.displayID) }
+        for displayID in changedDisplayIDs {
+            registry.reset(displayID: displayID)
+        }
+        stateLock.withLock {
+            servicesByDisplayID = matchedServices
+            valueRanges = valueRanges.filter {
+                displayIDs.contains($0.key.displayID) && !changedDisplayIDs.contains($0.key.displayID)
+            }
+            controlCodes = controlCodes.filter {
+                displayIDs.contains($0.key.displayID) && !changedDisplayIDs.contains($0.key.displayID)
+            }
+        }
     }
 
     func hasService(for displayID: CGDirectDisplayID) -> Bool {
-        servicesByDisplayID[displayID] != nil
+        stateLock.withLock { servicesByDisplayID[displayID] != nil }
     }
 
     func isTemporarilyDisabled(_ control: DisplayControlKind, displayID: CGDirectDisplayID) -> Bool {
         registry.isDisabled(ControlKey(displayID: displayID, control: control))
     }
 
+    func hasVerifiedControl(_ control: DisplayControlKind, displayID: CGDirectDisplayID) -> Bool {
+        stateLock.withLock {
+            controlCodes[ControlKey(displayID: displayID, control: control)] != nil
+        }
+    }
+
+    func setValueRange(_ range: DDCValueRange, for control: DisplayControlKind, displayID: CGDirectDisplayID) {
+        stateLock.withLock {
+            valueRanges[ControlKey(displayID: displayID, control: control)] = range
+        }
+    }
+
+    func valueRange(for control: DisplayControlKind, displayID: CGDirectDisplayID) -> DDCValueRange? {
+        stateLock.withLock {
+            valueRanges[ControlKey(displayID: displayID, control: control)]
+        }
+    }
+
+    func brightnessWritePlan(for percentage: Double, displayID: CGDirectDisplayID) -> DDCBrightnessWritePlan {
+        let range = valueRange(for: .brightness, displayID: displayID)
+            ?? DDCValueRange(min: 0, max: maxDetectLimit)
+        return range.brightnessWritePlan(for: percentage)
+    }
+
     func read(_ control: DisplayControlKind, displayID: CGDirectDisplayID, fastFail: Bool = false) -> Double? {
-        guard let service = servicesByDisplayID[displayID] else {
+        guard let service = stateLock.withLock({ servicesByDisplayID[displayID] }) else {
             displayDDCLog.debug("No DDC service for display \(displayID, privacy: .public)")
             return nil
         }
@@ -62,10 +103,13 @@ final class DisplayDDCBridge {
             }
 
             let detectedMax = min(values.max, maxDetectLimit)
-            var range = valueRanges[key] ?? DDCValueRange(min: 0, max: detectedMax)
-            range.max = max(range.min + 1, detectedMax)
-            valueRanges[key] = range
-            controlCodes[key] = vcp
+            let range = stateLock.withLock {
+                var range = valueRanges[key] ?? DDCValueRange(min: 0, max: detectedMax)
+                range.max = max(range.min + 1, detectedMax)
+                valueRanges[key] = range
+                controlCodes[key] = vcp
+                return range
+            }
 
             let percentage = range.percentage(from: values.current)
             registry.recordReadSuccess(key)
@@ -81,21 +125,26 @@ final class DisplayDDCBridge {
         return nil
     }
 
-    func write(_ value: Double, for control: DisplayControlKind, displayID: CGDirectDisplayID) -> Bool {
-        guard let service = servicesByDisplayID[displayID] else {
+    func write(_ value: Double, for control: DisplayControlKind, displayID: CGDirectDisplayID) -> DDCWriteOutcome {
+        guard let service = stateLock.withLock({ servicesByDisplayID[displayID] }) else {
             displayDDCLog.warning("No DDC service while writing display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public)")
-            return false
+            return .failure
         }
 
         let key = ControlKey(displayID: displayID, control: control)
         guard !registry.isDisabled(key) else {
             displayDDCLog.debug("DDC write skipped for display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public); temporarily disabled")
-            return false
+            return .failure
         }
 
-        let range = valueRanges[key] ?? DDCValueRange(min: 0, max: maxDetectLimit)
+        let range = stateLock.withLock {
+            valueRanges[key] ?? DDCValueRange(min: 0, max: maxDetectLimit)
+        }
         let clampedPercentage = min(100, max(0, value))
-        var ddcValue = range.rawValue(for: clampedPercentage)
+        let brightnessPlan = control == .brightness
+            ? range.brightnessWritePlan(for: clampedPercentage)
+            : nil
+        var ddcValue = brightnessPlan?.rawValue ?? range.rawValue(for: clampedPercentage)
         if control == .volume, value > 0 {
             ddcValue = max(1, ddcValue)
         }
@@ -111,7 +160,7 @@ final class DisplayDDCBridge {
             if value <= 0, muteSuccess {
                 registry.recordWriteSuccess(key)
                 displayDDCLog.notice("Wrote DDC mute display \(displayID, privacy: .public)")
-                return true
+                return .success()
             }
         }
 
@@ -126,7 +175,9 @@ final class DisplayDDCBridge {
                 "Write DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public) code \(vcp.rawValue, privacy: .public) value \(ddcValue, privacy: .public) range \(range.min, privacy: .public)-\(range.max, privacy: .public) success \(success, privacy: .public)"
             )
             if success {
-                controlCodes[key] = vcp
+                stateLock.withLock {
+                    controlCodes[key] = vcp
+                }
                 registry.recordWriteSuccess(key)
                 calibrateMinimumIfNeeded(
                     requestedPercentage: clampedPercentage,
@@ -136,17 +187,20 @@ final class DisplayDDCBridge {
                     service: service.service,
                     vcp: vcp
                 )
-                return true
+                return .success(
+                    quantizationOverlayOpacity: brightnessPlan?.overlayOpacity ?? 0
+                )
             }
         }
 
         registry.recordWriteFailure(key)
-        return false
+        return .failure
     }
 
     private func orderedCandidates(for key: ControlKey) -> [DDCVCPCode] {
         let candidates = DDCVCPCode.candidates(for: key.control)
-        guard let preferred = controlCodes[key], candidates.contains(preferred) else {
+        let preferred = stateLock.withLock { controlCodes[key] }
+        guard let preferred, candidates.contains(preferred) else {
             return candidates
         }
         return [preferred] + candidates.filter { $0 != preferred }
@@ -177,14 +231,16 @@ final class DisplayDDCBridge {
         else { return }
 
         let learnedRange = DDCValueRange(min: returnedCurrent, max: detectedMax)
-        valueRanges[key] = learnedRange
+        stateLock.withLock {
+            valueRanges[key] = learnedRange
+        }
         displayDDCLog.notice(
             "Learned DDC minimum for display \(key.displayID, privacy: .public) brightness: \(returnedCurrent, privacy: .public), max \(detectedMax, privacy: .public)"
         )
     }
 }
 
-struct DDCValueRange: Equatable {
+nonisolated struct DDCValueRange: Equatable {
     var min: UInt16
     var max: UInt16
 
@@ -202,6 +258,48 @@ struct DDCValueRange: Equatable {
         let clampedPercentage = Swift.min(100, Swift.max(0, percentage))
         let raw = Double(max - min) * (clampedPercentage / 100) + Double(min)
         return UInt16(Swift.min(Double(max), Swift.max(Double(min), raw.rounded())))
+    }
+
+    func brightnessWritePlan(for percentage: Double) -> DDCBrightnessWritePlan {
+        let clampedPercentage = Swift.min(100, Swift.max(0, percentage))
+        let span = Double(max - min)
+        let desiredRaw = Double(min) + span * clampedPercentage / 100
+        let raw = UInt16(
+            Swift.min(
+                Double(max),
+                Swift.max(Double(min), desiredRaw.rounded(.up))
+            )
+        )
+        let actualPercentage = self.percentage(from: raw)
+        let overlayOpacity: Double
+        if clampedPercentage > 0, actualPercentage > clampedPercentage {
+            overlayOpacity = 1 - clampedPercentage / actualPercentage
+        } else {
+            overlayOpacity = 0
+        }
+        return DDCBrightnessWritePlan(
+            rawValue: raw,
+            overlayOpacity: Swift.min(1, Swift.max(0, overlayOpacity))
+        )
+    }
+}
+
+nonisolated struct DDCBrightnessWritePlan: Equatable {
+    let rawValue: UInt16
+    let overlayOpacity: Double
+}
+
+nonisolated struct DDCWriteOutcome {
+    let success: Bool
+    let quantizationOverlayOpacity: Double
+
+    static let failure = DDCWriteOutcome(success: false, quantizationOverlayOpacity: 0)
+
+    static func success(quantizationOverlayOpacity: Double = 0) -> DDCWriteOutcome {
+        DDCWriteOutcome(
+            success: true,
+            quantizationOverlayOpacity: quantizationOverlayOpacity
+        )
     }
 }
 
@@ -227,9 +325,10 @@ private enum DDCVCPCode: UInt8 {
 private enum DDCTransport {
     private static let sevenBitAddress: UInt8 = 0x37
     private static let dataAddress: UInt8 = 0x51
-    private static let ioQueue = DispatchQueue(label: "fanshu.ddc.io")
     private static let communicateTimeoutSeconds = 3
     private static let circuitCooldownSeconds = 10
+    private static let queueLock = NSLock()
+    private nonisolated(unsafe) static var ioQueuesByDisplayID: [CGDirectDisplayID: DispatchQueue] = [:]
     private static let circuitLock = NSLock()
     private nonisolated(unsafe) static var circuitOpenUntilByDisplayID: [CGDirectDisplayID: DispatchTime] = [:]
 
@@ -292,7 +391,7 @@ private enum DDCTransport {
         var result = false
         let semaphore = DispatchSemaphore(value: 0)
 
-        ioQueue.async {
+        ioQueue(for: displayID).async {
             result = communicateUnlocked(
                 service: service,
                 send: &sendCopy,
@@ -313,6 +412,17 @@ private enum DDCTransport {
         send = sendCopy
         reply = replyCopy
         return result
+    }
+
+    private static func ioQueue(for displayID: CGDirectDisplayID) -> DispatchQueue {
+        queueLock.withLock {
+            if let queue = ioQueuesByDisplayID[displayID] {
+                return queue
+            }
+            let queue = DispatchQueue(label: "fanshu.ddc.io.\(displayID)")
+            ioQueuesByDisplayID[displayID] = queue
+            return queue
+        }
     }
 
     private static func communicateUnlocked(

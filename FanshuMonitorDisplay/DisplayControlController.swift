@@ -16,6 +16,9 @@ final class DisplayControlController: ObservableObject {
     private let defaults = UserDefaults.standard
     private var fallbackValues: [CGDirectDisplayID: [DisplayControlKind: Double]] = [:]
     private var recentWrittenValues: [ControlKey: RecentDisplayValue] = [:]
+    private var latestWriteSequences: [ControlKey: UInt64] = [:]
+    private var latestConfirmedWriteSequences: [ControlKey: UInt64] = [:]
+    private var nextWriteSequence: UInt64 = 0
     private var screenChangeObserver: NSObjectProtocol?
     private var didWakeObserver: NSObjectProtocol?
     private var screensDidWakeObserver: NSObjectProtocol?
@@ -227,18 +230,20 @@ final class DisplayControlController: ObservableObject {
     }
 
     private func performWakeMaintenancePass(generation: Int, fullRefresh: Bool) {
-        guard generation == wakeMaintenanceGeneration, isBuiltInBlackoutDesired else {
+        guard generation == wakeMaintenanceGeneration else {
             return
         }
 
-        let appliedDisplayIDs = service.reapplyBuiltInBlackoutsToOnlineDisplays()
-        if !appliedDisplayIDs.isEmpty {
-            builtInBlackoutDisplayIDs.formUnion(appliedDisplayIDs)
+        if isBuiltInBlackoutDesired {
+            let appliedDisplayIDs = service.reapplyBuiltInBlackoutsToOnlineDisplays()
+            if !appliedDisplayIDs.isEmpty {
+                builtInBlackoutDisplayIDs.formUnion(appliedDisplayIDs)
+            }
         }
 
         if fullRefresh {
             refreshAsync()
-        } else if !displays.isEmpty {
+        } else if isBuiltInBlackoutDesired, !displays.isEmpty {
             syncBuiltInBlackouts()
         }
     }
@@ -412,17 +417,30 @@ final class DisplayControlController: ObservableObject {
     }
 
     func setValueAsync(_ value: Double, for control: DisplayControlKind, displayID: CGDirectDisplayID) {
-        setValue(value, for: control, displayID: displayID, markUnsupportedOnFailure: true)
+        setValue(
+            value,
+            for: control,
+            displayID: displayID,
+            mode: .coalesced,
+            markUnsupportedOnFailure: true
+        )
     }
 
     func setKeyboardBrightnessValue(_ value: Double, displayID: CGDirectDisplayID) {
-        setValue(value, for: .brightness, displayID: displayID, markUnsupportedOnFailure: false)
+        setValue(
+            value,
+            for: .brightness,
+            displayID: displayID,
+            mode: .ordered,
+            markUnsupportedOnFailure: false
+        )
     }
 
     private func setValue(
         _ value: Double,
         for control: DisplayControlKind,
         displayID: CGDirectDisplayID,
+        mode: DisplayWriteMode,
         markUnsupportedOnFailure: Bool
     ) {
         let clampedValue = min(100, max(0, value))
@@ -437,8 +455,19 @@ final class DisplayControlController: ObservableObject {
         }
 
         let key = ControlKey(displayID: displayID, control: control)
+        nextWriteSequence &+= 1
+        let sequence = nextWriteSequence
+        latestWriteSequences[key] = sequence
         pendingValues[displayID, default: [:]][control] = clampedValue
-        worker.setValue(clampedValue, for: key, display: display, service: service) { [weak self] result in
+        worker.setValue(
+            clampedValue,
+            for: key,
+            sequence: sequence,
+            mode: mode,
+            performWrite: { [service, display] value in
+                service.setValue(value, for: key.control, display: display)
+            }
+        ) { [weak self] result in
             Task { @MainActor in
                 self?.handleWriteResult(result, markUnsupportedOnFailure: markUnsupportedOnFailure)
             }
@@ -481,16 +510,21 @@ final class DisplayControlController: ObservableObject {
     }
 
     private func handleWriteResult(_ result: DisplayWriteResult, markUnsupportedOnFailure: Bool) {
-        let currentPendingValue = pendingValues[result.key.displayID]?[result.key.control]
-        let isCurrentResult = currentPendingValue.map { abs($0 - result.value) < 0.001 } ?? false
+        let isCurrentResult = latestWriteSequences[result.key] == result.sequence
 
-        if result.success, isCurrentResult {
+        let latestConfirmedSequence = latestConfirmedWriteSequences[result.key] ?? 0
+        if result.success, result.sequence >= latestConfirmedSequence {
+            latestConfirmedWriteSequences[result.key] = result.sequence
             updateLocalValue(result.value, for: result.key.control, displayID: result.key.displayID)
             fallbackValues[result.key.displayID, default: [:]][result.key.control] = result.value
             recentWrittenValues[result.key] = RecentDisplayValue(value: result.value, date: Date())
-            AppLogger.ui.debug("Write succeeded for display \(result.key.displayID), control: \(result.key.control.storageKey, privacy: .public)")
+            AppLogger.ui.debug(
+                "Write succeeded for display \(result.key.displayID), control: \(result.key.control.storageKey, privacy: .public), current: \(isCurrentResult, privacy: .public)"
+            )
         } else if result.success {
-            AppLogger.ui.debug("Ignored stale write result for display \(result.key.displayID), control: \(result.key.control.storageKey, privacy: .public)")
+            AppLogger.ui.debug(
+                "Ignored out-of-order confirmed write for display \(result.key.displayID), control: \(result.key.control.storageKey, privacy: .public)"
+            )
         } else {
             AppLogger.ui.error("Write failed for display \(result.key.displayID), control: \(result.key.control.storageKey, privacy: .public)")
             if isCurrentResult, markUnsupportedOnFailure {
@@ -502,6 +536,7 @@ final class DisplayControlController: ObservableObject {
             return
         }
 
+        latestWriteSequences[result.key] = nil
         pendingValues[result.key.displayID]?[result.key.control] = nil
         if pendingValues[result.key.displayID]?.isEmpty == true {
             pendingValues[result.key.displayID] = nil
@@ -544,16 +579,35 @@ final class DisplayControlController: ObservableObject {
     }
 }
 
-private final class DisplayControlWorker {
-    private let queue = DispatchQueue(label: "fanshu.ddc", qos: .userInitiated)
-    private var pendingWrites: [ControlKey: Double] = [:]
+nonisolated enum DisplayWriteMode {
+    case coalesced
+    case ordered
+}
+
+nonisolated final class DisplayControlWorker: @unchecked Sendable {
+    private struct PendingWrite {
+        let value: Double
+        let sequence: UInt64
+        let performWrite: (Double) -> Bool
+        let completion: (DisplayWriteResult) -> Void
+    }
+
+    private let stateQueue = DispatchQueue(label: "fanshu.display-control.state", qos: .userInitiated)
+    private let hardwareQueue = DispatchQueue(
+        label: "fanshu.display-control.hardware",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
+    private var writeQueuesByDisplayID: [CGDirectDisplayID: DispatchQueue] = [:]
+    private var pendingWrites: [ControlKey: PendingWrite] = [:]
     private var debounceTimers: [ControlKey: DispatchWorkItem] = [:]
+    private var debounceGenerations: [ControlKey: UInt64] = [:]
     private var cachedDiscovery: (displays: [ControlledDisplay], refreshedAt: Date)?
     private let debounceInterval: DispatchTimeInterval = .milliseconds(150)
     private let discoveryCacheInterval: TimeInterval = 2
 
     func refresh(service: DisplayControlService, completion: @escaping ([ControlledDisplay]) -> Void) {
-        queue.async {
+        stateQueue.async {
             let now = Date()
             if let cachedDiscovery = self.cachedDiscovery,
                now.timeIntervalSince(cachedDiscovery.refreshedAt) < self.discoveryCacheInterval {
@@ -561,14 +615,18 @@ private final class DisplayControlWorker {
                 return
             }
 
-            let displays = service.displays()
-            self.cachedDiscovery = (displays, now)
-            completion(displays)
+            self.hardwareQueue.async(flags: .barrier) {
+                let displays = service.displays()
+                self.stateQueue.async {
+                    self.cachedDiscovery = (displays, now)
+                    completion(displays)
+                }
+            }
         }
     }
 
     func invalidateDiscoveryCache() {
-        queue.async {
+        stateQueue.async {
             self.cachedDiscovery = nil
         }
     }
@@ -576,31 +634,100 @@ private final class DisplayControlWorker {
     func setValue(
         _ value: Double,
         for key: ControlKey,
-        display: ControlledDisplay,
-        service: DisplayControlService,
+        sequence: UInt64,
+        mode: DisplayWriteMode,
+        performWrite: @escaping (Double) -> Bool,
         completion: @escaping (DisplayWriteResult) -> Void
     ) {
-        queue.async {
-            self.pendingWrites[key] = value
-
-            self.debounceTimers[key]?.cancel()
-            let timer = DispatchWorkItem { [service, display, key, completion] in
-                guard let latestValue = self.pendingWrites.removeValue(forKey: key) else {
-                    return
-                }
-                self.debounceTimers.removeValue(forKey: key)
-
-                let success = service.setValue(latestValue, for: key.control, display: display)
-                completion(DisplayWriteResult(key: key, value: latestValue, success: success))
+        stateQueue.async {
+            switch mode {
+            case .ordered:
+                self.cancelPendingWrite(for: key)
+                self.perform(
+                    PendingWrite(
+                        value: value,
+                        sequence: sequence,
+                        performWrite: performWrite,
+                        completion: completion
+                    ),
+                    for: key
+                )
+            case .coalesced:
+                self.scheduleCoalescedWrite(
+                    PendingWrite(
+                        value: value,
+                        sequence: sequence,
+                        performWrite: performWrite,
+                        completion: completion
+                    ),
+                    for: key
+                )
             }
-            self.debounceTimers[key] = timer
-            self.queue.asyncAfter(deadline: .now() + self.debounceInterval, execute: timer)
         }
+    }
+
+    private func scheduleCoalescedWrite(_ request: PendingWrite, for key: ControlKey) {
+        pendingWrites[key] = request
+        debounceTimers[key]?.cancel()
+
+        let generation = (debounceGenerations[key] ?? 0) &+ 1
+        debounceGenerations[key] = generation
+        let timer = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.debounceGenerations[key] == generation,
+                  let latestRequest = self.pendingWrites.removeValue(forKey: key)
+            else {
+                return
+            }
+            self.debounceTimers[key] = nil
+            self.debounceGenerations[key] = nil
+
+            self.perform(latestRequest, for: key)
+        }
+        debounceTimers[key] = timer
+        stateQueue.asyncAfter(deadline: .now() + debounceInterval, execute: timer)
+    }
+
+    private func cancelPendingWrite(for key: ControlKey) {
+        debounceTimers[key]?.cancel()
+        debounceTimers[key] = nil
+        debounceGenerations[key] = nil
+        pendingWrites[key] = nil
+    }
+
+    private func perform(_ request: PendingWrite, for key: ControlKey) {
+        let writeQueue = writeQueue(for: key.displayID)
+        writeQueue.async {
+            let success = self.hardwareQueue.sync {
+                request.performWrite(request.value)
+            }
+            request.completion(
+                DisplayWriteResult(
+                    key: key,
+                    value: request.value,
+                    sequence: request.sequence,
+                    success: success
+                )
+            )
+        }
+    }
+
+    private func writeQueue(for displayID: CGDirectDisplayID) -> DispatchQueue {
+        if let queue = writeQueuesByDisplayID[displayID] {
+            return queue
+        }
+        let queue = DispatchQueue(
+            label: "fanshu.display-control.write.\(displayID)",
+            qos: .userInitiated
+        )
+        writeQueuesByDisplayID[displayID] = queue
+        return queue
     }
 }
 
-private nonisolated struct DisplayWriteResult {
+nonisolated struct DisplayWriteResult {
     let key: ControlKey
     let value: Double
+    let sequence: UInt64
     let success: Bool
 }

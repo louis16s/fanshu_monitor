@@ -149,8 +149,157 @@ struct DisplayClassifierTests {
     }
 }
 
+struct DisplayBrightnessCapabilityTests {
+    @Test func appleNativeDisplayRequiresNativeBrightnessProbe() {
+        #expect(DisplayControlService.supportsBrightness(
+            displayKind: .appleNative,
+            nativeBrightnessAvailable: true,
+            ddcBrightnessAvailable: false,
+            ddcBrightnessPreviouslyVerified: false,
+            isTemporarilyDisabled: false
+        ))
+        #expect(!DisplayControlService.supportsBrightness(
+            displayKind: .appleNative,
+            nativeBrightnessAvailable: false,
+            ddcBrightnessAvailable: true,
+            ddcBrightnessPreviouslyVerified: true,
+            isTemporarilyDisabled: false
+        ))
+    }
+
+    @Test func ddcServiceWithoutReadableOrKnownBrightnessIsNotControllable() {
+        #expect(!DisplayControlService.supportsBrightness(
+            displayKind: .externalDDC,
+            nativeBrightnessAvailable: false,
+            ddcBrightnessAvailable: false,
+            ddcBrightnessPreviouslyVerified: false,
+            isTemporarilyDisabled: false
+        ))
+    }
+
+    @Test func previouslyVerifiedDDCDisplaySurvivesATransientReadFailure() {
+        #expect(DisplayControlService.supportsBrightness(
+            displayKind: .externalDDC,
+            nativeBrightnessAvailable: false,
+            ddcBrightnessAvailable: false,
+            ddcBrightnessPreviouslyVerified: true,
+            isTemporarilyDisabled: false
+        ))
+    }
+
+    @Test func faultedDDCDisplayIsNotControllable() {
+        #expect(!DisplayControlService.supportsBrightness(
+            displayKind: .externalDDC,
+            nativeBrightnessAvailable: false,
+            ddcBrightnessAvailable: true,
+            ddcBrightnessPreviouslyVerified: true,
+            isTemporarilyDisabled: true
+        ))
+    }
+}
+
 struct DisplaySoftwareDimmingWindowPolicyTests {
     @Test func overlayStaysAboveScreenSaverWindows() {
         #expect(DisplaySoftwareDimmingWindowPolicy.level.rawValue > NSWindow.Level.screenSaver.rawValue)
+    }
+}
+
+struct DisplayControlWorkerTests {
+    private let key = ControlKey(displayID: 1, control: .brightness)
+
+    @Test func orderedKeyboardWritesPreserveEveryLevel() {
+        let worker = DisplayControlWorker()
+        let recorder = ThreadSafeValues()
+        let group = DispatchGroup()
+        let levels = [20.0, 25.0, 30.0, 35.0]
+
+        for (sequence, level) in levels.enumerated() {
+            group.enter()
+            worker.setValue(
+                level,
+                for: key,
+                sequence: UInt64(sequence + 1),
+                mode: .ordered,
+                performWrite: { value in
+                    recorder.append(value)
+                    return true
+                },
+                completion: { _ in group.leave() }
+            )
+        }
+
+        #expect(group.wait(timeout: .now() + 3) == .success)
+        #expect(recorder.values == levels)
+    }
+
+    @Test func coalescedSliderWritesOnlyTheLatestLevel() {
+        let worker = DisplayControlWorker()
+        let recorder = ThreadSafeValues()
+        let completion = DispatchSemaphore(value: 0)
+
+        for (sequence, level) in [20.0, 25.0, 30.0].enumerated() {
+            worker.setValue(
+                level,
+                for: key,
+                sequence: UInt64(sequence + 1),
+                mode: .coalesced,
+                performWrite: { value in
+                    recorder.append(value)
+                    return true
+                },
+                completion: { _ in completion.signal() }
+            )
+        }
+
+        #expect(completion.wait(timeout: .now() + 3) == .success)
+        #expect(recorder.values == [30])
+    }
+
+    @Test func slowDisplayDoesNotBlockAnotherDisplay() {
+        let worker = DisplayControlWorker()
+        let slowStarted = DispatchSemaphore(value: 0)
+        let slowFinished = DispatchSemaphore(value: 0)
+        let fastFinished = DispatchSemaphore(value: 0)
+
+        worker.setValue(
+            25,
+            for: ControlKey(displayID: 1, control: .brightness),
+            sequence: 1,
+            mode: .ordered,
+            performWrite: { _ in
+                slowStarted.signal()
+                Thread.sleep(forTimeInterval: 0.8)
+                return true
+            },
+            completion: { _ in slowFinished.signal() }
+        )
+        #expect(slowStarted.wait(timeout: .now() + 1) == .success)
+
+        worker.setValue(
+            25,
+            for: ControlKey(displayID: 2, control: .brightness),
+            sequence: 2,
+            mode: .ordered,
+            performWrite: { _ in true },
+            completion: { _ in fastFinished.signal() }
+        )
+
+        #expect(fastFinished.wait(timeout: .now() + 0.5) == .success)
+        #expect(slowFinished.wait(timeout: .now() + 1) == .success)
+    }
+}
+
+private final class ThreadSafeValues: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [Double] = []
+
+    var values: [Double] {
+        lock.withLock { storage }
+    }
+
+    func append(_ value: Double) {
+        lock.withLock {
+            storage.append(value)
+        }
     }
 }

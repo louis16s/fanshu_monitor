@@ -102,10 +102,20 @@ final class BrightnessKeyEventTap {
             return false
         }
 
-        let configuredStep = min(20, max(1, settings?.brightnessKeyStepPercent ?? 6.25))
+        let configuredStep = min(20, max(1, settings?.brightnessKeyStepPercent ?? 5))
         let step = mediaKey.isFineIncrement ? max(0.5, configuredStep / 4.0) : configuredStep
         let current = displayController.value(for: .brightness, displayID: target.id)
-        let next = min(100, max(0, current + (mediaKey.isUp ? step : -step)))
+        let next = BrightnessStepCalculator.nextValue(
+            from: current,
+            step: step,
+            increasing: mediaKey.isUp
+        )
+        guard BrightnessStepCalculator.changesValue(from: current, to: next) else {
+            if settings?.displayNativeOSDEnabled == true {
+                NativeOSDService.showBrightness(displayID: target.id, value: next)
+            }
+            return true
+        }
         AppLogger.ui.debug("Brightness key handled for display \(target.id), value \(next, privacy: .public)")
         displayController.setKeyboardBrightnessValue(next, displayID: target.id)
         if settings?.displayNativeOSDEnabled == true {
@@ -150,6 +160,28 @@ final class BrightnessKeyEventTap {
 
         let handled = tap.handle(event: event, type: type)
         return handled ? nil : Unmanaged.passUnretained(event)
+    }
+}
+
+nonisolated enum BrightnessStepCalculator {
+    static func nextValue(from currentValue: Double, step: Double, increasing: Bool) -> Double {
+        let clampedCurrent = min(100, max(0, currentValue))
+        let clampedStep = min(100, max(0.1, step))
+        let epsilon = 0.000_001
+
+        if increasing {
+            guard clampedCurrent < 100 - epsilon else { return 100 }
+            let level = floor((clampedCurrent + epsilon) / clampedStep) + 1
+            return min(100, level * clampedStep)
+        }
+
+        guard clampedCurrent > epsilon else { return 0 }
+        let level = ceil((clampedCurrent - epsilon) / clampedStep) - 1
+        return max(0, level * clampedStep)
+    }
+
+    static func changesValue(from currentValue: Double, to nextValue: Double) -> Bool {
+        abs(nextValue - currentValue) > 0.000_001
     }
 }
 

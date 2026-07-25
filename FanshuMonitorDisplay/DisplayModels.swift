@@ -6,6 +6,7 @@ struct ControlledDisplay: Identifiable {
     let storageID: String
     let name: String
     let isBuiltIn: Bool
+    let usesNativeBrightness: Bool
     var supportsBrightness: Bool
     var supportsVolume: Bool
     var supportsContrast: Bool

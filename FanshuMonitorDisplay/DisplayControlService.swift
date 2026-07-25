@@ -10,6 +10,7 @@ final class DisplayControlService {
     private let softwareDimming = DisplaySoftwareDimmingService()
     private let builtInBlackout = BuiltInDisplayBlackoutService()
     private let displayClassifier = DisplayClassifier()
+    private lazy var ddcRangeStore = DisplayDDCRangeStore(defaults: defaults)
     var softwareDimmingEnabled = true
 
     func displays() -> [ControlledDisplay] {
@@ -31,6 +32,9 @@ final class DisplayControlService {
             let usesDDC = displayKind == .externalDDC
             let name = displayName(for: id, isBuiltIn: isBuiltIn)
             let storageID = displayStorageID(for: id, name: name, isBuiltIn: isBuiltIn)
+            if usesDDC, let storedRange = ddcRangeStore.range(displayStorageID: storageID) {
+                ddc.setValueRange(storedRange, for: .brightness, displayID: id)
+            }
             let appleBrightness = usesNativeBrightness ? displayServices.getBrightness(displayID: id) : nil
             let hasDDCService = usesDDC && ddc.hasService(for: id)
             let brightnessTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.brightness, displayID: id)
@@ -42,22 +46,48 @@ final class DisplayControlService {
             let storedBrightness = storedValue(for: .brightness, displayStorageID: storageID)
             let storedVolume = storedValue(for: .volume, displayStorageID: storageID)
             let storedContrast = storedValue(for: .contrast, displayStorageID: storageID)
-            let supportsBrightness = usesNativeBrightness
-                ? appleBrightness != nil
-                : usesDDC && !brightnessTemporarilyDisabled && (ddcBrightness != nil || storedBrightness != nil || hasDDCService)
+            let hasVerifiedDDCBrightness = usesDDC && ddc.hasVerifiedControl(.brightness, displayID: id)
+            let supportsBrightness = Self.supportsBrightness(
+                displayKind: displayKind,
+                nativeBrightnessAvailable: appleBrightness != nil,
+                ddcBrightnessAvailable: ddcBrightness != nil,
+                ddcBrightnessPreviouslyVerified: hasVerifiedDDCBrightness,
+                isTemporarilyDisabled: brightnessTemporarilyDisabled
+            )
             let supportsVolume = usesDDC && !volumeTemporarilyDisabled && (ddcVolume != nil || storedVolume != nil)
             let supportsContrast = usesDDC && !contrastTemporarilyDisabled && (ddcContrast != nil || storedContrast != nil)
+            if usesDDC,
+               ddcBrightness != nil,
+               let learnedRange = ddc.valueRange(for: .brightness, displayID: id) {
+                ddcRangeStore.save(learnedRange, displayStorageID: storageID)
+            }
+            let restoredQuantizationOpacity: Double
+            if usesDDC, let storedBrightness {
+                let mappedHardware = softwareDimming.hardwareBrightness(forUserBrightness: storedBrightness)
+                restoredQuantizationOpacity = ddc.brightnessWritePlan(
+                    for: mappedHardware,
+                    displayID: id
+                ).overlayOpacity
+            } else {
+                restoredQuantizationOpacity = 0
+            }
 
             return ControlledDisplay(
                 id: id,
                 storageID: storageID,
                 name: name,
                 isBuiltIn: isBuiltIn,
+                usesNativeBrightness: usesNativeBrightness,
                 supportsBrightness: supportsBrightness,
                 supportsVolume: supportsVolume,
                 supportsContrast: supportsContrast,
                 brightness: appleBrightness.map { Double($0 * 100) }
-                    ?? softwareDimming.userBrightness(for: id, storedUserBrightness: storedBrightness, hardwareBrightness: ddcBrightness)
+                    ?? softwareDimming.userBrightness(
+                        for: id,
+                        storedUserBrightness: storedBrightness,
+                        hardwareBrightness: ddcBrightness,
+                        restoredQuantizationOpacity: restoredQuantizationOpacity
+                    )
                     ?? storedBrightness
                     ?? DisplayControlKind.brightness.defaultValue,
                 volume: ddcVolume
@@ -93,7 +123,7 @@ final class DisplayControlService {
             return false
         }
 
-        if display.isBuiltIn {
+        if display.usesNativeBrightness {
             switch control {
             case .brightness:
                 return displayServices.setBrightness(displayID: display.id, value: Float(value / 100))
@@ -111,14 +141,39 @@ final class DisplayControlService {
             }
         }
 
-        let success = ddc.write(writeValue, for: control, displayID: display.id)
-        if success {
+        let outcome = ddc.write(writeValue, for: control, displayID: display.id)
+        if outcome.success {
             if control == .brightness, softwareDimmingEnabled {
-                softwareDimming.setUserBrightness(value, for: display.id)
+                softwareDimming.setUserBrightness(
+                    value,
+                    for: display.id,
+                    additionalOverlayOpacity: outcome.quantizationOverlayOpacity
+                )
+            }
+            if control == .brightness,
+               let range = ddc.valueRange(for: .brightness, displayID: display.id) {
+                ddcRangeStore.save(range, displayStorageID: display.storageID)
             }
             saveStoredValue(value, for: control, displayStorageID: display.storageID)
         }
-        return success
+        return outcome.success
+    }
+
+    nonisolated static func supportsBrightness(
+        displayKind: DisplayKind,
+        nativeBrightnessAvailable: Bool,
+        ddcBrightnessAvailable: Bool,
+        ddcBrightnessPreviouslyVerified: Bool,
+        isTemporarilyDisabled: Bool
+    ) -> Bool {
+        switch displayKind {
+        case .builtIn, .appleNative:
+            return nativeBrightnessAvailable
+        case .externalDDC:
+            return !isTemporarilyDisabled && (ddcBrightnessAvailable || ddcBrightnessPreviouslyVerified)
+        case .virtual, .dummy, .unsupported:
+            return false
+        }
     }
 
     func syncSoftwareDimming(for displays: [ControlledDisplay]) {
@@ -304,9 +359,57 @@ final class DisplayControlService {
     }
 }
 
+struct DisplayDDCRangeStore {
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+    }
+
+    func range(displayStorageID: String) -> DDCValueRange? {
+        guard let dictionary = defaults.dictionary(forKey: key(displayStorageID: displayStorageID)),
+              let minimum = dictionary["min"] as? NSNumber,
+              let maximum = dictionary["max"] as? NSNumber
+        else {
+            return nil
+        }
+        let minValue = UInt16(clamping: minimum.intValue)
+        let maxValue = UInt16(clamping: maximum.intValue)
+        guard maxValue > minValue else {
+            return nil
+        }
+        return DDCValueRange(min: minValue, max: maxValue)
+    }
+
+    func save(_ range: DDCValueRange, displayStorageID: String) {
+        defaults.set(
+            ["min": Int(range.min), "max": Int(range.max)],
+            forKey: key(displayStorageID: displayStorageID)
+        )
+    }
+
+    private func key(displayStorageID: String) -> String {
+        "displayControl.ddcRange.\(displayStorageID).brightness"
+    }
+}
+
 enum DisplayDimmingCalibration {
     static let hardwareZeroUserBrightness: Double = 15
     static let maximumOverlayOpacity: Double = 0.70
+
+    static func hardwareBrightness(forUserBrightness userBrightness: Double) -> Double {
+        let clamped = min(100, max(0, userBrightness))
+        guard clamped > hardwareZeroUserBrightness else { return 0 }
+        return min(
+            100,
+            max(0, (clamped - hardwareZeroUserBrightness) / (100 - hardwareZeroUserBrightness) * 100)
+        )
+    }
+
+    static func overlayOpacity(forUserBrightness userBrightness: Double) -> Double {
+        let clamped = min(hardwareZeroUserBrightness, max(0, userBrightness))
+        return (1 - clamped / hardwareZeroUserBrightness) * maximumOverlayOpacity
+    }
 }
 
 enum DisplaySoftwareDimmingWindowPolicy {
@@ -319,19 +422,25 @@ private final class DisplaySoftwareDimmingService {
     private let maximumOverlayOpacity: Double = DisplayDimmingCalibration.maximumOverlayOpacity
     private let lock = NSLock()
     private var requestedBrightness: [CGDirectDisplayID: Double] = [:]
+    private var quantizationOverlayOpacity: [CGDirectDisplayID: Double] = [:]
     @MainActor private var overlayWindows: [CGDirectDisplayID: NSWindow] = [:]
 
     func userBrightness(
         for displayID: CGDirectDisplayID,
         storedUserBrightness: Double?,
-        hardwareBrightness: Double?
+        hardwareBrightness: Double?,
+        restoredQuantizationOpacity: Double
     ) -> Double? {
         if let cached = cachedBrightness(for: displayID) {
             return cached
         }
 
-        if let storedUserBrightness, storedUserBrightness < dimmingThreshold {
-            setUserBrightness(storedUserBrightness, for: displayID)
+        if let storedUserBrightness {
+            setUserBrightness(
+                storedUserBrightness,
+                for: displayID,
+                additionalOverlayOpacity: restoredQuantizationOpacity
+            )
             return storedUserBrightness
         }
 
@@ -340,19 +449,27 @@ private final class DisplaySoftwareDimmingService {
     }
 
     func hardwareBrightness(forUserBrightness userBrightness: Double) -> Double {
-        let clamped = min(100, max(0, userBrightness))
-        guard clamped > dimmingThreshold else { return 0 }
-        return min(100, max(0, (clamped - dimmingThreshold) / (100 - dimmingThreshold) * 100))
+        DisplayDimmingCalibration.hardwareBrightness(forUserBrightness: userBrightness)
     }
 
-    func setUserBrightness(_ userBrightness: Double, for displayID: CGDirectDisplayID) {
+    func setUserBrightness(
+        _ userBrightness: Double,
+        for displayID: CGDirectDisplayID,
+        additionalOverlayOpacity: Double = 0
+    ) {
         let clamped = min(100, max(0, userBrightness))
+        let clampedAdditionalOpacity = min(1, max(0, additionalOverlayOpacity))
         lock.lock()
         requestedBrightness[displayID] = clamped
+        quantizationOverlayOpacity[displayID] = clampedAdditionalOpacity
         lock.unlock()
 
         Task { @MainActor [weak self] in
-            self?.apply(userBrightness: clamped, for: displayID)
+            self?.apply(
+                userBrightness: clamped,
+                additionalOverlayOpacity: clampedAdditionalOpacity,
+                for: displayID
+            )
         }
     }
 
@@ -362,16 +479,22 @@ private final class DisplaySoftwareDimmingService {
 
         lock.lock()
         requestedBrightness = requestedBrightness.filter { displayIDs.contains($0.key) }
+        quantizationOverlayOpacity = quantizationOverlayOpacity.filter { displayIDs.contains($0.key) }
         for (displayID, brightness) in brightnessByID where CGDisplayIsBuiltin(displayID) == 0 {
             requestedBrightness[displayID] = brightness
         }
         let values = requestedBrightness
+        let additionalOpacities = quantizationOverlayOpacity
         lock.unlock()
 
         Task { @MainActor [weak self] in
             guard let self else { return }
             for (displayID, brightness) in values {
-                self.apply(userBrightness: brightness, for: displayID)
+                self.apply(
+                    userBrightness: brightness,
+                    additionalOverlayOpacity: additionalOpacities[displayID] ?? 0,
+                    for: displayID
+                )
             }
             self.removeMissingWindows(keeping: displayIDs)
         }
@@ -380,6 +503,7 @@ private final class DisplaySoftwareDimmingService {
     func clear(displayID: CGDirectDisplayID) {
         lock.lock()
         requestedBrightness[displayID] = nil
+        quantizationOverlayOpacity[displayID] = nil
         lock.unlock()
 
         Task { @MainActor [weak self] in
@@ -390,6 +514,7 @@ private final class DisplaySoftwareDimmingService {
     func clearAll() {
         lock.lock()
         requestedBrightness.removeAll()
+        quantizationOverlayOpacity.removeAll()
         lock.unlock()
 
         Task { @MainActor [weak self] in
@@ -407,13 +532,18 @@ private final class DisplaySoftwareDimmingService {
     }
 
     @MainActor
-    private func apply(userBrightness: Double, for displayID: CGDirectDisplayID) {
+    private func apply(
+        userBrightness: Double,
+        additionalOverlayOpacity: Double,
+        for displayID: CGDirectDisplayID
+    ) {
         guard CGDisplayIsBuiltin(displayID) == 0 else {
             removeWindow(for: displayID)
             return
         }
 
-        let opacity = overlayOpacity(for: userBrightness)
+        let baseOpacity = overlayOpacity(for: userBrightness)
+        let opacity = 1 - (1 - baseOpacity) * (1 - additionalOverlayOpacity)
         guard opacity > 0.001 else {
             removeWindow(for: displayID)
             return
@@ -434,8 +564,7 @@ private final class DisplaySoftwareDimmingService {
     }
 
     private func overlayOpacity(for userBrightness: Double) -> Double {
-        let clamped = min(dimmingThreshold, max(0, userBrightness))
-        return (1 - clamped / dimmingThreshold) * maximumOverlayOpacity
+        DisplayDimmingCalibration.overlayOpacity(forUserBrightness: userBrightness)
     }
 
     @MainActor

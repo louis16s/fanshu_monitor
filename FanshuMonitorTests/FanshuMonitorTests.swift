@@ -129,6 +129,85 @@ struct FanshuMonitorTests {
         #expect(range.percentage(from: 55) == 50)
     }
 
+    @Test func defaultBrightnessStepsVisitEveryFivePercentLevel() {
+        var value = 0.0
+        var levels: [Double] = []
+
+        while value < 100 {
+            value = BrightnessStepCalculator.nextValue(from: value, step: 5, increasing: true)
+            levels.append(value)
+        }
+
+        #expect(levels == Array(stride(from: 5.0, through: 100.0, by: 5.0)))
+
+        var descending: [Double] = []
+        while value > 0 {
+            value = BrightnessStepCalculator.nextValue(from: value, step: 5, increasing: false)
+            descending.append(value)
+        }
+        #expect(descending == Array(stride(from: 95.0, through: 0.0, by: -5.0)))
+    }
+
+    @Test func brightnessStepsSnapToTheNearestDirectionalLevel() {
+        #expect(BrightnessStepCalculator.nextValue(from: 46, step: 5, increasing: true) == 50)
+        #expect(BrightnessStepCalculator.nextValue(from: 46, step: 5, increasing: false) == 45)
+        #expect(BrightnessStepCalculator.nextValue(from: 100, step: 5, increasing: true) == 100)
+        #expect(BrightnessStepCalculator.nextValue(from: 0, step: 5, increasing: false) == 0)
+        #expect(!BrightnessStepCalculator.changesValue(from: 100, to: 100))
+        #expect(!BrightnessStepCalculator.changesValue(from: 0, to: 0))
+        #expect(BrightnessStepCalculator.changesValue(from: 95, to: 100))
+    }
+
+    @Test func everyDefaultBrightnessLevelChangesHardwareOrSoftwareDimming() {
+        let levels = Array(stride(from: 0.0, through: 100.0, by: 5.0))
+
+        for pair in zip(levels, levels.dropFirst()) {
+            let previousHardware = DisplayDimmingCalibration.hardwareBrightness(forUserBrightness: pair.0)
+            let nextHardware = DisplayDimmingCalibration.hardwareBrightness(forUserBrightness: pair.1)
+            let previousOverlay = DisplayDimmingCalibration.overlayOpacity(forUserBrightness: pair.0)
+            let nextOverlay = DisplayDimmingCalibration.overlayOpacity(forUserBrightness: pair.1)
+
+            #expect(
+                abs(nextHardware - previousHardware) > 0.001
+                    || abs(nextOverlay - previousOverlay) > 0.001
+            )
+        }
+    }
+
+    @Test func everyDefaultBrightnessLevelChangesEvenOnLowResolutionDDC() {
+        let range = DDCValueRange(min: 0, max: 10)
+        let levels = Array(stride(from: 0.0, through: 100.0, by: 5.0))
+        var previous: (raw: UInt16, opacity: Double)?
+
+        for level in levels {
+            let hardware = DisplayDimmingCalibration.hardwareBrightness(forUserBrightness: level)
+            let plan = range.brightnessWritePlan(for: hardware)
+            let baseOpacity = DisplayDimmingCalibration.overlayOpacity(forUserBrightness: level)
+            let combinedOpacity = 1 - (1 - baseOpacity) * (1 - plan.overlayOpacity)
+
+            if let previous {
+                #expect(
+                    plan.rawValue != previous.raw
+                        || abs(combinedOpacity - previous.opacity) > 0.001
+                )
+            }
+            previous = (plan.rawValue, combinedOpacity)
+        }
+    }
+
+    @Test func ddcRangePersistsAcrossServiceRecreation() {
+        let suiteName = "FanshuMonitorTests.ddcRange"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let range = DDCValueRange(min: 7, max: 83)
+
+        DisplayDDCRangeStore(defaults: defaults).save(range, displayStorageID: "test-display")
+        let restored = DisplayDDCRangeStore(defaults: defaults).range(displayStorageID: "test-display")
+
+        #expect(restored == range)
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
     @Test func monitorColorSchemeDefaultsToSystemBlue() {
         let defaults = UserDefaults(suiteName: "FanshuMonitorTests.colorScheme.default")!
         defaults.removePersistentDomain(forName: "FanshuMonitorTests.colorScheme.default")
