@@ -232,7 +232,7 @@ struct UpdateCheckerTests {
 
         await checker.checkForUpdates()
 
-        #expect(checker.state == .failed("检查更新过于频繁，请稍后再试"))
+        #expect(checker.state == .failed(String(localized: "update.rate-limited")))
     }
 
     @Test func checkForUpdatesMapsMissingReleaseToFriendlyMessage() async {
@@ -252,7 +252,7 @@ struct UpdateCheckerTests {
 
         await checker.checkForUpdates()
 
-        #expect(checker.state == .failed("暂时没有可用的发布版本"))
+        #expect(checker.state == .failed(String(localized: "update.no-release")))
     }
 
     @Test func checkForUpdatesHandlesDecodeFailure() async {
@@ -272,7 +272,7 @@ struct UpdateCheckerTests {
 
         await checker.checkForUpdates()
 
-        #expect(checker.state == .failed("无法解析更新信息"))
+        #expect(checker.state == .failed(String(localized: "update.parse-failed")))
     }
 
     @Test func resolveDownloadURLFallsBackToReleasePage() throws {
