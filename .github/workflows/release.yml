@@ -52,7 +52,8 @@ jobs:
 
       - name: Run tests
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          mkdir -p build
           xcodebuild \
             -project '番薯monitor.xcodeproj' \
             -scheme '番薯Monitor' \
@@ -60,7 +61,21 @@ jobs:
             -destination 'platform=macOS,arch=arm64' \
             -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO \
-            test
+            test 2>&1 | tee build/test.log
+          test_status="${PIPESTATUS[0]}"
+          if [[ "$test_status" -ne 0 ]]; then
+            python3 - <<'PY'
+          from pathlib import Path
+
+          lines = Path("build/test.log").read_text(errors="replace").splitlines()
+          markers = (" error:", "failed", "failure", "Testing failed", "TEST FAILED")
+          selected = [line.strip() for line in lines if any(marker.lower() in line.lower() for marker in markers)]
+          summary = " | ".join(selected[-20:])[-6000:] or "xcodebuild test failed without a matching summary line"
+          summary = summary.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error file=.github/workflows/release.yml,line=49::{summary}")
+          PY
+            exit "$test_status"
+          fi
 
       - name: Build Release app
         run: |
