@@ -151,13 +151,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codex Usage"
+            "value": "Codex Limits"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codex Usage"
+            "value": "Codex Limits"
           }
         }
       }
@@ -270,6 +270,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "On Battery"
+          }
+        }
+      }
+    },
+    "battery-state.not-connected": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未连接"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Connected"
           }
         }
       }

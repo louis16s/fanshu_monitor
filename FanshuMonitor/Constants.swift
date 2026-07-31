@@ -10,8 +10,6 @@ nonisolated enum MonitorConstants {
 
     // MARK: Animation
     static let animationInterval = 5.0
-    static let menuBarLoadUpdateInterval: TimeInterval = 3
-    static let menuBarLoadUpdateFrameInterval = 1
     static let menuBarLoadChangeThreshold = 5.0
     static let menuBarLoadSmoothStep = 100.0
 

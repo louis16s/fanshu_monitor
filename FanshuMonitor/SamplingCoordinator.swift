@@ -23,12 +23,19 @@ actor SamplingCoordinator {
 
     func sample(
         kinds: [MonitorKind],
-        previousModules: [MonitorModule]
+        previousModules: [MonitorModule],
+        enabledMetrics: [MonitorKind: Set<String>] = [:],
+        panelVisible: Bool = true
     ) -> SystemMonitorSnapshot? {
         guard !kinds.isEmpty else { return nil }
         guard !Task.isCancelled else { return nil }
 
-        let snapshot = sampler.sample(kinds: kinds, previousModules: previousModules)
+        let snapshot = sampler.sample(
+            kinds: kinds,
+            previousModules: previousModules,
+            enabledMetrics: enabledMetrics,
+            panelVisible: panelVisible
+        )
         guard !Task.isCancelled else { return nil }
         return snapshot
     }

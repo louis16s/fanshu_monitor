@@ -8,18 +8,38 @@ nonisolated struct SystemMonitorSnapshot: Sendable {
 nonisolated final class SystemMonitorSampler: @unchecked Sendable {
     private var samplers: [MonitorKind: MonitorSampler] = [:]
 
-    func sample(previousModules: [MonitorModule]) -> SystemMonitorSnapshot {
-        sample(kinds: MonitorKind.allCases, previousModules: previousModules)
+    func sample(
+        previousModules: [MonitorModule],
+        enabledMetrics: [MonitorKind: Set<String>] = [:],
+        panelVisible: Bool = true
+    ) -> SystemMonitorSnapshot {
+        sample(
+            kinds: MonitorKind.allCases,
+            previousModules: previousModules,
+            enabledMetrics: enabledMetrics,
+            panelVisible: panelVisible
+        )
     }
 
-    func sample(kinds: some Sequence<MonitorKind>, previousModules: [MonitorModule]) -> SystemMonitorSnapshot {
+    func sample(
+        kinds: some Sequence<MonitorKind>,
+        previousModules: [MonitorModule],
+        enabledMetrics: [MonitorKind: Set<String>] = [:],
+        panelVisible: Bool = true
+    ) -> SystemMonitorSnapshot {
         autoreleasepool {
             var modulesByKind = Dictionary(uniqueKeysWithValues: previousModules.map { ($0.kind, $0) })
 
             for kind in kinds where kind != .codex {
                 let sampler = sampler(for: kind)
                 let previous = modulesByKind[kind]
-                let module = sampler.sample(previous: previous)
+                let metricIDs = enabledMetrics[kind]
+                    ?? Set(kind.availableMetrics.filter(\.isDefault).map(\.id))
+                let context = MonitorSamplingContext(
+                    enabledMetricIDs: metricIDs,
+                    panelVisible: panelVisible
+                )
+                let module = sampler.sample(previous: previous, context: context)
 
                 if let previous {
                     var updated = module

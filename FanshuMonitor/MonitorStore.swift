@@ -34,13 +34,16 @@ final class MonitorStore: ObservableObject {
     private var samplingGeneration = 0
     private var cancellables: Set<AnyCancellable> = []
     private var menuBarTargetComputeLoad = 0.0
-    private var framesSinceLastMenuBarTargetUpdate = MonitorConstants.menuBarLoadUpdateFrameInterval
-    private var animationTickCounter = 0
     private var lastMenuBarIconKey = ""
 
     init() {
         let settings = MonitorSettings()
-        let initialModules = MonitorKind.allCases.map(MonitorModule.placeholder)
+        let initialModules = MonitorKind.allCases.map { kind in
+            if kind == .codex, let cachedModule = CodexQuotaCache.loadModule() {
+                return cachedModule
+            }
+            return MonitorModule.placeholder(kind: kind)
+        }
         self.settings = settings
         refreshSchedule.setInterval(settings.codexRefreshIntervalMinutes * 60, for: .codex)
         allModules = initialModules
@@ -121,13 +124,10 @@ final class MonitorStore: ObservableObject {
                 self.refreshSchedule.reset()
                 self.modules = self.visibleModules(from: self.allModules)
                 self.advance(kinds: visibleKinds)
+                self.refreshMenuBarLoad()
             }
             .store(in: &cancellables)
-        timerCancellable = Timer.publish(every: refreshSchedule.tickInterval, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                self?.advance()
-            }
+        configureSamplingTimer()
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
                 self?.refreshInputServicesAfterActivation()
@@ -157,28 +157,30 @@ final class MonitorStore: ObservableObject {
     var combinedComputeLoad: Double {
         switch settings.ringSource {
         case .combined:
-            let cpuValue = allModules.first { $0.kind == .cpu }?.value ?? 0
-            let gpuValue = allModules.first { $0.kind == .gpu }?.value ?? 0
-            let memoryPressure = allModules.first { $0.kind == .memory }?.pressure ?? .unknown
+            let cpuValue = visibleModuleValue(for: .cpu)
+            let gpuValue = visibleModuleValue(for: .gpu)
+            let memoryPressure = settings.isVisible(.memory)
+                ? allModules.first { $0.kind == .memory }?.pressure ?? .unknown
+                : .unknown
             return ComputeLoadModel.combined(
                 cpuValue: cpuValue,
                 gpuValue: gpuValue,
                 memoryPressure: memoryPressure
             )
         case .cpu:
-            return allModules.first { $0.kind == .cpu }?.value ?? 0
+            return visibleModuleValue(for: .cpu)
         case .gpu:
-            return allModules.first { $0.kind == .gpu }?.value ?? 0
+            return visibleModuleValue(for: .gpu)
         case .memory:
-            return allModules.first { $0.kind == .memory }?.value ?? 0
+            return visibleModuleValue(for: .memory)
         case .storage:
-            return allModules.first { $0.kind == .storage }?.value ?? 0
+            return visibleModuleValue(for: .storage)
         case .network:
-            return allModules.first { $0.kind == .network }?.value ?? 0
+            return visibleModuleValue(for: .network)
         case .battery:
-            return allModules.first { $0.kind == .battery }?.value ?? 0
+            return visibleModuleValue(for: .battery)
         case .codex:
-            return allModules.first { $0.kind == .codex }?.value ?? 0
+            return visibleModuleValue(for: .codex)
         case .codexWeekly:
             return codexMetricPercent("weekly")
         }
@@ -191,6 +193,9 @@ final class MonitorStore: ObservableObject {
         case .codex, .codexWeekly:
             return ComputeLoadModel.quotaLevel(forRemaining: combinedComputeLoad)
         case .memory:
+            guard settings.isVisible(.memory) else {
+                return .idle
+            }
             let pressure = allModules.first { $0.kind == .memory }?.pressure ?? .unknown
             switch pressure {
             case .normal: return .idle
@@ -202,6 +207,9 @@ final class MonitorStore: ObservableObject {
     }
 
     private func codexMetricPercent(_ name: String) -> Double {
+        guard settings.isVisible(.codex) else {
+            return 0
+        }
         guard let value = allModules.first(where: { $0.kind == .codex })?
             .metrics
             .first(where: { $0.name == name })?
@@ -211,6 +219,13 @@ final class MonitorStore: ObservableObject {
             return 0
         }
         return min(100, max(0, number))
+    }
+
+    private func visibleModuleValue(for kind: MonitorKind) -> Double {
+        guard settings.isVisible(kind) else {
+            return 0
+        }
+        return allModules.first { $0.kind == kind }?.value ?? 0
     }
 
     private func advance() {
@@ -237,12 +252,16 @@ final class MonitorStore: ObservableObject {
         samplingGeneration &+= 1
         let requestGeneration = samplingGeneration
         let previousModules = allModules
+        let enabledMetrics = enabledSamplingMetrics(for: requestedKinds)
+        let panelVisible = isPanelVisible
         let coordinator = samplingCoordinator
 
         samplingTask = Task { [weak self] in
             let snapshot = await coordinator.sample(
                 kinds: requestedKinds,
-                previousModules: previousModules
+                previousModules: previousModules,
+                enabledMetrics: enabledMetrics,
+                panelVisible: panelVisible
             )
             guard !Task.isCancelled,
                   let snapshot,
@@ -258,7 +277,6 @@ final class MonitorStore: ObservableObject {
     }
 
     private func advanceAnimation() {
-        animationTickCounter += 1
         menuBarFrame = (menuBarFrame + 1) % 48
         updateMenuBarTargetComputeLoadIfNeeded(force: true)
         let nextDisplayedComputeLoad = ComputeLoadModel.smoothedDisplayValue(
@@ -313,12 +331,6 @@ final class MonitorStore: ObservableObject {
     #endif
 
     private func updateMenuBarTargetComputeLoadIfNeeded(force: Bool = false) {
-        framesSinceLastMenuBarTargetUpdate += 1
-        guard force || framesSinceLastMenuBarTargetUpdate >= MonitorConstants.menuBarLoadUpdateFrameInterval else {
-            return
-        }
-
-        framesSinceLastMenuBarTargetUpdate = 0
         let currentLoad = combinedComputeLoad
         guard force || ComputeLoadModel.shouldUpdateMenuBarTarget(
             currentTarget: menuBarTargetComputeLoad,
@@ -358,16 +370,18 @@ final class MonitorStore: ObservableObject {
     }
 
     func panelDidAppear() {
+        guard !isPanelVisible else { return }
         isPanelVisible = true
-        refreshCodexUsageNow()
+        configureSamplingTimer()
+        let visibleKinds = settings.visibleKinds
+        refreshSchedule.markRefreshed(visibleKinds, at: Date())
+        advance(kinds: visibleKinds)
     }
 
     func panelDidDisappear() {
+        guard isPanelVisible else { return }
         isPanelVisible = false
-    }
-
-    func refreshCodexUsageNow() {
-        refreshCodexUsage(force: true)
+        configureSamplingTimer()
     }
 
     private func refreshCodexUsage(force: Bool) {
@@ -391,12 +405,29 @@ final class MonitorStore: ObservableObject {
         }
     }
 
-    func refreshNow() {
-        refreshSchedule.reset()
-        advance(kinds: settings.visibleKinds)
-        #if DISPLAY_CONTROL
-        displayController.refreshNow()
-        #endif
+    private func enabledSamplingMetrics(
+        for kinds: some Sequence<MonitorKind>
+    ) -> [MonitorKind: Set<String>] {
+        Dictionary(uniqueKeysWithValues: kinds.map { kind in
+            let metricIDs = settings.enabledMetrics[kind]
+                ?? Set(kind.availableMetrics.filter(\.isDefault).map(\.id))
+            return (kind, metricIDs)
+        })
+    }
+
+    private func configureSamplingTimer() {
+        timerCancellable?.cancel()
+        let interval = refreshSchedule.timerInterval(panelVisible: isPanelVisible)
+        timerCancellable = Timer.publish(
+            every: interval,
+            tolerance: max(0.1, interval * 0.1),
+            on: .main,
+            in: .common
+        )
+        .autoconnect()
+        .sink { [weak self] _ in
+            self?.advance()
+        }
     }
 
     func moduleDetailsText() -> String {

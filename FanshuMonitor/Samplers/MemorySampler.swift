@@ -7,7 +7,7 @@ nonisolated final class MemorySampler: MonitorSampler {
 
     private let totalMemorySize = MemorySampler.memoryTotalSize()
 
-    func sample(previous: MonitorModule?) -> MonitorModule {
+    func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
         var stats = vm_statistics64()
         var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
         let result = withUnsafeMutablePointer(to: &stats) {

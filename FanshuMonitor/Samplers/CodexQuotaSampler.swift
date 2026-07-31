@@ -17,7 +17,7 @@ actor CodexQuotaSampler {
         }
 
         let refreshID = UUID()
-        let cachedModule = cachedModule
+        let cachedModule = cachedModule ?? previous
         let client = client
         let task = Task {
             await Self.loadModule(client: client, cachedModule: cachedModule)
@@ -62,6 +62,7 @@ actor CodexQuotaSampler {
     ) async -> MonitorModule {
         do {
             let report = try await client.load()
+            CodexQuotaCache.save(report)
             return Self.module(from: report)
         } catch {
             return MonitorModule(
@@ -74,6 +75,7 @@ actor CodexQuotaSampler {
                     MonitorMetric(name: "weekly", value: cachedMetric("weekly", in: cachedModule)),
                     MonitorMetric(name: "five-hour-reset", value: cachedMetric("five-hour-reset", in: cachedModule)),
                     MonitorMetric(name: "weekly-reset", value: cachedMetric("weekly-reset", in: cachedModule)),
+                    MonitorMetric(name: "reset-credits", value: cachedMetric("reset-credits", in: cachedModule)),
                     MonitorMetric(name: "status", value: error.localizedDescription)
                 ],
                 samples: cachedModule?.samples ?? seedSamples(0)
@@ -94,7 +96,8 @@ actor CodexQuotaSampler {
             MonitorMetric(name: "five-hour", value: "--"),
             MonitorMetric(name: "weekly", value: "--"),
             MonitorMetric(name: "five-hour-reset", value: "--"),
-            MonitorMetric(name: "weekly-reset", value: "--")
+            MonitorMetric(name: "weekly-reset", value: "--"),
+            MonitorMetric(name: "reset-credits", value: "--")
         ],
         samples: seedSamples(0)
     )
@@ -118,15 +121,11 @@ actor CodexQuotaSampler {
                 MonitorMetric(name: "five-hour", value: fiveHourRemaining),
                 MonitorMetric(name: "weekly", value: weeklyRemaining),
                 MonitorMetric(name: "five-hour-reset", value: fiveHourResetText),
-                MonitorMetric(name: "weekly-reset", value: weeklyResetText)
+                MonitorMetric(name: "weekly-reset", value: weeklyResetText),
+                MonitorMetric(name: "reset-credits", value: resetCreditsText(report.resetCredits))
             ],
             samples: seedSamples(fiveHourRemainingValue)
         )
-    }
-
-    private static func usedPercent(from snapshot: CodexQuotaSnapshot?) -> Double? {
-        guard let remainingRatio = snapshot?.remainingRatio else { return nil }
-        return 100 - remainingRatio * 100
     }
 
     private static func percentText(_ ratio: Double?) -> String {
@@ -140,6 +139,11 @@ actor CodexQuotaSampler {
 
     private static func formattedWeeklyReset(_ date: Date?) -> String {
         date.map { quotaDateFormatter.string(from: $0) } ?? "--"
+    }
+
+    private static func resetCreditsText(_ count: Int?) -> String {
+        guard let count else { return "--" }
+        return "\(max(0, count)) 张"
     }
 
     private static func normalizedPlanName(_ planType: String?) -> String {
@@ -176,6 +180,7 @@ nonisolated enum CodexUsageError: LocalizedError, Equatable {
     case missingAccessToken
     case invalidAuthFile
     case invalidResponse(Int)
+    case networkTimedOut
     case networkFailed(String)
     case invalidPayload
 
@@ -189,6 +194,8 @@ nonisolated enum CodexUsageError: LocalizedError, Equatable {
             return "登录文件无效"
         case .invalidResponse(let status):
             return "接口返回 \(status)"
+        case .networkTimedOut:
+            return "连接超时"
         case .networkFailed:
             return "网络请求失败"
         case .invalidPayload:
@@ -199,21 +206,21 @@ nonisolated enum CodexUsageError: LocalizedError, Equatable {
 
 nonisolated struct CodexUsageClient: Sendable {
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, HTTPURLResponse)
+    static let requestTimeout: TimeInterval = 12
 
-    static let liveTransport: Transport = { request in
+    private static let liveSession: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
-        configuration.timeoutIntervalForRequest = 20
-        configuration.timeoutIntervalForResource = 20
+        configuration.timeoutIntervalForRequest = requestTimeout
+        configuration.timeoutIntervalForResource = requestTimeout
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration)
+    }()
 
-        let session = URLSession(configuration: configuration)
-        defer {
-            session.finishTasksAndInvalidate()
-        }
-
-        let (data, response) = try await session.data(for: request)
+    static let liveTransport: Transport = { request in
+        let (data, response) = try await liveSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw CodexUsageError.invalidResponse(-1)
         }
@@ -238,6 +245,7 @@ nonisolated struct CodexUsageClient: Sendable {
         let accessToken = try loadAccessToken()
         var request = URLRequest(url: usageURL)
         request.httpMethod = "GET"
+        request.timeoutInterval = Self.requestTimeout
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("番薯Monitor/0.2.8", forHTTPHeaderField: "User-Agent")
@@ -249,7 +257,7 @@ nonisolated struct CodexUsageClient: Sendable {
         } catch let error as CodexUsageError {
             throw error
         } catch {
-            throw CodexUsageError.networkFailed(error.localizedDescription)
+            throw Self.mapTransportError(error)
         }
 
         guard response.statusCode == 200 else {
@@ -257,6 +265,13 @@ nonisolated struct CodexUsageClient: Sendable {
         }
 
         return try Self.parseUsage(data)
+    }
+
+    static func mapTransportError(_ error: Error) -> CodexUsageError {
+        if let urlError = error as? URLError, urlError.code == .timedOut {
+            return .networkTimedOut
+        }
+        return .networkFailed(error.localizedDescription)
     }
 
     static func parseUsage(_ data: Data) throws -> CodexQuotaReport {
@@ -276,7 +291,8 @@ nonisolated struct CodexUsageClient: Sendable {
 
             return CodexQuotaReport(
                 planType: response.planType,
-                periods: periods
+                periods: periods,
+                resetCredits: response.rateLimitResetCredits?.availableCount
             )
         } catch {
             throw CodexUsageError.invalidPayload
@@ -303,12 +319,13 @@ nonisolated struct CodexUsageClient: Sendable {
     }
 }
 
-nonisolated struct CodexQuotaReport: Equatable, Sendable {
+nonisolated struct CodexQuotaReport: Codable, Equatable, Sendable {
     var planType: String?
     var periods: [CodexQuotaSnapshot]
+    var resetCredits: Int?
 }
 
-nonisolated struct CodexQuotaSnapshot: Equatable, Sendable {
+nonisolated struct CodexQuotaSnapshot: Codable, Equatable, Sendable {
     var id: String
     var label: String
     var remaining: Double
@@ -319,6 +336,26 @@ nonisolated struct CodexQuotaSnapshot: Equatable, Sendable {
     var remainingRatio: Double? {
         guard limit > 0 else { return nil }
         return max(0, min(1, remaining / limit))
+    }
+}
+
+nonisolated enum CodexQuotaCache {
+    private static let key = "codex.quota.lastSuccessfulReport"
+
+    static func loadModule(defaults: UserDefaults = .standard) -> MonitorModule? {
+        guard let data = defaults.data(forKey: key),
+              let report = try? JSONDecoder().decode(CodexQuotaReport.self, from: data)
+        else {
+            return nil
+        }
+        return CodexQuotaSampler.module(from: report)
+    }
+
+    static func save(_ report: CodexQuotaReport, defaults: UserDefaults = .standard) {
+        guard let data = try? JSONEncoder().encode(report) else {
+            return
+        }
+        defaults.set(data, forKey: key)
     }
 }
 
@@ -337,10 +374,20 @@ nonisolated private struct CodexAuth: Decodable {
 nonisolated private struct CodexUsageResponse: Decodable {
     var planType: String?
     var rateLimit: RateLimit?
+    var rateLimitResetCredits: RateLimitResetCredits?
 
     enum CodingKeys: String, CodingKey {
         case planType = "plan_type"
         case rateLimit = "rate_limit"
+        case rateLimitResetCredits = "rate_limit_reset_credits"
+    }
+
+    struct RateLimitResetCredits: Decodable {
+        var availableCount: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case availableCount = "available_count"
+        }
     }
 
     struct RateLimit: Decodable {

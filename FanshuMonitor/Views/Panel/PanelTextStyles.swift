@@ -12,15 +12,7 @@ extension Text {
             .kerning(tracking)
     }
 
-    func panelMetricLabelFont() -> some View {
-        self
-            .font(.system(
-                size: PanelTypography.moduleHeaderSize,
-                weight: PanelTypography.moduleHeaderWeight
-            ))
-    }
-
-    func panelTitleValueFont() -> some View {
+    func panelModuleHeaderFont() -> some View {
         self
             .font(.system(
                 size: PanelTypography.moduleHeaderSize,

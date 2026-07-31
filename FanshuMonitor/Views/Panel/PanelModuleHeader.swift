@@ -53,15 +53,15 @@ struct PanelModuleHeader<Leading: View, Trailing: View>: View {
 
             HStack(spacing: PanelModuleHeaderMetrics.textSpacing) {
                 Text(title)
-                    .panelMetricLabelFont()
+                    .panelModuleHeaderFont()
                     .foregroundStyle(titleColor)
                     .fixedSize(horizontal: true, vertical: false)
 
                 Text(value)
-                    .panelTitleValueFont()
+                    .panelModuleHeaderFont()
                     .foregroundStyle(valueColor)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.82)
+                    .truncationMode(.tail)
             }
             .lineLimit(1)
             .layoutPriority(2)

@@ -361,6 +361,7 @@ final class MonitorSettings: ObservableObject {
                     "状态": "weekly-reset",
                     "5H刷新": "five-hour-reset",
                     "周刷新": "weekly-reset",
+                    "重置卡": "reset-credits",
                     "next-reset": "five-hour-reset",
                     "status": "weekly-reset"
                 ]
@@ -376,8 +377,9 @@ final class MonitorSettings: ObservableObject {
             }
         }
 
-        let availableIds = Set(kind.availableMetrics.map { $0.id })
-        let filtered = result.intersection(availableIds)
+        let filtered = kind.availableMetrics
+            .map(\.id)
+            .filter(result.contains)
 
         if filtered.isEmpty {
             return Array(defaultMetricIds(for: kind))

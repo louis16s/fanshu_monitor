@@ -4,7 +4,7 @@ import OSLog
 nonisolated final class StorageSampler: MonitorSampler {
     var kind: MonitorKind { .storage }
 
-    func sample(previous: MonitorModule?) -> MonitorModule {
+    func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
         do {
             let rootURL = URL(fileURLWithPath: "/")
             let values = try rootURL.resourceValues(forKeys: [
@@ -19,7 +19,7 @@ nonisolated final class StorageSampler: MonitorSampler {
 
             return MonitorModule(
                 kind: .storage,
-                context: externalVolumesJSON(),
+                context: context.panelVisible ? externalVolumesJSON() : previous?.context,
                 value: percentage,
                 summary: percent(percentage),
                 metrics: [

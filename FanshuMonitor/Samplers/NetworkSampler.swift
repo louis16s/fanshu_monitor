@@ -12,10 +12,17 @@ nonisolated final class NetworkSampler: MonitorSampler {
     private let ssidRefreshInterval: TimeInterval = 30
     private let addressRefreshInterval: TimeInterval = 30
 
-    func sample(previous: MonitorModule?) -> MonitorModule {
+    func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
         let now = Date()
-        let bytes = networkBytes()
-        let addresses = addressSummary(for: bytes, at: now)
+        let shouldCollectAddresses = context.panelVisible
+            && (context.includes("ipv4") || context.includes("ipv6"))
+        let bytes = networkBytes(includeAddresses: shouldCollectAddresses)
+        let addresses = shouldCollectAddresses
+            ? addressSummary(for: bytes, at: now)
+            : cachedAddressValues(from: previous)
+        let ssid = context.shouldCollectExpensiveMetric("ssid")
+            ? currentSSID(at: now)
+            : previous?.metrics.first { $0.name == "ssid" }?.value ?? "--"
         let previousBytes = previousNetworkBytes
         previousNetworkBytes = (bytes.input, bytes.output, now)
 
@@ -24,13 +31,13 @@ nonisolated final class NetworkSampler: MonitorSampler {
                 kind: .network,
                 value: 0,
                 summary: bytes.interface,
-                metrics: [
-                    MonitorMetric(name: "ssid", value: currentSSID(at: now)),
-                    MonitorMetric(name: "ipv4", value: addresses.ipv4),
-                    MonitorMetric(name: "ipv6", value: addresses.ipv6),
-                    MonitorMetric(name: "upload", value: "--"),
-                    MonitorMetric(name: "download", value: "--")
-                ],
+                metrics: metrics(
+                    context: context,
+                    ssid: ssid,
+                    addresses: addresses,
+                    upload: "--",
+                    download: "--"
+                ),
                 samples: seedSamples(0)
             )
         }
@@ -44,18 +51,47 @@ nonisolated final class NetworkSampler: MonitorSampler {
             kind: .network,
             value: value,
             summary: bytes.interface,
-            metrics: [
-                MonitorMetric(name: "ssid", value: currentSSID(at: now)),
-                MonitorMetric(name: "ipv4", value: addresses.ipv4),
-                MonitorMetric(name: "ipv6", value: addresses.ipv6),
-                MonitorMetric(name: "upload", value: bytesPerSecond(upload)),
-                MonitorMetric(name: "download", value: bytesPerSecond(download))
-            ],
+            metrics: metrics(
+                context: context,
+                ssid: ssid,
+                addresses: addresses,
+                upload: bytesPerSecond(upload),
+                download: bytesPerSecond(download)
+            ),
             samples: seedSamples(value)
         )
     }
 
-    private func networkBytes() -> NetworkInterfaceSnapshot {
+    private func metrics(
+        context: MonitorSamplingContext,
+        ssid: String,
+        addresses: (ipv4: String, ipv6: String),
+        upload: String,
+        download: String
+    ) -> [MonitorMetric] {
+        let values = [
+            "ssid": ssid,
+            "ipv4": addresses.ipv4,
+            "ipv6": addresses.ipv6,
+            "upload": upload,
+            "download": download
+        ]
+        return MonitorKind.network.availableMetrics.compactMap { metric in
+            guard context.includes(metric.id), let value = values[metric.id] else {
+                return nil
+            }
+            return MonitorMetric(name: metric.id, value: value)
+        }
+    }
+
+    private func cachedAddressValues(from previous: MonitorModule?) -> (ipv4: String, ipv6: String) {
+        (
+            ipv4: previous?.metrics.first { $0.name == "ipv4" }?.value ?? "--",
+            ipv6: previous?.metrics.first { $0.name == "ipv6" }?.value ?? "--"
+        )
+    }
+
+    private func networkBytes(includeAddresses: Bool) -> NetworkInterfaceSnapshot {
         var addressList: UnsafeMutablePointer<ifaddrs>?
         var totalsByInterface: [String: (input: UInt64, output: UInt64)] = [:]
         var ipv4ByInterface: [String: [String]] = [:]
@@ -90,6 +126,9 @@ nonisolated final class NetworkSampler: MonitorSampler {
                 totalsByInterface[name] = current
 
             case AF_INET, AF_INET6:
+                guard includeAddresses else {
+                    continue
+                }
                 guard let addressText = ipAddress(from: address) else {
                     continue
                 }

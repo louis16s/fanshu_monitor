@@ -18,13 +18,13 @@ nonisolated final class BatterySampler: MonitorSampler {
         }
     }
 
-    func sample(previous: MonitorModule?) -> MonitorModule {
+    func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
         guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
               let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef],
               let source = sources.first,
               let description = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any] else {
             AppLogger.sampler.error("BatterySampler failed to read power source info")
-            return externalPowerModule()
+            return externalPowerModule(previous: previous, panelVisible: context.panelVisible)
         }
 
         let current = doubleValue(description[kIOPSCurrentCapacityKey]) ?? 0
@@ -34,12 +34,13 @@ nonisolated final class BatterySampler: MonitorSampler {
         let sourceState = description[kIOPSPowerSourceStateKey] as? String
         let connected = sourceState == kIOPSACPowerValue
 
-        let smart = smartBatteryInfo(at: Date())
-        let adapterWatts = smart.adapterWatts ?? externalAdapterWatts()
+        let shouldCollectTelemetry = context.panelVisible
+        let smart = shouldCollectTelemetry ? smartBatteryInfo(at: Date()) : nil
+        let adapterWatts = smart?.adapterWatts ?? (shouldCollectTelemetry ? externalAdapterWatts() : nil)
         let chargingPower = connected
-            ? (smart.telemetryChargingWatts ?? smart.chargingPowerWatts)
+            ? (smart?.telemetryChargingWatts ?? smart?.chargingPowerWatts)
             : nil
-        let systemPower = smart.systemPowerWatts ?? powerTelemetryWatts()
+        let systemPower = smart?.systemPowerWatts ?? (shouldCollectTelemetry ? powerTelemetryWatts() : nil)
 
         return MonitorModule(
             kind: .battery,
@@ -48,20 +49,74 @@ nonisolated final class BatterySampler: MonitorSampler {
             metrics: [
                 MonitorMetric(name: "type", value: "battery"),
                 MonitorMetric(name: "status", value: isCharging ? "charging" : (connected ? "ac-power" : "on-battery")),
-                MonitorMetric(name: "adapter", value: wattString(adapterWatts, rounded: true)),
-                MonitorMetric(name: "charging-power", value: connected ? wattStringAllowZero(chargingPower) : "--"),
-                MonitorMetric(name: "power", value: wattString(systemPower)),
-                MonitorMetric(name: "health", value: smart.healthPercent.map(percent) ?? "--"),
-                MonitorMetric(name: "cycle-count", value: smart.cycleCount.map { "\($0)" } ?? "--"),
-                MonitorMetric(name: "temperature", value: smart.temperatureCelsius.map { "\(String(format: "%.0f", $0))°C" } ?? "--")
+                MonitorMetric(name: "adapter", value: connected
+                    ? telemetryValue(
+                        "adapter",
+                        freshValue: Self.adapterMetricValue(isConnected: true, watts: adapterWatts),
+                        previous: previous,
+                        shouldCollect: shouldCollectTelemetry
+                    )
+                    : Self.adapterMetricValue(isConnected: false, watts: nil)),
+                MonitorMetric(name: "charging-power", value: telemetryValue(
+                    "charging-power",
+                    freshValue: connected ? wattStringAllowZero(chargingPower) : "--",
+                    previous: previous,
+                    shouldCollect: shouldCollectTelemetry
+                )),
+                MonitorMetric(name: "power", value: telemetryValue(
+                    "power",
+                    freshValue: wattString(systemPower),
+                    previous: previous,
+                    shouldCollect: shouldCollectTelemetry
+                )),
+                MonitorMetric(name: "health", value: telemetryValue(
+                    "health",
+                    freshValue: smart?.healthPercent.map(percent) ?? "--",
+                    previous: previous,
+                    shouldCollect: shouldCollectTelemetry
+                )),
+                MonitorMetric(name: "cycle-count", value: telemetryValue(
+                    "cycle-count",
+                    freshValue: smart?.cycleCount.map { "\($0)" } ?? "--",
+                    previous: previous,
+                    shouldCollect: shouldCollectTelemetry
+                )),
+                MonitorMetric(name: "temperature", value: telemetryValue(
+                    "temperature",
+                    freshValue: smart?.temperatureCelsius.map { "\(String(format: "%.0f", $0))°C" } ?? "--",
+                    previous: previous,
+                    shouldCollect: shouldCollectTelemetry
+                ))
             ],
             samples: seedSamples(percentage)
         )
     }
 
-    private func externalPowerModule() -> MonitorModule {
-        let adapterWatts = externalAdapterWatts()
-        let powerWatts = powerTelemetryWatts()
+    private func telemetryValue(
+        _ name: String,
+        freshValue: String,
+        previous: MonitorModule?,
+        shouldCollect: Bool
+    ) -> String {
+        if shouldCollect {
+            return freshValue
+        }
+        return previous?.metrics.first { $0.name == name }?.value ?? "--"
+    }
+
+    static func adapterMetricValue(isConnected: Bool, watts: Double?) -> String {
+        guard isConnected else {
+            return "not-connected"
+        }
+        return wattString(watts, rounded: true)
+    }
+
+    private func externalPowerModule(
+        previous: MonitorModule?,
+        panelVisible: Bool
+    ) -> MonitorModule {
+        let adapterWatts = panelVisible ? externalAdapterWatts() : nil
+        let powerWatts = panelVisible ? powerTelemetryWatts() : nil
         return MonitorModule(
             kind: .battery,
             value: 100,
@@ -69,8 +124,18 @@ nonisolated final class BatterySampler: MonitorSampler {
             metrics: [
                 MonitorMetric(name: "type", value: "ac-power"),
                 MonitorMetric(name: "status", value: "ac-power"),
-                MonitorMetric(name: "adapter", value: wattString(adapterWatts, rounded: true)),
-                MonitorMetric(name: "power", value: wattString(powerWatts))
+                MonitorMetric(name: "adapter", value: telemetryValue(
+                    "adapter",
+                    freshValue: wattString(adapterWatts, rounded: true),
+                    previous: previous,
+                    shouldCollect: panelVisible
+                )),
+                MonitorMetric(name: "power", value: telemetryValue(
+                    "power",
+                    freshValue: wattString(powerWatts),
+                    previous: previous,
+                    shouldCollect: panelVisible
+                ))
             ],
             samples: seedSamples(100)
         )
@@ -98,8 +163,6 @@ nonisolated final class BatterySampler: MonitorSampler {
         let designCapacity = doubleRegistryValue(service, "DesignCapacity")
         let maxCapacity = doubleRegistryValue(service, "AppleRawMaxCapacity")
             ?? doubleRegistryValue(service, "MaxCapacity")
-        let voltage = doubleRegistryValue(service, "Voltage")
-        let amperage = doubleRegistryValue(service, "Amperage")
         let adapterWatts = adapterWatts(service)
         let systemPowerWatts = systemPowerWatts(service)
         let chargingPowerWatts = chargingPowerWatts(service)
@@ -110,16 +173,9 @@ nonisolated final class BatterySampler: MonitorSampler {
         } else {
             nil as Double?
         }
-        let batteryWatts = if let voltage, let amperage {
-            nonZeroWatts(abs(voltage * amperage / 1_000_000))
-        } else {
-            nil as Double?
-        }
-
         return SmartBatteryInfo(
             cycleCount: cycleCount,
             healthPercent: health,
-            batteryPowerWatts: batteryWatts,
             adapterWatts: adapterWatts,
             systemPowerWatts: systemPowerWatts,
             chargingPowerWatts: chargingPowerWatts,
@@ -252,7 +308,6 @@ nonisolated final class BatterySampler: MonitorSampler {
 nonisolated private struct SmartBatteryInfo {
     var cycleCount: Int?
     var healthPercent: Double?
-    var batteryPowerWatts: Double?
     var adapterWatts: Double?
     var systemPowerWatts: Double?
     var chargingPowerWatts: Double?

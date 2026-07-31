@@ -7,13 +7,15 @@ nonisolated final class CPUSampler: MonitorSampler {
     var kind: MonitorKind { .cpu }
 
     private var previousCPUInfo: host_cpu_load_info?
-    private let smcReader: SMCReader? = SMCReader()
+    private lazy var smcReader: SMCReader? = SMCReader()
 
-    func sample(previous: MonitorModule?) -> MonitorModule {
+    func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
         let info = hostCPULoadInfo()
         let metrics: [MonitorMetric]
         let total: Double
-        let temperature = cpuTemperatureText()
+        let temperature = context.shouldCollectExpensiveMetric("temperature")
+            ? cpuTemperatureText()
+            : previous?.metrics.first { $0.name == "temperature" }?.value ?? "--"
 
         if let info, let previousCPUInfo {
             let userDiff = Double(info.cpu_ticks.0 &- previousCPUInfo.cpu_ticks.0)
@@ -26,20 +28,26 @@ nonisolated final class CPUSampler: MonitorSampler {
             let user = all > 0 ? ((userDiff + niceDiff) / all) * 100 : 0
             let idle = all > 0 ? (idleDiff / all) * 100 : 100
             total = min(100, max(0, system + user))
-            metrics = [
+            var currentMetrics = [
                 MonitorMetric(name: "system", value: percent(system)),
                 MonitorMetric(name: "user", value: percent(user)),
-                MonitorMetric(name: "idle", value: percent(idle)),
-                MonitorMetric(name: "temperature", value: temperature)
+                MonitorMetric(name: "idle", value: percent(idle))
             ]
+            if context.includes("temperature") {
+                currentMetrics.append(MonitorMetric(name: "temperature", value: temperature))
+            }
+            metrics = currentMetrics
         } else {
             total = 0
-            metrics = [
+            var currentMetrics = [
                 MonitorMetric(name: "system", value: "--"),
                 MonitorMetric(name: "user", value: "--"),
-                MonitorMetric(name: "idle", value: "--"),
-                MonitorMetric(name: "temperature", value: temperature)
+                MonitorMetric(name: "idle", value: "--")
             ]
+            if context.includes("temperature") {
+                currentMetrics.append(MonitorMetric(name: "temperature", value: temperature))
+            }
+            metrics = currentMetrics
         }
 
         if let info {

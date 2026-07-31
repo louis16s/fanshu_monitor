@@ -27,6 +27,16 @@ struct SettingsTests {
         #expect(settings.codexRefreshIntervalMinutes == 5)
     }
 
+    @Test func codexResetCreditsIsOptionalByDefault() {
+        let suite = "codexResetCreditsIsOptionalByDefault"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(!settings.isMetricEnabled("reset-credits", for: .codex))
+    }
+
     @Test func codexRefreshIntervalLoadsPersistedValue() {
         let suite = "codexRefreshIntervalLoadsPersistedValue"
         let defaults = UserDefaults(suiteName: suite)!

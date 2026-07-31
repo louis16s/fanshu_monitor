@@ -45,13 +45,6 @@ final class MouseControlController: ObservableObject {
             }
             .store(in: &cancellables)
 
-        settings.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
-                self?.eventTap?.refresh()
-            }
-            .store(in: &cancellables)
-
         syncEnabledState(settings.mouseControlEnabled)
     }
 

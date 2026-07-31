@@ -72,7 +72,7 @@ struct MetricGlassRow: View {
         case .battery:
             "Power"
         case .codex:
-            "Codex Usage"
+            "Codex Limits"
         }
     }
 
@@ -189,10 +189,9 @@ private struct CodexMetricDetailGrid: View {
             MetricDetailGrid(metrics: metrics, kind: .codex, theme: theme)
         } else {
             MetricDetailGrid(
-                metrics: [
-                    MonitorMetric(name: "weekly", value: presentation.weeklyText),
-                    MonitorMetric(name: "weekly-reset", value: presentation.weeklyResetText)
-                ],
+                metrics: metrics.filter {
+                    $0.name != "five-hour" && $0.name != "five-hour-reset"
+                },
                 kind: .codex,
                 theme: theme
             )
@@ -227,6 +226,7 @@ private func chineseMetricName(kind: MonitorKind, id: String) -> String? {
     case (.codex, "weekly"): return "一周"
     case (.codex, "five-hour-reset"): return "5H刷新"
     case (.codex, "weekly-reset"): return "周刷新"
+    case (.codex, "reset-credits"): return "重置卡"
     case (.codex, "next-reset"): return "下次刷新"
     case (.codex, "status"): return "状态"
     default: return nil
@@ -237,6 +237,8 @@ private func localizedMetricValue(kind: MonitorKind, metric: MonitorMetric) -> S
     switch (kind, metric.name) {
     case (.memory, "pressure"):
         return localizedMemoryPressure(metric.value)
+    case (.battery, "adapter"):
+        return localizedBatteryState(metric.value)
     default:
         return metric.value
     }
@@ -394,8 +396,12 @@ struct NetworkGlassRow: View {
                 PanelModuleIcon(systemName: "wifi", color: tint)
             } trailing: {
                 HStack(spacing: 6) {
-                    NetworkRatePill(systemImage: "arrow.up", text: value("upload"), theme: theme)
-                    NetworkRatePill(systemImage: "arrow.down", text: value("download"), theme: theme)
+                    if enabledMetricNames.contains("upload") {
+                        NetworkRatePill(systemImage: "arrow.up", text: value("upload"), theme: theme)
+                    }
+                    if enabledMetricNames.contains("download") {
+                        NetworkRatePill(systemImage: "arrow.down", text: value("download"), theme: theme)
+                    }
                 }
             }
 
@@ -415,11 +421,14 @@ struct NetworkGlassRow: View {
 
     private var detailMetrics: [MonitorMetric] {
         let names = ["ssid", "ipv4", "ipv6", "upload", "download"]
-        let enabledNames = Set(details.map(\.name))
         return names.compactMap { name in
-            guard enabledNames.contains(name) else { return nil }
+            guard enabledMetricNames.contains(name) else { return nil }
             return module.metrics.first(where: { $0.name == name })
         }
+    }
+
+    private var enabledMetricNames: Set<String> {
+        Set(details.map(\.name))
     }
 
     private func value(_ name: String) -> String {
@@ -545,7 +554,7 @@ struct BatteryGlassRow: View {
     private var detailMetrics: [MonitorMetric] {
         let names = isConnectedToPower
             ? ["charging-power", "adapter", "health", "cycle-count", "temperature"]
-            : ["health", "cycle-count", "temperature"]
+            : ["adapter", "health", "cycle-count", "temperature"]
 
         let enabledNames = Set(details.map(\.name))
 

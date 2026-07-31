@@ -89,6 +89,38 @@ struct FanshuMonitorTests {
     @Test func monitorRefreshScheduleTickInterval() {
         let schedule = MonitorRefreshSchedule()
         #expect(schedule.tickInterval == 1.0)
+        #expect(schedule.timerInterval(panelVisible: true) == 1.0)
+        #expect(schedule.timerInterval(panelVisible: false) == 5.0)
+    }
+
+    @Test func expensiveMetricsRequireSelectionAndAVisiblePanel() {
+        let visible = MonitorSamplingContext(
+            enabledMetricIDs: ["temperature"],
+            panelVisible: true
+        )
+        let hidden = MonitorSamplingContext(
+            enabledMetricIDs: ["temperature"],
+            panelVisible: false
+        )
+        let disabled = MonitorSamplingContext(
+            enabledMetricIDs: [],
+            panelVisible: true
+        )
+
+        #expect(visible.shouldCollectExpensiveMetric("temperature"))
+        #expect(!hidden.shouldCollectExpensiveMetric("temperature"))
+        #expect(!disabled.shouldCollectExpensiveMetric("temperature"))
+    }
+
+    @Test func networkSamplerOnlyPublishesEnabledMetrics() {
+        let context = MonitorSamplingContext(
+            enabledMetricIDs: ["upload"],
+            panelVisible: false
+        )
+
+        let module = NetworkSampler().sample(previous: nil, context: context)
+
+        #expect(module.metrics.map(\.name) == ["upload"])
     }
 
     @Test func codexRefreshScheduleUsesConfiguredInterval() {
@@ -244,6 +276,10 @@ struct FanshuMonitorTests {
           "rate_limit": {
             "primary_window": { "used_percent": 25, "reset_at": 1779385358 },
             "secondary_window": { "used_percent": 40, "reset_at": 1779868997 }
+          },
+          "rate_limit_reset_credits": {
+            "available_count": 2,
+            "applicable_available_count": 1
           }
         }
         """
@@ -258,6 +294,7 @@ struct FanshuMonitorTests {
         #expect(module.metrics.first { $0.name == "weekly" }?.value == "60%")
         #expect(module.metrics.first { $0.name == "five-hour-reset" }?.value != nil)
         #expect(module.metrics.first { $0.name == "weekly-reset" }?.value != nil)
+        #expect(module.metrics.first { $0.name == "reset-credits" }?.value == "2 张")
     }
 
     @Test func codexUsageClassifiesAWeeklyPrimaryWindowByDuration() throws {
@@ -282,6 +319,53 @@ struct FanshuMonitorTests {
         #expect(module.metrics.first { $0.name == "five-hour" }?.value == "--")
         #expect(module.metrics.first { $0.name == "weekly" }?.value == "91%")
         #expect(module.metrics.first { $0.name == "weekly-reset" }?.value != "--")
+        #expect(module.metrics.first { $0.name == "reset-credits" }?.value == "--")
+    }
+
+    @Test func codexResetCreditsMetricIsDisabledByDefault() {
+        let resetCredits = MonitorKind.codex.availableMetrics.first { $0.id == "reset-credits" }
+
+        #expect(resetCredits?.title == "重置卡")
+        #expect(resetCredits?.isDefault == false)
+    }
+
+    @Test func batteryAdapterReportsDisconnectedStateWithoutStaleWattage() {
+        #expect(BatterySampler.adapterMetricValue(isConnected: false, watts: 60) == "not-connected")
+        #expect(BatterySampler.adapterMetricValue(isConnected: true, watts: 60) == "60 W")
+        #expect(BatterySampler.adapterMetricValue(isConnected: true, watts: nil) == "--")
+    }
+
+    @Test func codexTransportTimeoutUsesResponsiveError() {
+        #expect(CodexUsageClient.requestTimeout == 12)
+        #expect(CodexUsageClient.mapTransportError(URLError(.timedOut)) == .networkTimedOut)
+        #expect(CodexUsageError.networkTimedOut.localizedDescription == "连接超时")
+    }
+
+    @Test func codexQuotaCacheRestoresTheLastSuccessfulReport() {
+        let suiteName = "FanshuMonitorTests.codexQuotaCache"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let report = CodexQuotaReport(
+            planType: "plus",
+            periods: [
+                CodexQuotaSnapshot(
+                    id: "week",
+                    label: "一周",
+                    remaining: 87,
+                    limit: 100,
+                    usedPercent: 13,
+                    resetAt: nil
+                )
+            ],
+            resetCredits: 2
+        )
+
+        CodexQuotaCache.save(report, defaults: defaults)
+        let module = CodexQuotaCache.loadModule(defaults: defaults)
+
+        #expect(module?.summary == "Plus")
+        #expect(module?.metrics.first { $0.name == "weekly" }?.value == "87%")
+        #expect(module?.metrics.first { $0.name == "reset-credits" }?.value == "2 张")
     }
 
     @Test func codexQuotaPresentationUsesWeeklyFallbackWhenFiveHourIsMissing() {

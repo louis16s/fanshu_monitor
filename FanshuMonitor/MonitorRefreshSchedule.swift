@@ -46,6 +46,10 @@ final class MonitorRefreshSchedule {
         intervals[kind] = max(tickInterval, interval)
     }
 
+    func timerInterval(panelVisible: Bool) -> TimeInterval {
+        panelVisible ? tickInterval : max(tickInterval, 5)
+    }
+
     private func effectiveInterval(for kind: MonitorKind, panelVisible: Bool) -> TimeInterval {
         let base = intervals[kind] ?? tickInterval
         guard !panelVisible else { return base }

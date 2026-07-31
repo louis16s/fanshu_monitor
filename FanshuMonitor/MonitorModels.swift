@@ -156,6 +156,7 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
                 MetricSwitch(id: "weekly", title: "一周", isDefault: true),
                 MetricSwitch(id: "five-hour-reset", title: "5H刷新", isDefault: true),
                 MetricSwitch(id: "weekly-reset", title: "周刷新", isDefault: false),
+                MetricSwitch(id: "reset-credits", title: "重置卡", isDefault: false),
             ]
         }
     }
