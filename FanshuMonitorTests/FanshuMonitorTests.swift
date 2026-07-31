@@ -446,6 +446,33 @@ struct FanshuMonitorTests {
         #expect(module?.metrics.first { $0.name == "reset-credits" }?.value == "2 张")
     }
 
+    @Test func codexRefreshFailureKeepsTheCachedPlanAndQuota() {
+        let cachedModule = MonitorModule(
+            kind: .codex,
+            value: 0,
+            summary: "--",
+            metrics: [
+                MonitorMetric(name: "plan", value: "Plus"),
+                MonitorMetric(name: "five-hour", value: "--"),
+                MonitorMetric(name: "weekly", value: "51%"),
+                MonitorMetric(name: "five-hour-reset", value: "--"),
+                MonitorMetric(name: "weekly-reset", value: "2026.8.5"),
+                MonitorMetric(name: "reset-credits", value: "--")
+            ],
+            samples: seedSamples(0)
+        )
+
+        let fallback = CodexQuotaSampler.fallbackModule(
+            cachedModule: cachedModule,
+            errorDescription: "连接超时"
+        )
+
+        #expect(fallback.summary == "Plus")
+        #expect(fallback.metrics.first { $0.name == "plan" }?.value == "Plus")
+        #expect(fallback.metrics.first { $0.name == "weekly" }?.value == "51%")
+        #expect(fallback.metrics.first { $0.name == "status" }?.value == "连接超时")
+    }
+
     @Test func codexQuotaPresentationUsesWeeklyFallbackWhenFiveHourIsMissing() {
         let presentation = CodexQuotaPresentation(metrics: [
             MonitorMetric(name: "five-hour", value: "--"),

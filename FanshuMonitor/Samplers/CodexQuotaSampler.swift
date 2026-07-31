@@ -65,26 +65,53 @@ actor CodexQuotaSampler {
             CodexQuotaCache.save(report)
             return Self.module(from: report)
         } catch {
-            return MonitorModule(
-                kind: .codex,
-                value: cachedModule?.value ?? 0,
-                summary: "--",
-                metrics: [
-                    MonitorMetric(name: "plan", value: cachedMetric("plan", in: cachedModule)),
-                    MonitorMetric(name: "five-hour", value: cachedMetric("five-hour", in: cachedModule)),
-                    MonitorMetric(name: "weekly", value: cachedMetric("weekly", in: cachedModule)),
-                    MonitorMetric(name: "five-hour-reset", value: cachedMetric("five-hour-reset", in: cachedModule)),
-                    MonitorMetric(name: "weekly-reset", value: cachedMetric("weekly-reset", in: cachedModule)),
-                    MonitorMetric(name: "reset-credits", value: cachedMetric("reset-credits", in: cachedModule)),
-                    MonitorMetric(name: "status", value: error.localizedDescription)
-                ],
-                samples: cachedModule?.samples ?? seedSamples(0)
+            return fallbackModule(
+                cachedModule: cachedModule,
+                errorDescription: error.localizedDescription
             )
         }
     }
 
+    static func fallbackModule(
+        cachedModule: MonitorModule?,
+        errorDescription: String
+    ) -> MonitorModule {
+        let cachedPlan = cachedPlanName(in: cachedModule)
+        return MonitorModule(
+            kind: .codex,
+            value: cachedModule?.value ?? 0,
+            summary: cachedPlan,
+            metrics: [
+                MonitorMetric(name: "plan", value: cachedPlan),
+                MonitorMetric(name: "five-hour", value: cachedMetric("five-hour", in: cachedModule)),
+                MonitorMetric(name: "weekly", value: cachedMetric("weekly", in: cachedModule)),
+                MonitorMetric(name: "five-hour-reset", value: cachedMetric("five-hour-reset", in: cachedModule)),
+                MonitorMetric(name: "weekly-reset", value: cachedMetric("weekly-reset", in: cachedModule)),
+                MonitorMetric(name: "reset-credits", value: cachedMetric("reset-credits", in: cachedModule)),
+                MonitorMetric(name: "status", value: errorDescription)
+            ],
+            samples: cachedModule?.samples ?? seedSamples(0)
+        )
+    }
+
     private static func cachedMetric(_ name: String, in module: MonitorModule?) -> String {
         module?.metrics.first { $0.name == name }?.value ?? "--"
+    }
+
+    private static func cachedPlanName(in module: MonitorModule?) -> String {
+        let metricValue = cachedMetric("plan", in: module)
+        if isUsablePlanName(metricValue) {
+            return metricValue
+        }
+        if let summary = module?.summary, isUsablePlanName(summary) {
+            return summary
+        }
+        return "--"
+    }
+
+    private static func isUsablePlanName(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed != "--" && trimmed != "刷新中"
     }
 
     private static let placeholderModule = MonitorModule(
