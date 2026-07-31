@@ -459,7 +459,10 @@ final class MonitorStore: ObservableObject {
         configureSamplingTimer()
         let visibleKinds = settings.visibleKinds
         refreshSchedule.markRefreshed(visibleKinds, at: Date())
-        advance(kinds: visibleKinds)
+        if visibleKinds.contains(.codex) {
+            refreshCodexUsage(force: true)
+        }
+        advance(kinds: visibleKinds.filter { $0 != .codex })
         configureCodexTaskProgressMonitoring()
     }
 
