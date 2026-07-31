@@ -70,7 +70,7 @@ nonisolated(unsafe) let displayReconfigurationCallback: CGDisplayReconfiguration
     }
 }
 
-nonisolated enum DisplayControlKind: Hashable, CaseIterable {
+nonisolated enum DisplayControlKind: Hashable, CaseIterable, Sendable {
     case brightness
     case volume
     case contrast
@@ -101,6 +101,14 @@ nonisolated enum DisplayControlKind: Hashable, CaseIterable {
 nonisolated struct ControlKey: Hashable {
     let displayID: CGDirectDisplayID
     let control: DisplayControlKind
+}
+
+nonisolated enum DisplayValueChangePolicy {
+    static let minimumVisibleDelta = 0.1
+
+    static func shouldPublish(current: Double, next: Double) -> Bool {
+        abs(next - current) >= minimumVisibleDelta
+    }
 }
 
 struct RecentDisplayValue {

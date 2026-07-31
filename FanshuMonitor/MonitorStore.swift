@@ -133,6 +133,7 @@ final class MonitorStore: ObservableObject {
             .sink { [weak self] visibleKinds in
                 guard let self else { return }
                 let activeKinds = self.activeSamplingKinds
+                self.cancelSamplingTask()
                 self.syncSamplerResidency()
                 self.refreshSchedule.reset()
                 self.modules = self.visibleModules(from: self.allModules)
@@ -317,6 +318,8 @@ final class MonitorStore: ObservableObject {
             displayController.startAutomaticRefresh()
             if displayController.displays.isEmpty {
                 displayController.refreshAsync()
+            } else {
+                displayController.refreshNow()
             }
         } else {
             displayController.stopAutomaticRefresh()
@@ -385,6 +388,9 @@ final class MonitorStore: ObservableObject {
     func panelDidAppear() {
         guard !isPanelVisible else { return }
         isPanelVisible = true
+        #if DISPLAY_CONTROL
+        displayController.setPanelVisible(true)
+        #endif
         syncSamplerResidency()
         configureSamplingTimer()
         let visibleKinds = settings.visibleKinds
@@ -395,6 +401,10 @@ final class MonitorStore: ObservableObject {
     func panelDidDisappear() {
         guard isPanelVisible else { return }
         isPanelVisible = false
+        cancelSamplingTask()
+        #if DISPLAY_CONTROL
+        displayController.setPanelVisible(false)
+        #endif
         syncSamplerResidency()
         configureSamplingTimer()
     }
@@ -412,6 +422,12 @@ final class MonitorStore: ObservableObject {
         Task { [samplingCoordinator] in
             await samplingCoordinator.retainSamplers(for: activeKinds)
         }
+    }
+
+    private func cancelSamplingTask() {
+        samplingTask?.cancel()
+        samplingTask = nil
+        samplingGeneration &+= 1
     }
 
     private func refreshCodexUsage(force: Bool) {

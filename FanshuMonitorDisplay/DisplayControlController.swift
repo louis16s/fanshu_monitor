@@ -25,6 +25,10 @@ final class DisplayControlController: ObservableObject {
     private var refreshWorkItem: DispatchWorkItem?
     private var wakeMaintenanceGeneration = 0
     private var displayCallbackRegistered = false
+    private var isPanelVisible = false
+    private var nativeBrightnessSyncTask: Task<Void, Never>?
+    private var nativeBrightnessSyncGeneration = 0
+    private var nativeBrightnessReadsInFlight: Set<CGDirectDisplayID> = []
     private var isBuiltInBlackoutDesired: Bool {
         get {
             defaults.bool(forKey: Self.builtInBlackoutPreferenceKey)
@@ -60,6 +64,7 @@ final class DisplayControlController: ObservableObject {
         if displayCallbackRegistered {
             CGDisplayRemoveReconfigurationCallback(displayReconfigurationCallback, Unmanaged.passUnretained(self).toOpaque())
         }
+        nativeBrightnessSyncTask?.cancel()
         Task { @MainActor [service] in
             service.clearBuiltInBlackouts()
             service.clearSoftwareDimming()
@@ -67,7 +72,8 @@ final class DisplayControlController: ObservableObject {
     }
 
     func refreshAsync() {
-        worker.refresh(service: service) { detectedDisplays in
+        let controls = activeControls
+        worker.refresh(service: service, activeControls: controls) { detectedDisplays in
             DispatchQueue.main.async {
                 AppLogger.ui.info("Display refresh completed, found \(detectedDisplays.count) displays")
                 let mergedDisplays = detectedDisplays.map { self.mergedDisplayValues(for: $0) }
@@ -77,6 +83,7 @@ final class DisplayControlController: ObservableObject {
                 }
                 self.syncBuiltInBlackouts()
                 self.syncSoftwareDimming()
+                self.configureNativeBrightnessSync()
             }
         }
     }
@@ -155,6 +162,7 @@ final class DisplayControlController: ObservableObject {
         if CGDisplayRegisterReconfigurationCallback(displayReconfigurationCallback, pointer) == .success {
             displayCallbackRegistered = true
         }
+        configureNativeBrightnessSync()
     }
 
     func stopAutomaticRefresh() {
@@ -176,6 +184,13 @@ final class DisplayControlController: ObservableObject {
             CGDisplayRemoveReconfigurationCallback(displayReconfigurationCallback, Unmanaged.passUnretained(self).toOpaque())
             displayCallbackRegistered = false
         }
+        stopNativeBrightnessSync()
+    }
+
+    func setPanelVisible(_ isVisible: Bool) {
+        guard isPanelVisible != isVisible else { return }
+        isPanelVisible = isVisible
+        configureNativeBrightnessSync()
     }
 
     func scheduleRefresh(delay: TimeInterval = 0.45) {
@@ -492,8 +507,107 @@ final class DisplayControlController: ObservableObject {
         guard let index = displays.firstIndex(where: { $0.id == displayID }) else {
             return
         }
+        guard DisplayValueChangePolicy.shouldPublish(
+            current: displays[index].value(for: control),
+            next: value
+        ) else {
+            return
+        }
 
         displays[index].setValue(value, for: control)
+    }
+
+    private var activeControls: Set<DisplayControlKind> {
+        guard let settings else {
+            return Set(DisplayControlKind.allCases)
+        }
+
+        var controls: Set<DisplayControlKind> = []
+        if settings.displayBrightnessControlEnabled || settings.brightnessKeyInterceptionEnabled {
+            controls.insert(.brightness)
+        }
+        if settings.displayVolumeControlEnabled {
+            controls.insert(.volume)
+        }
+        if settings.displayContrastControlEnabled {
+            controls.insert(.contrast)
+        }
+        return controls
+    }
+
+    private func configureNativeBrightnessSync() {
+        stopNativeBrightnessSync()
+        guard isPanelVisible,
+              settings?.displayModuleVisible == true,
+              settings?.displayBrightnessControlEnabled == true,
+              displays.contains(where: { $0.usesNativeBrightness && $0.supportsBrightness })
+        else {
+            return
+        }
+
+        nativeBrightnessSyncGeneration &+= 1
+        let generation = nativeBrightnessSyncGeneration
+        nativeBrightnessSyncTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                self?.syncNativeBrightness(generation: generation)
+                do {
+                    try await Task.sleep(for: .milliseconds(400))
+                } catch {
+                    break
+                }
+            }
+        }
+    }
+
+    private func stopNativeBrightnessSync() {
+        nativeBrightnessSyncTask?.cancel()
+        nativeBrightnessSyncTask = nil
+        nativeBrightnessSyncGeneration &+= 1
+        nativeBrightnessReadsInFlight.removeAll()
+    }
+
+    private func syncNativeBrightness(generation: Int) {
+        guard generation == nativeBrightnessSyncGeneration else { return }
+
+        let displayIDs = displays.compactMap { display -> CGDirectDisplayID? in
+            guard display.usesNativeBrightness,
+                  display.supportsBrightness,
+                  !builtInBlackoutDisplayIDs.contains(display.id),
+                  pendingValues[display.id]?[.brightness] == nil,
+                  !nativeBrightnessReadsInFlight.contains(display.id)
+            else {
+                return nil
+            }
+            return display.id
+        }
+
+        for displayID in displayIDs {
+            nativeBrightnessReadsInFlight.insert(displayID)
+            worker.readNativeBrightness(
+                displayID: displayID,
+                performRead: { [service] in
+                    service.nativeBrightness(displayID: displayID)
+                }
+            ) { [weak self] value in
+                Task { @MainActor in
+                    guard let self else { return }
+                    guard generation == self.nativeBrightnessSyncGeneration else {
+                        return
+                    }
+                    self.nativeBrightnessReadsInFlight.remove(displayID)
+                    guard let value,
+                          self.pendingValues[displayID]?[.brightness] == nil
+                    else {
+                        return
+                    }
+
+                    let key = ControlKey(displayID: displayID, control: .brightness)
+                    self.recentWrittenValues[key] = nil
+                    self.updateLocalValue(value, for: .brightness, displayID: displayID)
+                    self.fallbackValues[displayID, default: [:]][.brightness] = value
+                }
+            }
+        }
     }
 
     private func handleWriteResult(_ result: DisplayWriteResult, markUnsupportedOnFailure: Bool) {
@@ -585,35 +699,85 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         qos: .userInitiated,
         attributes: .concurrent
     )
+    private let discoveryQueue = DispatchQueue(
+        label: "fanshu.display-control.discovery",
+        qos: .utility
+    )
     private var writeQueuesByDisplayID: [CGDirectDisplayID: DispatchQueue] = [:]
     private var pendingWrites: [ControlKey: PendingWrite] = [:]
     private var debounceTimers: [ControlKey: DispatchWorkItem] = [:]
     private var debounceGenerations: [ControlKey: UInt64] = [:]
-    private var cachedDiscovery: (displays: [ControlledDisplay], refreshedAt: Date)?
+    private var discoveryGeneration: UInt64 = 0
+    private var cachedDiscovery: (
+        displays: [ControlledDisplay],
+        activeControls: Set<DisplayControlKind>,
+        refreshedAt: Date
+    )?
     private let debounceInterval: DispatchTimeInterval = .milliseconds(150)
     private let discoveryCacheInterval: TimeInterval = 2
 
-    func refresh(service: DisplayControlService, completion: @escaping ([ControlledDisplay]) -> Void) {
+    func refresh(
+        service: DisplayControlService,
+        activeControls: Set<DisplayControlKind>,
+        completion: @escaping ([ControlledDisplay]) -> Void
+    ) {
+        refresh(
+            activeControls: activeControls,
+            performDiscovery: {
+                service.displays(reading: activeControls)
+            },
+            completion: completion
+        )
+    }
+
+    func refresh(
+        activeControls: Set<DisplayControlKind>,
+        performDiscovery: @escaping () -> [ControlledDisplay],
+        completion: @escaping ([ControlledDisplay]) -> Void
+    ) {
         stateQueue.async {
             let now = Date()
             if let cachedDiscovery = self.cachedDiscovery,
+               cachedDiscovery.activeControls == activeControls,
                now.timeIntervalSince(cachedDiscovery.refreshedAt) < self.discoveryCacheInterval {
                 completion(cachedDiscovery.displays)
                 return
             }
 
-            self.hardwareQueue.async(flags: .barrier) {
-                let displays = service.displays()
+            self.discoveryGeneration &+= 1
+            let generation = self.discoveryGeneration
+            self.discoveryQueue.async {
+                let displays = performDiscovery()
                 self.stateQueue.async {
-                    self.cachedDiscovery = (displays, now)
+                    guard generation == self.discoveryGeneration else {
+                        return
+                    }
+                    self.cachedDiscovery = (displays, activeControls, now)
                     completion(displays)
                 }
             }
         }
     }
 
+    func readNativeBrightness(
+        displayID: CGDirectDisplayID,
+        performRead: @escaping () -> Double?,
+        completion: @escaping (Double?) -> Void
+    ) {
+        stateQueue.async {
+            let readQueue = self.writeQueue(for: displayID)
+            readQueue.async {
+                let value = self.hardwareQueue.sync {
+                    performRead()
+                }
+                completion(value)
+            }
+        }
+    }
+
     func invalidateDiscoveryCache() {
         stateQueue.async {
+            self.discoveryGeneration &+= 1
             self.cachedDiscovery = nil
         }
     }

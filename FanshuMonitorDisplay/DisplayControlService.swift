@@ -13,7 +13,7 @@ final class DisplayControlService {
     private lazy var ddcRangeStore = DisplayDDCRangeStore(defaults: defaults)
     var softwareDimmingEnabled = true
 
-    func displays() -> [ControlledDisplay] {
+    func displays(reading activeControls: Set<DisplayControlKind> = Set(DisplayControlKind.allCases)) -> [ControlledDisplay] {
         var ids = [CGDirectDisplayID](repeating: 0, count: 16)
         var count: UInt32 = 0
         guard CGGetOnlineDisplayList(UInt32(ids.count), &ids, &count) == .success else {
@@ -40,9 +40,15 @@ final class DisplayControlService {
             let brightnessTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.brightness, displayID: id)
             let volumeTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.volume, displayID: id)
             let contrastTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.contrast, displayID: id)
-            let ddcBrightness = usesDDC ? ddc.read(.brightness, displayID: id) : nil
-            let ddcVolume = usesDDC ? ddc.read(.volume, displayID: id) : nil
-            let ddcContrast = usesDDC ? ddc.read(.contrast, displayID: id) : nil
+            let ddcBrightness = usesDDC && activeControls.contains(.brightness)
+                ? ddc.read(.brightness, displayID: id)
+                : nil
+            let ddcVolume = usesDDC && activeControls.contains(.volume)
+                ? ddc.read(.volume, displayID: id)
+                : nil
+            let ddcContrast = usesDDC && activeControls.contains(.contrast)
+                ? ddc.read(.contrast, displayID: id)
+                : nil
             let storedBrightness = storedValue(for: .brightness, displayStorageID: storageID)
             let storedVolume = storedValue(for: .volume, displayStorageID: storageID)
             let storedContrast = storedValue(for: .contrast, displayStorageID: storageID)
@@ -157,6 +163,10 @@ final class DisplayControlService {
             saveStoredValue(value, for: control, displayStorageID: display.storageID)
         }
         return outcome.success
+    }
+
+    func nativeBrightness(displayID: CGDirectDisplayID) -> Double? {
+        displayServices.getBrightness(displayID: displayID).map { Double($0 * 100) }
     }
 
     nonisolated static func supportsBrightness(

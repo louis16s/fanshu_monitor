@@ -26,6 +26,37 @@ jobs:
           sw_vers
           xcodebuild -version
 
+      - name: Verify tag matches app version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag_version="${TAG_NAME#v}"
+          app_version="$(
+            xcodebuild \
+              -project '番薯monitor.xcodeproj' \
+              -scheme '番薯Monitor' \
+              -configuration Release \
+              -showBuildSettings |
+              awk '/ MARKETING_VERSION = / { print $3; exit }'
+          )"
+          test -n "$app_version"
+          if [[ "$tag_version" != "$app_version" ]]; then
+            echo "Tag version ${tag_version} does not match MARKETING_VERSION ${app_version}" >&2
+            exit 1
+          fi
+
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project '番薯monitor.xcodeproj' \
+            -scheme '番薯Monitor' \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
       - name: Build Release app
         run: |
           set -euo pipefail
@@ -46,9 +77,15 @@ jobs:
           APP_PATH='build/番薯Monitor.xcarchive/Products/Applications/番薯Monitor.app'
           test -d "$APP_PATH"
 
+          codesign --force --deep --sign - "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
           mkdir -p build/release
-          ditto -c -k --keepParent "$APP_PATH" 'build/release/FanshuMonitor.zip'
-          shasum -a 256 'build/release/FanshuMonitor.zip' > 'build/release/checksums.txt'
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" 'build/release/FanshuMonitor.zip'
+          (
+            cd build/release
+            shasum -a 256 'FanshuMonitor.zip' > 'checksums.txt'
+          )
           ls -lh build/release
 
       - name: Create release manifest

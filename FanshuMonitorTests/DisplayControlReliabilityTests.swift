@@ -204,6 +204,14 @@ struct DisplaySoftwareDimmingWindowPolicyTests {
     }
 }
 
+struct DisplayValueChangePolicyTests {
+    @Test func unchangedNativeBrightnessDoesNotRepublishDisplayState() {
+        #expect(!DisplayValueChangePolicy.shouldPublish(current: 50, next: 50))
+        #expect(!DisplayValueChangePolicy.shouldPublish(current: 50, next: 50.05))
+        #expect(DisplayValueChangePolicy.shouldPublish(current: 50, next: 50.2))
+    }
+}
+
 struct DisplayControlWorkerTests {
     private let key = ControlKey(displayID: 1, control: .brightness)
 
@@ -286,6 +294,107 @@ struct DisplayControlWorkerTests {
 
         #expect(fastFinished.wait(timeout: .now() + 0.5) == .success)
         #expect(slowFinished.wait(timeout: .now() + 1) == .success)
+    }
+
+    @Test func nativeBrightnessReadWaitsForPendingWriteOnTheSameDisplay() {
+        let worker = DisplayControlWorker()
+        let writeStarted = DispatchSemaphore(value: 0)
+        let allowWriteToFinish = DispatchSemaphore(value: 0)
+        let writeFinished = DispatchSemaphore(value: 0)
+        let readFinished = DispatchSemaphore(value: 0)
+        let recorder = ThreadSafeValues()
+
+        worker.setValue(
+            65,
+            for: key,
+            sequence: 1,
+            mode: .ordered,
+            performWrite: { value in
+                writeStarted.signal()
+                _ = allowWriteToFinish.wait(timeout: .now() + 2)
+                recorder.append(value)
+                return true
+            },
+            completion: { _ in writeFinished.signal() }
+        )
+        #expect(writeStarted.wait(timeout: .now() + 1) == .success)
+
+        worker.readNativeBrightness(
+            displayID: key.displayID,
+            performRead: {
+                recorder.append(66)
+                return 66
+            },
+            completion: { _ in readFinished.signal() }
+        )
+
+        #expect(readFinished.wait(timeout: .now() + 0.1) == .timedOut)
+        allowWriteToFinish.signal()
+        #expect(writeFinished.wait(timeout: .now() + 1) == .success)
+        #expect(readFinished.wait(timeout: .now() + 1) == .success)
+        #expect(recorder.values == [65, 66])
+    }
+
+    @Test func slowDiscoveryDoesNotBlockNativeBrightnessOnAnotherDisplay() {
+        let worker = DisplayControlWorker()
+        let discoveryStarted = DispatchSemaphore(value: 0)
+        let allowDiscoveryToFinish = DispatchSemaphore(value: 0)
+        let discoveryFinished = DispatchSemaphore(value: 0)
+        let brightnessFinished = DispatchSemaphore(value: 0)
+
+        worker.refresh(
+            activeControls: [.brightness],
+            performDiscovery: {
+                discoveryStarted.signal()
+                _ = allowDiscoveryToFinish.wait(timeout: .now() + 2)
+                return []
+            },
+            completion: { _ in discoveryFinished.signal() }
+        )
+        #expect(discoveryStarted.wait(timeout: .now() + 1) == .success)
+
+        worker.readNativeBrightness(
+            displayID: 2,
+            performRead: { 55 },
+            completion: { _ in brightnessFinished.signal() }
+        )
+
+        #expect(brightnessFinished.wait(timeout: .now() + 0.5) == .success)
+        allowDiscoveryToFinish.signal()
+        #expect(discoveryFinished.wait(timeout: .now() + 1) == .success)
+    }
+
+    @Test func displayDiscoveriesAreSerialized() {
+        let worker = DisplayControlWorker()
+        let firstStarted = DispatchSemaphore(value: 0)
+        let allowFirstToFinish = DispatchSemaphore(value: 0)
+        let secondStarted = DispatchSemaphore(value: 0)
+        let secondFinished = DispatchSemaphore(value: 0)
+
+        worker.refresh(
+            activeControls: [.brightness],
+            performDiscovery: {
+                firstStarted.signal()
+                _ = allowFirstToFinish.wait(timeout: .now() + 2)
+                return []
+            },
+            completion: { _ in }
+        )
+        #expect(firstStarted.wait(timeout: .now() + 1) == .success)
+
+        worker.refresh(
+            activeControls: [.brightness, .contrast],
+            performDiscovery: {
+                secondStarted.signal()
+                return []
+            },
+            completion: { _ in secondFinished.signal() }
+        )
+
+        #expect(secondStarted.wait(timeout: .now() + 0.1) == .timedOut)
+        allowFirstToFinish.signal()
+        #expect(secondStarted.wait(timeout: .now() + 1) == .success)
+        #expect(secondFinished.wait(timeout: .now() + 1) == .success)
     }
 }
 
