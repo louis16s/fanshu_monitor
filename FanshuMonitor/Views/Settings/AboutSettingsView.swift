@@ -8,12 +8,10 @@ struct AboutSettingsView: View {
     private let releasesURL = URL(string: "https://github.com/louis16s/fanshu_monitor/releases")!
 
     private var appVersion: String {
-        guard let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-              !version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard AppVersion.current != "0.0.0" else {
             return String(localized: "about.unknown")
         }
-
-        return version
+        return AppVersion.current
     }
 
     var body: some View {

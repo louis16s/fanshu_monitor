@@ -38,7 +38,7 @@ nonisolated final class BatterySampler: MonitorSampler {
         let smart = shouldCollectTelemetry ? smartBatteryInfo(at: Date()) : nil
         let adapterWatts = smart?.adapterWatts ?? (shouldCollectTelemetry ? externalAdapterWatts() : nil)
         let chargingPower = connected
-            ? (smart?.telemetryChargingWatts ?? smart?.chargingPowerWatts)
+            ? smart?.chargingPowerWatts
             : nil
         let systemPower = smart?.systemPowerWatts ?? (shouldCollectTelemetry ? powerTelemetryWatts() : nil)
 
@@ -166,7 +166,6 @@ nonisolated final class BatterySampler: MonitorSampler {
         let adapterWatts = adapterWatts(service)
         let systemPowerWatts = systemPowerWatts(service)
         let chargingPowerWatts = chargingPowerWatts(service)
-        let telemetryChargingWatts = telemetryChargingWatts(service)
         let temperature = doubleRegistryValue(service, "Temperature").map { $0 / 100 }
         let health = if let maxCapacity, let designCapacity, designCapacity > 0 {
             min(100, max(0, maxCapacity / designCapacity * 100))
@@ -179,8 +178,7 @@ nonisolated final class BatterySampler: MonitorSampler {
             adapterWatts: adapterWatts,
             systemPowerWatts: systemPowerWatts,
             chargingPowerWatts: chargingPowerWatts,
-            temperatureCelsius: temperature,
-            telemetryChargingWatts: telemetryChargingWatts
+            temperatureCelsius: temperature
         )
     }
 
@@ -200,30 +198,26 @@ nonisolated final class BatterySampler: MonitorSampler {
     }
 
     private func chargingPowerWatts(_ service: io_service_t) -> Double? {
-        // 优先用 PowerTelemetryData.BatteryPower（电池包级别，准确）
         if let value = IORegistryEntryCreateCFProperty(service, "PowerTelemetryData" as CFString, kCFAllocatorDefault, 0)?
             .takeRetainedValue() as? [String: Any],
-           let bp = signedDoubleValue(value["BatteryPower"]), bp < 0 {
-            return abs(bp) / 1_000
+           let watts = Self.chargingPowerWatts(
+               batteryPowerMilliwatts: signedDoubleValue(value["BatteryPower"])
+           ) {
+            return watts
         }
-        // Fallback: ChargerData 的 ChargingCurrent * ChargingVoltage
-        // 注意 ChargingVoltage 是单节电芯电压，结果会偏低
+
         guard let value = IORegistryEntryCreateCFProperty(service, "ChargerData" as CFString, kCFAllocatorDefault, 0)?
             .takeRetainedValue() as? [String: Any],
-              let current = doubleValue(value["ChargingCurrent"]),
-              let voltage = doubleValue(value["ChargingVoltage"]) else {
+              let current = doubleValue(value["ChargingCurrent"]) else {
             return nil
         }
-        return nonZeroWatts(current * voltage / 1_000_000)
-    }
-
-    private func telemetryChargingWatts(_ service: io_service_t) -> Double? {
-        guard let value = IORegistryEntryCreateCFProperty(service, "PowerTelemetryData" as CFString, kCFAllocatorDefault, 0)?
-            .takeRetainedValue() as? [String: Any],
-              let bp = signedDoubleValue(value["BatteryPower"]), bp < 0 else {
+        guard let voltage = doubleRegistryValue(service, "AppleRawBatteryVoltage")
+            ?? doubleRegistryValue(service, "Voltage")
+            ?? doubleValue(value["ChargingVoltage"]),
+              voltage > 0 else {
             return nil
         }
-        return abs(bp) / 1_000
+        return max(0, current * voltage / 1_000_000)
     }
 
     private func powerTelemetryWatts() -> Double? {
@@ -243,28 +237,37 @@ nonisolated final class BatterySampler: MonitorSampler {
             return nil
         }
 
-        guard let powerIn = doubleValue(value["SystemPowerIn"]), powerIn > 0 else {
-            // 电池供电：用 BatteryPower
-            if let bp = signedDoubleValue(value["BatteryPower"]), bp != 0 {
-                return abs(bp) / 1_000
-            }
+        return Self.systemPowerWatts(
+            systemLoadMilliwatts: doubleValue(value["SystemLoad"]),
+            systemPowerInMilliwatts: doubleValue(value["SystemPowerIn"]),
+            batteryPowerMilliwatts: signedDoubleValue(value["BatteryPower"])
+        )
+    }
+
+    static func chargingPowerWatts(batteryPowerMilliwatts: Double?) -> Double? {
+        guard let batteryPowerMilliwatts, batteryPowerMilliwatts > 0 else {
             return nil
         }
+        return batteryPowerMilliwatts / 1_000
+    }
 
-        let batteryPower = signedDoubleValue(value["BatteryPower"]) ?? 0
-
-        if batteryPower == 0 {
-            // 未充电：SystemPowerIn 就是系统功耗
-            return powerIn / 1_000
+    static func systemPowerWatts(
+        systemLoadMilliwatts: Double?,
+        systemPowerInMilliwatts: Double?,
+        batteryPowerMilliwatts: Double?
+    ) -> Double? {
+        if let systemLoadMilliwatts, systemLoadMilliwatts > 0 {
+            return systemLoadMilliwatts / 1_000
         }
 
-        let systemPower = powerIn - abs(batteryPower)
-        if systemPower > 0 {
-            // 充电时：系统功耗 = 适配器输入 - 充电功率
-            return systemPower / 1_000
+        if let systemPowerInMilliwatts, systemPowerInMilliwatts > 0 {
+            let systemPower = systemPowerInMilliwatts - (batteryPowerMilliwatts ?? 0)
+            return nonZeroWatts(systemPower / 1_000)
         }
 
-        // 遥测瞬时不同步导致差值为负，返回 nil 而非跳到完整 powerIn
+        if let batteryPowerMilliwatts, batteryPowerMilliwatts < 0 {
+            return abs(batteryPowerMilliwatts) / 1_000
+        }
         return nil
     }
 
@@ -312,5 +315,4 @@ nonisolated private struct SmartBatteryInfo {
     var systemPowerWatts: Double?
     var chargingPowerWatts: Double?
     var temperatureCelsius: Double?
-    var telemetryChargingWatts: Double?
 }

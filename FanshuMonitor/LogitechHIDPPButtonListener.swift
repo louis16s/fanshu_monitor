@@ -3,97 +3,134 @@ import IOKit.hid
 import OSLog
 
 final class LogitechHIDPPButtonListener: @unchecked Sendable {
-    private weak var settings: MonitorSettings?
     private let queue = DispatchQueue(label: "com.fanshu.monitor.hidpp-buttons", qos: .utility)
     private let actionQueue = DispatchQueue(label: "com.fanshu.monitor.hidpp-actions", qos: .userInitiated)
-    private var isRunning = false
-    private var client: Client?
+    private let stateLock = NSLock()
+    private var desiredRunning = false
+    private var workerActive = false
+    private var restartRequested = false
+    private var workerRunLoop: CFRunLoop?
+    private var gestureAction: MouseButtonAction = .passThrough
 
-    init(settings: MonitorSettings) {
-        self.settings = settings
+    deinit {
+        stop()
+    }
+
+    func updateAction(_ action: MouseButtonAction) {
+        stateLock.withLock {
+            gestureAction = action
+        }
     }
 
     func start() {
+        let shouldStartWorker = stateLock.withLock {
+            let wasDesired = desiredRunning
+            desiredRunning = true
+            guard !workerActive else {
+                if !wasDesired {
+                    restartRequested = true
+                }
+                return false
+            }
+            workerActive = true
+            return true
+        }
+        guard shouldStartWorker else { return }
+        launchWorker()
+    }
+
+    private func launchWorker() {
         queue.async { [weak self] in
-            guard let self, !self.isRunning else { return }
-            self.isRunning = true
+            guard let self else { return }
             self.listen()
+            self.workerDidExit()
         }
     }
 
     func stop() {
-        queue.async { [weak self] in
-            self?.isRunning = false
-            self?.client?.close()
-            self?.client = nil
+        let runLoop = stateLock.withLock {
+            desiredRunning = false
+            restartRequested = false
+            return workerRunLoop
+        }
+        if let runLoop {
+            CFRunLoopStop(runLoop)
         }
     }
 
     private func listen() {
-        while isRunning {
-            autoreleasepool {
-                guard let device = Self.enumerateLogitechDevices().first else {
-                    Thread.sleep(forTimeInterval: 2)
-                    return
-                }
+        autoreleasepool {
+            guard let device = Self.enumerateLogitechDevices().first else { return }
 
-                let client = Client(device: device)
-                self.client = client
-                guard client.open() else {
-                    Thread.sleep(forTimeInterval: 2)
-                    return
-                }
-                defer {
-                    client.close()
-                    self.client = nil
-                }
+            let client = Client(device: device)
+            guard client.open() else { return }
+            defer {
+                client.close()
+            }
 
-                guard client.configureGestureReporting() else {
-                    Thread.sleep(forTimeInterval: 2)
-                    return
-                }
+            guard client.configureGestureReporting() else { return }
 
-                AppLogger.mouse.info("HID++ gesture button listener started")
-                while isRunning, settings?.mouseControlEnabled == true {
-                    client.pumpReports { [weak self] isGestureUp in
-                        guard isGestureUp,
-                              let action = self?.settings?.mouseAction(for: .gesture),
-                              action != .passThrough else {
-                            return
-                        }
-                        self?.actionQueue.async {
-                            MouseActionExecutor.execute(action)
-                        }
+            client.startGestureEvents { [weak self] in
+                guard let self else { return }
+                let action = self.currentGestureAction
+                guard action != .passThrough else { return }
+                self.actionQueue.async {
+                    MouseActionExecutor.execute(action)
+                }
+            }
+
+            AppLogger.mouse.info("HID++ gesture button listener started")
+            let runLoop = CFRunLoopGetCurrent()
+            stateLock.withLock {
+                workerRunLoop = runLoop
+            }
+            defer {
+                stateLock.withLock {
+                    if workerRunLoop === runLoop {
+                        workerRunLoop = nil
                     }
-                    CFRunLoopRunInMode(CFRunLoopMode.defaultMode, 0.05, true)
                 }
+            }
+            while shouldContinue {
+                CFRunLoopRun()
             }
         }
     }
 
+    private var shouldContinue: Bool {
+        stateLock.withLock { desiredRunning }
+    }
+
+    private func workerDidExit() {
+        let shouldRestart = stateLock.withLock {
+            workerActive = false
+            workerRunLoop = nil
+            guard desiredRunning, restartRequested else { return false }
+            restartRequested = false
+            workerActive = true
+            return true
+        }
+        if shouldRestart {
+            launchWorker()
+        }
+    }
+
+    private var currentGestureAction: MouseButtonAction {
+        stateLock.withLock { gestureAction }
+    }
+
     private static func enumerateLogitechDevices() -> [IOHIDDevice] {
         let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        IOHIDManagerSetDeviceMatching(manager, [kIOHIDVendorIDKey as String: 0x046D] as CFDictionary)
+        IOHIDManagerSetDeviceMatching(
+            manager,
+            [kIOHIDVendorIDKey as String: LogitechMouseDeviceMatcher.vendorID] as CFDictionary
+        )
         guard IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess else {
             return []
         }
         defer { IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone)) }
         guard let set = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else { return [] }
-        return Array(set).filter { device in
-            let productID = intProperty(device, kIOHIDProductIDKey as CFString)
-            let name = stringProperty(device, kIOHIDProductKey as CFString)
-            return productID == 0xB037
-                || name.localizedCaseInsensitiveContains("MX Anywhere")
-                || name.localizedCaseInsensitiveContains("Logitech")
-        }
-    }
-
-    private static func intProperty(_ device: IOHIDDevice, _ key: CFString) -> Int {
-        (IOHIDDeviceGetProperty(device, key) as? NSNumber)?.intValue ?? 0
-    }
-
-    private static func stringProperty(_ device: IOHIDDevice, _ key: CFString) -> String {
-        IOHIDDeviceGetProperty(device, key) as? String ?? ""
+        return Array(set).filter(LogitechMouseDeviceMatcher.isSupported)
     }
 
     private final class Client {
@@ -111,6 +148,8 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
         private var reprogFeature: UInt8?
         private var gestureCID: Int?
         private var gestureHeld = false
+        private var gestureHandler: (@Sendable () -> Void)?
+        private var isAwaitingResponse = false
 
         init(device: IOHIDDevice) {
             self.device = device
@@ -162,23 +201,9 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
             return false
         }
 
-        func pumpReports(onGestureUp: (Bool) -> Void) {
-            let snapshot = takeReports()
-            for report in snapshot {
-                guard let parsed = HIDPPResponse(report: report),
-                      parsed.featureIndex == reprogFeature,
-                      parsed.function == 0,
-                      let gestureCID else {
-                    continue
-                }
-                let cids = Self.cids(in: parsed.params)
-                let isHeld = cids.contains(gestureCID)
-                if isHeld && !gestureHeld {
-                    gestureHeld = true
-                } else if !isHeld && gestureHeld {
-                    gestureHeld = false
-                    onGestureUp(true)
-                }
+        func startGestureEvents(_ handler: @escaping @Sendable () -> Void) {
+            lock.withLock {
+                gestureHandler = handler
             }
         }
 
@@ -196,7 +221,16 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
         }
 
         private func request(featureIndex: UInt8, function: UInt8, params: [UInt8], timeout: TimeInterval) -> HIDPPResponse? {
-            _ = takeReports()
+            lock.withLock {
+                reports.removeAll(keepingCapacity: true)
+                isAwaitingResponse = true
+            }
+            defer {
+                lock.withLock {
+                    isAwaitingResponse = false
+                    reports.removeAll(keepingCapacity: true)
+                }
+            }
             transmit(featureIndex: featureIndex, function: function, params: params)
             let deadline = Date().addingTimeInterval(timeout)
             while Date() < deadline {
@@ -248,9 +282,29 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
         }
 
         private func appendReport(_ report: [UInt8]) {
-            lock.lock()
-            reports.append(report)
-            lock.unlock()
+            let handler = lock.withLock {
+                if isAwaitingResponse {
+                    reports.append(report)
+                }
+                return gestureHandler
+            }
+            handleGestureReport(report, handler: handler)
+        }
+
+        private func handleGestureReport(_ report: [UInt8], handler: (@Sendable () -> Void)?) {
+            guard let parsed = HIDPPResponse(report: report),
+                  parsed.featureIndex == reprogFeature,
+                  parsed.function == 0,
+                  let gestureCID else {
+                return
+            }
+            let isHeld = Self.cids(in: parsed.params).contains(gestureCID)
+            if isHeld && !gestureHeld {
+                gestureHeld = true
+            } else if !isHeld && gestureHeld {
+                gestureHeld = false
+                handler?()
+            }
         }
 
         private static func cids(in params: [UInt8]) -> Set<Int> {

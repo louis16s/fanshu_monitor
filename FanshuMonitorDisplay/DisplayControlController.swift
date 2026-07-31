@@ -87,19 +87,6 @@ final class DisplayControlController: ObservableObject {
         refreshAsync()
     }
 
-    func refreshSynchronously() {
-        refreshWorkItem?.cancel()
-        let detectedDisplays = service.displays()
-        AppLogger.ui.info("Synchronous display refresh completed, found \(detectedDisplays.count) displays")
-        let mergedDisplays = detectedDisplays.map { mergedDisplayValues(for: $0) }
-        displays = mergedDisplays
-        for display in mergedDisplays {
-            seedFallbackValues(for: display)
-        }
-        syncBuiltInBlackouts()
-        syncSoftwareDimming()
-    }
-
     func isBuiltInBlackoutEnabled(displayID: CGDirectDisplayID) -> Bool {
         builtInBlackoutDisplayIDs.contains(displayID)
     }

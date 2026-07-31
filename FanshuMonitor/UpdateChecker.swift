@@ -14,7 +14,7 @@ final class UpdateChecker {
     init(
         latestReleaseURL: URL = URL(string: "https://api.github.com/repos/louis16s/fanshu_monitor/releases/latest")!,
         currentVersionProvider: @escaping () -> String = {
-            Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+            AppVersion.current
         },
         dataLoader: @escaping DataLoader = { request in
             try await URLSession.shared.data(for: request)

@@ -1,5 +1,18 @@
 import Foundation
 
+nonisolated enum MonitorSamplingPolicy {
+    static func activeKinds(
+        visibleKinds: Set<MonitorKind>,
+        panelVisible: Bool,
+        ringSource: HaloRingSource
+    ) -> Set<MonitorKind> {
+        guard !panelVisible, ringSource != .network else {
+            return visibleKinds
+        }
+        return visibleKinds.subtracting([.network])
+    }
+}
+
 final class MonitorRefreshSchedule {
     let tickInterval: TimeInterval
 

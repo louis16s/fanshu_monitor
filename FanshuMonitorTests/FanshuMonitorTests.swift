@@ -335,6 +335,76 @@ struct FanshuMonitorTests {
         #expect(BatterySampler.adapterMetricValue(isConnected: true, watts: nil) == "--")
     }
 
+    @Test func batteryPowerTelemetryUsesTheCorrectDirectionAndUnits() {
+        #expect(BatterySampler.chargingPowerWatts(batteryPowerMilliwatts: 8_100) == 8.1)
+        #expect(BatterySampler.chargingPowerWatts(batteryPowerMilliwatts: -8_100) == nil)
+        #expect(BatterySampler.systemPowerWatts(
+            systemLoadMilliwatts: 7_300,
+            systemPowerInMilliwatts: 60_000,
+            batteryPowerMilliwatts: 15_000
+        ) == 7.3)
+        #expect(BatterySampler.systemPowerWatts(
+            systemLoadMilliwatts: nil,
+            systemPowerInMilliwatts: 60_000,
+            batteryPowerMilliwatts: 15_000
+        ) == 45)
+        #expect(BatterySampler.systemPowerWatts(
+            systemLoadMilliwatts: nil,
+            systemPowerInMilliwatts: 30_000,
+            batteryPowerMilliwatts: -5_000
+        ) == 35)
+        #expect(BatterySampler.systemPowerWatts(
+            systemLoadMilliwatts: nil,
+            systemPowerInMilliwatts: 0,
+            batteryPowerMilliwatts: -7_300
+        ) == 7.3)
+    }
+
+    @Test func networkCounterResetDoesNotCreateAnOverflowSpike() {
+        #expect(monotonicCounterDelta(current: 1_500, previous: 1_000) == 500)
+        #expect(monotonicCounterDelta(current: 100, previous: 9_000) == 0)
+    }
+
+    @Test func networkSamplerSleepsWithThePanelUnlessItDrivesTheMenuBarRing() {
+        let visibleKinds: Set<MonitorKind> = [.cpu, .network]
+        #expect(MonitorSamplingPolicy.activeKinds(
+            visibleKinds: visibleKinds,
+            panelVisible: false,
+            ringSource: .combined
+        ) == [.cpu])
+        #expect(MonitorSamplingPolicy.activeKinds(
+            visibleKinds: visibleKinds,
+            panelVisible: false,
+            ringSource: .network
+        ) == visibleKinds)
+        #expect(MonitorSamplingPolicy.activeKinds(
+            visibleKinds: visibleKinds,
+            panelVisible: true,
+            ringSource: .combined
+        ) == visibleKinds)
+    }
+
+    @Test func logitechDeviceMatchingRejectsNonMouseProducts() {
+        #expect(LogitechMouseDeviceMatcher.isSupported(LogitechMouseDescriptor(
+            productID: 0xB037,
+            productName: "MX Anywhere 3S",
+            primaryUsagePage: 1,
+            primaryUsage: 2
+        )))
+        #expect(LogitechMouseDeviceMatcher.isSupported(LogitechMouseDescriptor(
+            productID: 42,
+            productName: "Logitech Mouse",
+            primaryUsagePage: 1,
+            primaryUsage: 2
+        )))
+        #expect(!LogitechMouseDeviceMatcher.isSupported(LogitechMouseDescriptor(
+            productID: 43,
+            productName: "Logitech Keyboard",
+            primaryUsagePage: 1,
+            primaryUsage: 6
+        )))
+    }
+
     @Test func codexTransportTimeoutUsesResponsiveError() {
         #expect(CodexUsageClient.requestTimeout == 12)
         #expect(CodexUsageClient.mapTransportError(URLError(.timedOut)) == .networkTimedOut)

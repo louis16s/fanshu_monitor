@@ -3,8 +3,6 @@ import IOKit.hid
 
 nonisolated final class LogitechHIDPPService: @unchecked Sendable {
     private enum Constants {
-        static let vendorID = 0x046D
-        static let mxAnywhere3SProductID = 0xB037
         static let longReportID: UInt8 = 0x11
         static let longReportLength = 20
         static let bluetoothDeviceIndex: UInt8 = 0xFF
@@ -48,7 +46,7 @@ nonisolated final class LogitechHIDPPService: @unchecked Sendable {
 
     private nonisolated func enumerateLogitechDevices() -> [IOHIDDevice] {
         let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        let matching = [kIOHIDVendorIDKey as String: Constants.vendorID] as CFDictionary
+        let matching = [kIOHIDVendorIDKey as String: LogitechMouseDeviceMatcher.vendorID] as CFDictionary
         IOHIDManagerSetDeviceMatching(manager, matching)
         guard IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess else {
             return []
@@ -57,13 +55,7 @@ nonisolated final class LogitechHIDPPService: @unchecked Sendable {
         guard let set = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else {
             return []
         }
-        return Array(set).filter { device in
-            let productID = Self.intProperty(device, kIOHIDProductIDKey as CFString)
-            let name = Self.stringProperty(device, kIOHIDProductKey as CFString)
-            return productID == Constants.mxAnywhere3SProductID
-                || name.localizedCaseInsensitiveContains("MX Anywhere")
-                || name.localizedCaseInsensitiveContains("Logitech")
-        }
+        return Array(set).filter(LogitechMouseDeviceMatcher.isSupported)
     }
 
     private nonisolated static func intProperty(_ device: IOHIDDevice, _ key: CFString) -> Int {
@@ -100,7 +92,7 @@ nonisolated final class LogitechHIDPPService: @unchecked Sendable {
                 transport: transport,
                 supportsDPI: findFeature(Constants.adjustableDPI) != nil,
                 dpiMin: 200,
-                dpiMax: productID == Constants.mxAnywhere3SProductID ? 8000 : 4000,
+                dpiMax: productID == LogitechMouseDeviceMatcher.mxAnywhere3SProductID ? 8000 : 4000,
                 currentDPI: nil,
                 batteryPercent: nil
             )

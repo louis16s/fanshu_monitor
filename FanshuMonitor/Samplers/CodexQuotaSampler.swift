@@ -248,7 +248,7 @@ nonisolated struct CodexUsageClient: Sendable {
         request.timeoutInterval = Self.requestTimeout
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("番薯Monitor/0.2.8", forHTTPHeaderField: "User-Agent")
+        request.setValue(AppVersion.userAgent, forHTTPHeaderField: "User-Agent")
 
         let data: Data
         let response: HTTPURLResponse

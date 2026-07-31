@@ -27,3 +27,9 @@ nonisolated enum MonitorConstants {
     static let maxSamples = 28
     static let sparklineMaxPoints = 24
 }
+
+nonisolated enum AppRuntime {
+    static let isRunningTests =
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        || ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
+}

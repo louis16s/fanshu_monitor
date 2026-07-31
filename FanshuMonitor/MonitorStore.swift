@@ -48,11 +48,19 @@ final class MonitorStore: ObservableObject {
         refreshSchedule.setInterval(settings.codexRefreshIntervalMinutes * 60, for: .codex)
         allModules = initialModules
         modules = initialModules.filter { settings.isVisible($0.kind) }
-        Task { [samplingCoordinator, settings] in
-            await samplingCoordinator.setCodexRefreshInterval(settings.codexRefreshIntervalMinutes * 60)
-            await samplingCoordinator.retainSamplers(for: settings.visibleKinds)
+        guard !AppRuntime.isRunningTests else {
+            return
         }
-        advance(kinds: settings.visibleKinds)
+        let initialSamplingKinds = MonitorSamplingPolicy.activeKinds(
+            visibleKinds: settings.visibleKinds,
+            panelVisible: false,
+            ringSource: settings.ringSource
+        )
+        Task { [samplingCoordinator] in
+            await samplingCoordinator.setCodexRefreshInterval(settings.codexRefreshIntervalMinutes * 60)
+            await samplingCoordinator.retainSamplers(for: initialSamplingKinds)
+        }
+        advance(kinds: initialSamplingKinds)
         updateMenuBarTargetComputeLoadIfNeeded(force: true)
         updateMenuBarIcon(force: true)
         refreshSchedule.markRefreshed(settings.visibleKinds, at: Date())
@@ -109,7 +117,13 @@ final class MonitorStore: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 DispatchQueue.main.async {
-                    self?.refreshMenuBarLoad()
+                    guard let self else { return }
+                    self.syncSamplerResidency()
+                    if self.settings.ringSource == .network,
+                       self.settings.isVisible(.network) {
+                        self.advance(kinds: [MonitorKind.network])
+                    }
+                    self.refreshMenuBarLoad()
                 }
             }
             .store(in: &cancellables)
@@ -118,12 +132,11 @@ final class MonitorStore: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] visibleKinds in
                 guard let self else { return }
-                Task { [samplingCoordinator = self.samplingCoordinator] in
-                    await samplingCoordinator.retainSamplers(for: visibleKinds)
-                }
+                let activeKinds = self.activeSamplingKinds
+                self.syncSamplerResidency()
                 self.refreshSchedule.reset()
                 self.modules = self.visibleModules(from: self.allModules)
-                self.advance(kinds: visibleKinds)
+                self.advance(kinds: activeKinds)
                 self.refreshMenuBarLoad()
             }
             .store(in: &cancellables)
@@ -231,7 +244,7 @@ final class MonitorStore: ObservableObject {
     private func advance() {
         let kinds = refreshSchedule.dueKinds(
             at: Date(),
-            visibleKinds: settings.visibleKinds,
+            visibleKinds: activeSamplingKinds,
             panelVisible: isPanelVisible
         )
         guard !kinds.isEmpty else {
@@ -372,6 +385,7 @@ final class MonitorStore: ObservableObject {
     func panelDidAppear() {
         guard !isPanelVisible else { return }
         isPanelVisible = true
+        syncSamplerResidency()
         configureSamplingTimer()
         let visibleKinds = settings.visibleKinds
         refreshSchedule.markRefreshed(visibleKinds, at: Date())
@@ -381,7 +395,23 @@ final class MonitorStore: ObservableObject {
     func panelDidDisappear() {
         guard isPanelVisible else { return }
         isPanelVisible = false
+        syncSamplerResidency()
         configureSamplingTimer()
+    }
+
+    private var activeSamplingKinds: Set<MonitorKind> {
+        MonitorSamplingPolicy.activeKinds(
+            visibleKinds: settings.visibleKinds,
+            panelVisible: isPanelVisible,
+            ringSource: settings.ringSource
+        )
+    }
+
+    private func syncSamplerResidency() {
+        let activeKinds = activeSamplingKinds
+        Task { [samplingCoordinator] in
+            await samplingCoordinator.retainSamplers(for: activeKinds)
+        }
     }
 
     private func refreshCodexUsage(force: Bool) {

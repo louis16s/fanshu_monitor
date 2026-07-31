@@ -21,17 +21,22 @@ final class MouseControlController: ObservableObject {
     }
 
     private weak var settings: MonitorSettings?
-    private let hidService = LogitechHIDPPService()
+    private let mouseWorker = LogitechMouseWorker()
+    private let presenceMonitor = LogitechMousePresenceMonitor()
     private var eventTap: MouseButtonEventTap?
     private var hidButtonListener: LogitechHIDPPButtonListener?
     private var cancellables = Set<AnyCancellable>()
+    private var deviceRequestGeneration: UInt64 = 0
+    private var presenceSessionGeneration: UInt64 = 0
+    private var isMousePresent = false
 
     func configure(settings: MonitorSettings) {
         self.settings = settings
         eventTap = MouseButtonEventTap(settings: settings)
-        hidButtonListener = LogitechHIDPPButtonListener(settings: settings)
+        hidButtonListener = LogitechHIDPPButtonListener()
 
         settings.$mouseControlEnabled
+            .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] enabled in
                 self?.syncEnabledState(enabled)
@@ -39,9 +44,10 @@ final class MouseControlController: ObservableObject {
             .store(in: &cancellables)
 
         settings.$mouseGestureAction
+            .dropFirst()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] action in
-                self?.syncGestureListener(enabled: settings.mouseControlEnabled, action: action)
+            .sink { [weak self] _ in
+                self?.syncInputListeners()
             }
             .store(in: &cancellables)
 
@@ -50,33 +56,45 @@ final class MouseControlController: ObservableObject {
 
     func refreshIfNeeded() {
         guard settings?.mouseControlEnabled == true else { return }
-        refresh()
-    }
-
-    func refreshButtonTapIfPossible() {
-        guard settings?.mouseControlEnabled == true else { return }
-        if eventTap?.start() == true {
-            buttonStatusText = "按钮监听已启用"
+        if isMousePresent {
+            refresh(readDPI: true)
+        } else {
+            presenceMonitor.refresh()
         }
     }
 
+    func refreshButtonTapIfPossible() {
+        guard settings?.mouseControlEnabled == true, device != nil else { return }
+        syncInputListeners()
+    }
+
     func refresh() {
-        refresh(readDPI: true)
+        guard settings?.mouseControlEnabled == true else { return }
+        statusText = "正在检测鼠标"
+        if isMousePresent {
+            refresh(readDPI: true)
+        } else {
+            presenceMonitor.refresh()
+        }
     }
 
     private func refresh(readDPI: Bool) {
         guard settings?.mouseControlEnabled == true else {
-            device = nil
-            statusText = "未启用"
+            suspendDeviceWork(status: "未启用", buttonStatus: "未启用")
+            return
+        }
+        guard isMousePresent else {
+            suspendDeviceWork(status: "等待鼠标连接", buttonStatus: "鼠标未连接")
             return
         }
 
         statusText = "正在检测鼠标"
-        Task { [weak self, hidService] in
-            let result = await Task.detached(priority: .utility) {
-                hidService.detectDevice(readDPI: readDPI)
-            }.value
-            guard let self else { return }
+        deviceRequestGeneration &+= 1
+        isApplyingDPI = false
+        let requestGeneration = deviceRequestGeneration
+        Task { [weak self, mouseWorker] in
+            let result = await mouseWorker.detectDevice(readDPI: readDPI)
+            guard let self, requestGeneration == self.deviceRequestGeneration else { return }
             self.device = result
             if let result {
                 if let currentDPI = result.currentDPI {
@@ -84,23 +102,24 @@ final class MouseControlController: ObservableObject {
                 }
                 let dpi = result.currentDPI.map { " · \($0) DPI" } ?? ""
                 self.statusText = "\(result.displayName)\(dpi)"
+                self.syncInputListeners()
             } else {
-                self.statusText = "未发现支持的 Logitech 鼠标"
+                self.suspendDeviceWork(status: "等待鼠标连接", buttonStatus: "鼠标未连接")
             }
         }
     }
 
     func applyDPI(_ value: Int) {
-        guard settings?.mouseControlEnabled == true else { return }
+        guard settings?.mouseControlEnabled == true, device != nil else { return }
         let clamped = min(8000, max(200, value))
+        deviceRequestGeneration &+= 1
+        let requestGeneration = deviceRequestGeneration
         isApplyingDPI = true
         statusText = "正在设置 DPI"
 
-        Task { [weak self, hidService] in
-            let success = await Task.detached(priority: .utility) {
-                hidService.setDPI(clamped)
-            }.value
-            guard let self else { return }
+        Task { [weak self, mouseWorker] in
+            let success = await mouseWorker.setDPI(clamped)
+            guard let self, requestGeneration == self.deviceRequestGeneration else { return }
             self.isApplyingDPI = false
             if success {
                 var updated = self.device
@@ -116,27 +135,66 @@ final class MouseControlController: ObservableObject {
 
     private func syncEnabledState(_ enabled: Bool) {
         if enabled {
-            if eventTap?.start() == true {
-                buttonStatusText = "按钮监听已启用"
-            } else {
-                buttonStatusText = "等待辅助功能授权"
+            presenceSessionGeneration &+= 1
+            let sessionGeneration = presenceSessionGeneration
+            statusText = "正在检测鼠标"
+            buttonStatusText = "等待鼠标连接"
+            presenceMonitor.start { [weak self] isPresent in
+                Task { @MainActor [weak self] in
+                    guard let self,
+                          sessionGeneration == self.presenceSessionGeneration else {
+                        return
+                    }
+                    self.mousePresenceDidChange(isPresent)
+                }
             }
-            syncGestureListener(enabled: true, action: settings?.mouseGestureAction ?? .passThrough)
-            refresh(readDPI: !(settings?.mouseDPIOnDemandEnabled ?? true))
         } else {
-            eventTap?.stop()
-            hidButtonListener?.stop()
-            device = nil
-            statusText = "未启用"
-            buttonStatusText = "未启用"
+            presenceSessionGeneration &+= 1
+            presenceMonitor.stop()
+            isMousePresent = false
+            suspendDeviceWork(status: "未启用", buttonStatus: "未启用")
         }
     }
 
-    private func syncGestureListener(enabled: Bool, action: MouseButtonAction) {
-        if enabled && action != .passThrough {
+    private func mousePresenceDidChange(_ isPresent: Bool) {
+        guard settings?.mouseControlEnabled == true else { return }
+        isMousePresent = isPresent
+        if isPresent {
+            refresh(readDPI: !(settings?.mouseDPIOnDemandEnabled ?? true))
+        } else {
+            suspendDeviceWork(status: "等待鼠标连接", buttonStatus: "鼠标未连接")
+        }
+    }
+
+    private func syncInputListeners() {
+        guard settings?.mouseControlEnabled == true, device != nil else {
+            eventTap?.stop()
+            hidButtonListener?.stop()
+            return
+        }
+
+        if eventTap?.start() == true {
+            buttonStatusText = "按钮监听已启用"
+        } else {
+            buttonStatusText = "等待辅助功能授权"
+        }
+
+        let action = settings?.mouseGestureAction ?? .passThrough
+        hidButtonListener?.updateAction(action)
+        if action != .passThrough {
             hidButtonListener?.start()
         } else {
             hidButtonListener?.stop()
         }
+    }
+
+    private func suspendDeviceWork(status: String, buttonStatus: String) {
+        deviceRequestGeneration &+= 1
+        isApplyingDPI = false
+        eventTap?.stop()
+        hidButtonListener?.stop()
+        device = nil
+        statusText = status
+        buttonStatusText = buttonStatus
     }
 }

@@ -23,7 +23,7 @@
 
 番薯Monitor 是一个轻量常驻的菜单栏应用，用来观察 CPU、GPU、内存、电源、Codex 额度、鼠标和显示器状态。它会根据鼠标所在屏幕分配 F1/F2 亮度键，在可控外接屏上调整 DDC 亮度，也能按不同时间段直接锁定系统。
 
-当前版本：`0.2.8`
+当前版本：`0.2.9`
 
 ## 主要功能
 
@@ -42,7 +42,7 @@
 
 ## 截图
 
-下面是当前 `0.2.8` 官网与动态面板预览。可以直接访问 [官网](https://louis16s.github.io/fanshu_monitor/) 操作显示器、锁屏、鼠标和 Codex 演示。
+下面是当前 `0.2.9` 官网与动态面板预览。可以直接访问 [官网](https://louis16s.github.io/fanshu_monitor/) 操作显示器、锁屏、鼠标和 Codex 演示。
 
 <p align="center">
   <img src="docs/images/site-preview.png" width="900" alt="番薯Monitor 官网与动态面板预览">

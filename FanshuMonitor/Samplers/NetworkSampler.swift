@@ -43,8 +43,8 @@ nonisolated final class NetworkSampler: MonitorSampler {
         }
 
         let delta = max(0.1, now.timeIntervalSince(previousBytes.timestamp))
-        let upload = Double(bytes.output &- previousBytes.output) / delta
-        let download = Double(bytes.input &- previousBytes.input) / delta
+        let upload = Double(monotonicCounterDelta(current: bytes.output, previous: previousBytes.output)) / delta
+        let download = Double(monotonicCounterDelta(current: bytes.input, previous: previousBytes.input)) / delta
         let value = min(100, log10(max(1, upload + download)) * 14)
 
         return MonitorModule(
@@ -267,4 +267,11 @@ nonisolated func networkAddressSummary(_ addresses: [String]) -> String {
     }
 
     return addresses.joined(separator: ", ")
+}
+
+nonisolated func monotonicCounterDelta(current: UInt64, previous: UInt64) -> UInt64 {
+    guard current >= previous else {
+        return 0
+    }
+    return current - previous
 }

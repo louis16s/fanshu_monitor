@@ -474,7 +474,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.8;
+				MARKETING_VERSION = 0.2.9;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitor";
 				PRODUCT_NAME = "番薯Monitor";
 				PRODUCT_MODULE_NAME = FanshuMonitor;
@@ -514,7 +514,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.8;
+				MARKETING_VERSION = 0.2.9;
 				GCC_GENERATE_TEST_COVERAGE_FILES = NO;
 				GCC_INSTRUMENT_PROGRAM_FLOW_ARCS = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitor";
@@ -554,7 +554,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.8;
+				MARKETING_VERSION = 0.2.9;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitor";
 				PRODUCT_NAME = "番薯Monitor";
 				PRODUCT_MODULE_NAME = FanshuMonitor;
@@ -606,7 +606,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.8;
+				MARKETING_VERSION = 0.2.9;
 				GCC_GENERATE_TEST_COVERAGE_FILES = NO;
 				GCC_INSTRUMENT_PROGRAM_FLOW_ARCS = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitor";
@@ -649,7 +649,7 @@
 				DEVELOPMENT_TEAM = 6V7934RHQZ;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.2.8;
+				MARKETING_VERSION = 0.2.9;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitorTests";
 				PRODUCT_NAME = FanshuMonitorTests;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -670,7 +670,7 @@
 				DEVELOPMENT_TEAM = 6V7934RHQZ;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.2.8;
+				MARKETING_VERSION = 0.2.9;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitorTests";
 				PRODUCT_NAME = FanshuMonitorTests;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -689,7 +689,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6V7934RHQZ;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.2.8;
+				MARKETING_VERSION = 0.2.9;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitorUITests";
 				PRODUCT_NAME = FanshuMonitorUITests;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -708,7 +708,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6V7934RHQZ;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.2.8;
+				MARKETING_VERSION = 0.2.9;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.fanshu.monitorUITests";
 				PRODUCT_NAME = FanshuMonitorUITests;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
