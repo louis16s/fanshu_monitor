@@ -1,6 +1,6 @@
 # 番薯Monitor 面板设计规范
 
-本文件是面板 UI 的长期约束。新增或修改 CPU、GPU、Memory、Power、Codex、Network、Storage、Display 等模块时必须遵守，避免各模块形成独立样式。
+本文件是面板 UI 的长期约束。新增或修改 CPU、GPU、UMA、Power、Codex、Network、Storage、Display 等模块时必须遵守，避免各模块形成独立样式。
 
 ## 标题行
 
@@ -25,7 +25,8 @@
 
 ## 视觉检查
 
-- CPU、GPU、Memory、Power、Codex、Display 同屏时，标题基线、字号、字重和左侧图标槽必须一致
+- CPU、GPU、UMA、Power、Codex、Display 同屏时，标题基线、字号、字重和左侧图标槽必须一致
+- 普通监控模块的英文标题统一由 `MonitorKind.panelTitle` 提供，视图不得重复硬编码
 - 中英文标题混排时保持同一字号和字重，不用额外字距补偿视觉大小
 - 长标题只能压缩尾部辅助内容或使用最小缩放，不能撑高标题行
 - 禁用模块的图标和文字要明显变灰并显示删除线

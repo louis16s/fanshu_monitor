@@ -23,6 +23,14 @@ struct FanshuMonitorTests {
         #expect(MonitorKind.memory.id == "memory")
     }
 
+    @Test func panelModuleTitlesUseOneCompactNamingSystem() {
+        #expect(MonitorKind.cpu.panelTitle == "CPU")
+        #expect(MonitorKind.gpu.panelTitle == "GPU")
+        #expect(MonitorKind.memory.panelTitle == "UMA")
+        #expect(MonitorKind.battery.panelTitle == "Power")
+        #expect(MonitorKind.codex.panelTitle == "Codex Limits")
+    }
+
     @Test func monitorModuleSeverityForCPU() {
         let module = MonitorModule(
             kind: .cpu,

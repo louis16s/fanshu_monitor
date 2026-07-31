@@ -3,11 +3,15 @@
 ## 分层
 
 1. `MonitorStore` 只负责 UI 状态、刷新调度和结果发布
-2. `SamplingCoordinator` actor 串行管理采样器并隔离主线程
-3. `SystemMonitorSampler` 按模块懒加载和释放具体采样器
+2. `SamplingCoordinator` actor 管理采样器生命周期并隔离主线程
+3. 每个 `MonitorModuleSamplerWorker` actor 独占一个模块采样器
 4. `MonitorSampler` 只访问所属硬件或系统数据源
 
 硬件读取不得直接放进 SwiftUI View 或 `MonitorStore` 的主线程回调
+
+面板打开后，各个可见模块并发采样，任一模块完成后立即独立回填界面。不同模块不得因为慢速 I/O 相互等待；同一模块的状态与硬件访问仍由自己的 worker 串行保护
+
+CPU 与 GPU 可以并发读取各自的轻量统计，但底层 SMC 调用使用共享锁串行执行，避免两个温度读取连接同时访问 AppleSMC
 
 ## 采样上下文
 
@@ -21,7 +25,7 @@
 
 ## 生命周期
 
-- 隐藏模块后由 `SamplingCoordinator.retainSamplers` 释放对应采样器
+- 隐藏模块后由 `SamplingCoordinator.retainSamplers` 释放对应 worker 和采样器
 - 面板打开时调度器每秒检查到期模块
 - 面板关闭时调度器每 5 秒唤醒一次，各模块仍使用自己的降频间隔
 - 网络在面板关闭时释放采样器并停止读取接口，只有菜单栏圆环明确选择网络时保留轻量采样

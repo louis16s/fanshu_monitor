@@ -27,15 +27,16 @@ Current version: `0.2.9`
 
 ## Highlights
 
-- Menu bar panel for CPU, GPU, memory, battery, Codex quota, and display state
+- Menu bar panel for CPU, GPU, UMA, battery, Codex quota, and display state
 - External display brightness target follows the pointer
+- Built-in display brightness lightly syncs with the system value every 0.2 seconds
 - Built-in and unsupported displays pass F1/F2 back to macOS
 - Display capability, DDC state, and unsupported reasons are shown per display
 - DDC failures are isolated per display with timeout circuit breaking and backoff
 - Scheduled locking supports custom ranges, next-day times, and independent idle limits
 - Hidden modules stop sampling, and panel-closed refresh slows down
 - Network, SSID, display discovery, heavy battery telemetry, and HID data load on demand
-- Memory panel shows the app's own memory footprint
+- UMA panel shows the app's own memory footprint
 - Mouse settings support MX Anywhere 3S DPI reads, DPI apply, and button mapping
 - Codex shows plan, 5H and weekly quota, plus separate reset times
 - About settings include update checks, project links, and reference project notes

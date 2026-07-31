@@ -2,6 +2,7 @@ import Foundation
 import IOKit
 
 nonisolated final class SMCReader {
+    private static let callLock = NSLock()
     private var conn: io_connect_t = 0
     private static let temperatureKeys = [
         "Tp09", "Tp0T", "Tp01", "Tp05", "Tp0D", "Tp0H", "Tp0L", "Tp0P", "Tp0X", "Tp0b"
@@ -110,6 +111,8 @@ nonisolated final class SMCReader {
     }
 
     private func call(_ index: UInt8, input: inout SMCKeyData_t, output: inout SMCKeyData_t) -> kern_return_t {
+        Self.callLock.lock()
+        defer { Self.callLock.unlock() }
         let inputSize = MemoryLayout<SMCKeyData_t>.stride
         var outputSize = MemoryLayout<SMCKeyData_t>.stride
         return IOConnectCallStructMethod(conn, UInt32(index), &input, inputSize, &output, &outputSize)

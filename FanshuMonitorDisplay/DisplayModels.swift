@@ -111,6 +111,22 @@ nonisolated enum DisplayValueChangePolicy {
     }
 }
 
+nonisolated enum DisplayNativeBrightnessSyncPolicy {
+    static let intervalMilliseconds = 200
+
+    static func shouldRun(
+        panelVisible: Bool,
+        moduleVisible: Bool,
+        brightnessControlEnabled: Bool,
+        hasNativeBrightnessDisplay: Bool
+    ) -> Bool {
+        panelVisible
+            && moduleVisible
+            && brightnessControlEnabled
+            && hasNativeBrightnessDisplay
+    }
+}
+
 struct RecentDisplayValue {
     let value: Double
     let date: Date

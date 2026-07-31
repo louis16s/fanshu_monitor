@@ -93,7 +93,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Memory"
+            "value": "UMA"
           }
         }
       }
@@ -365,7 +365,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Memory"
+            "value": "UMA"
           }
         }
       }

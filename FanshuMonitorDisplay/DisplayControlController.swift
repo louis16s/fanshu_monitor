@@ -537,11 +537,14 @@ final class DisplayControlController: ObservableObject {
 
     private func configureNativeBrightnessSync() {
         stopNativeBrightnessSync()
-        guard isPanelVisible,
-              settings?.displayModuleVisible == true,
-              settings?.displayBrightnessControlEnabled == true,
-              displays.contains(where: { $0.usesNativeBrightness && $0.supportsBrightness })
-        else {
+        guard DisplayNativeBrightnessSyncPolicy.shouldRun(
+            panelVisible: isPanelVisible,
+            moduleVisible: settings?.displayModuleVisible == true,
+            brightnessControlEnabled: settings?.displayBrightnessControlEnabled == true,
+            hasNativeBrightnessDisplay: displays.contains {
+                $0.usesNativeBrightness && $0.supportsBrightness
+            }
+        ) else {
             return
         }
 
@@ -551,7 +554,11 @@ final class DisplayControlController: ObservableObject {
             while !Task.isCancelled {
                 self?.syncNativeBrightness(generation: generation)
                 do {
-                    try await Task.sleep(for: .milliseconds(400))
+                    try await Task.sleep(
+                        for: .milliseconds(
+                            DisplayNativeBrightnessSyncPolicy.intervalMilliseconds
+                        )
+                    )
                 } catch {
                     break
                 }

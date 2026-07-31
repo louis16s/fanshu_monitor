@@ -82,6 +82,25 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var panelTitle: String {
+        switch self {
+        case .cpu:
+            "CPU"
+        case .gpu:
+            "GPU"
+        case .memory:
+            "UMA"
+        case .storage:
+            "Storage"
+        case .network:
+            "Network"
+        case .battery:
+            "Power"
+        case .codex:
+            "Codex Limits"
+        }
+    }
+
     var symbol: String {
         switch self {
         case .cpu:

@@ -30,6 +30,7 @@ final class MonitorStore: ObservableObject {
     private var animationTimerCancellable: AnyCancellable?
     private let samplingCoordinator = SamplingCoordinator()
     private var samplingTask: Task<Void, Never>?
+    private var pendingSamplingKinds: Set<MonitorKind> = []
     private var codexRefreshTask: Task<Void, Never>?
     private var samplingGeneration = 0
     private var cancellables: Set<AnyCancellable> = []
@@ -262,32 +263,64 @@ final class MonitorStore: ObservableObject {
         }
         guard !requestedKinds.isEmpty else { return }
 
-        samplingTask?.cancel()
+        guard samplingTask == nil else {
+            pendingSamplingKinds.formUnion(requestedKinds)
+            return
+        }
+
         samplingGeneration &+= 1
         let requestGeneration = samplingGeneration
-        let previousModules = allModules
         let enabledMetrics = enabledSamplingMetrics(for: requestedKinds)
         let panelVisible = isPanelVisible
         let coordinator = samplingCoordinator
+        let previousModules = allModules
 
         samplingTask = Task { [weak self] in
-            let snapshot = await coordinator.sample(
-                kinds: requestedKinds,
-                previousModules: previousModules,
-                enabledMetrics: enabledMetrics,
-                panelVisible: panelVisible
-            )
-            guard !Task.isCancelled,
-                  let snapshot,
-                  let self,
-                  requestGeneration == self.samplingGeneration
-            else {
-                return
+            guard let self else { return }
+            await withTaskGroup(of: MonitorModule?.self) { group in
+                for kind in requestedKinds {
+                    let previous = previousModules.first { $0.kind == kind }
+                    let metricIDs = enabledMetrics[kind] ?? []
+                    group.addTask {
+                        await coordinator.sampleModule(
+                            kind: kind,
+                            previous: previous,
+                            enabledMetricIDs: metricIDs,
+                            panelVisible: panelVisible
+                        )
+                    }
+                }
+
+                for await module in group {
+                    guard !Task.isCancelled,
+                          let module,
+                          requestGeneration == self.samplingGeneration
+                    else {
+                        group.cancelAll()
+                        return
+                    }
+                    self.mergeSampledModule(module)
+                }
             }
-            self.allModules = snapshot.modules
-            self.modules = self.visibleModules(from: snapshot.modules)
-            self.refreshMenuBarLoad()
+
+            guard requestGeneration == self.samplingGeneration else { return }
+            self.samplingTask = nil
+            let pendingKinds = self.pendingSamplingKinds
+            self.pendingSamplingKinds.removeAll()
+            if !pendingKinds.isEmpty {
+                self.advance(kinds: pendingKinds)
+            }
         }
+    }
+
+    private func mergeSampledModule(_ module: MonitorModule) {
+        guard let index = allModules.firstIndex(where: { $0.kind == module.kind })
+        else {
+            return
+        }
+        allModules[index] = module
+        modules = visibleModules(from: allModules)
+        refreshMenuBarLoad()
     }
 
     private func advanceAnimation() {
@@ -388,6 +421,7 @@ final class MonitorStore: ObservableObject {
     func panelDidAppear() {
         guard !isPanelVisible else { return }
         isPanelVisible = true
+        cancelSamplingTask()
         #if DISPLAY_CONTROL
         displayController.setPanelVisible(true)
         #endif
@@ -427,6 +461,7 @@ final class MonitorStore: ObservableObject {
     private func cancelSamplingTask() {
         samplingTask?.cancel()
         samplingTask = nil
+        pendingSamplingKinds.removeAll()
         samplingGeneration &+= 1
     }
 

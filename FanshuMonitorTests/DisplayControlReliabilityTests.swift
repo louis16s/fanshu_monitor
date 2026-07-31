@@ -210,6 +210,28 @@ struct DisplayValueChangePolicyTests {
         #expect(!DisplayValueChangePolicy.shouldPublish(current: 50, next: 50.05))
         #expect(DisplayValueChangePolicy.shouldPublish(current: 50, next: 50.2))
     }
+
+    @Test func nativeBrightnessUsesALightweightTwoHundredMillisecondSync() {
+        #expect(DisplayNativeBrightnessSyncPolicy.intervalMilliseconds == 200)
+        #expect(DisplayNativeBrightnessSyncPolicy.shouldRun(
+            panelVisible: true,
+            moduleVisible: true,
+            brightnessControlEnabled: true,
+            hasNativeBrightnessDisplay: true
+        ))
+        #expect(!DisplayNativeBrightnessSyncPolicy.shouldRun(
+            panelVisible: false,
+            moduleVisible: true,
+            brightnessControlEnabled: true,
+            hasNativeBrightnessDisplay: true
+        ))
+        #expect(!DisplayNativeBrightnessSyncPolicy.shouldRun(
+            panelVisible: true,
+            moduleVisible: true,
+            brightnessControlEnabled: true,
+            hasNativeBrightnessDisplay: false
+        ))
+    }
 }
 
 struct DisplayControlWorkerTests {

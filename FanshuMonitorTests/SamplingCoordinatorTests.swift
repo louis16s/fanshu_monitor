@@ -27,6 +27,23 @@ struct SamplingCoordinatorTests {
         #expect(releasedKinds.isEmpty)
     }
 
+    @Test func samplingLoadsEveryRequestedWorkerAndNothingElse() async {
+        let coordinator = SamplingCoordinator()
+        let previous = MonitorKind.allCases.map(MonitorModule.placeholder)
+
+        let snapshot = await coordinator.sample(
+            kinds: [.cpu, .memory, .battery],
+            previousModules: previous,
+            panelVisible: false
+        )
+
+        #expect(snapshot != nil)
+        let loadedKinds = await coordinator.loadedSamplerKinds()
+        #expect(loadedKinds == [.cpu, .memory, .battery])
+        #expect(!loadedKinds.contains(.network))
+        #expect(!loadedKinds.contains(.storage))
+    }
+
     @Test func brightnessInterceptionRequiresBothPermissions() {
         #expect(BrightnessKeyEventTap.canInterceptBrightnessKeys(
             accessibilityGranted: true,

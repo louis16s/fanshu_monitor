@@ -13,8 +13,8 @@
 
 - App/UI：SwiftUI 菜单栏面板、设置窗口和共享视觉组件
 - 状态层：`MonitorStore` 发布界面状态并调度刷新
-- 采样层：`SamplingCoordinator` actor 串行管理采样和过期结果
-- 采样器：`SystemMonitorSampler` 按可见模块懒加载并释放采样器
+- 采样层：`SamplingCoordinator` actor 管理 worker 生命周期、取消和结果合并
+- 采样器：`SamplingCoordinator` 按可见模块懒加载独立的 `MonitorModuleSamplerWorker`
 - 功能控制器：显示器、鼠标、锁屏、Codex 和更新检查彼此独立
 - 硬件桥接：DDC、DisplayServices、SMC、IOKit 与 HID 在后台队列执行
 - 发布层：tag、Release workflow、SHA-256 清单和 release manifest

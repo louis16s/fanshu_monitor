@@ -54,26 +54,7 @@ struct MetricGlassRow: View {
     }
 
     private var titleText: String {
-        "\(panelTitle(for: module.kind)):"
-    }
-
-    private func panelTitle(for kind: MonitorKind) -> String {
-        switch kind {
-        case .cpu:
-            "CPU"
-        case .gpu:
-            "GPU"
-        case .memory:
-            "Memory"
-        case .storage:
-            "Storage"
-        case .network:
-            "Network"
-        case .battery:
-            "Power"
-        case .codex:
-            "Codex Limits"
-        }
+        "\(module.kind.panelTitle):"
     }
 
     @ViewBuilder
@@ -388,7 +369,7 @@ struct NetworkGlassRow: View {
     var body: some View {
         VStack(spacing: 0) {
             PanelModuleHeader(
-                title: "Network:",
+                title: "\(module.kind.panelTitle):",
                 value: module.summary,
                 titleColor: theme.primaryText,
                 valueColor: theme.valueText
@@ -453,7 +434,7 @@ struct BatteryGlassRow: View {
     var body: some View {
         VStack(spacing: 0) {
             PanelModuleHeader(
-                title: "Power:",
+                title: "\(module.kind.panelTitle):",
                 value: summaryText,
                 titleColor: theme.primaryText,
                 valueColor: theme.valueText
