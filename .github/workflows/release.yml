@@ -52,6 +52,7 @@ jobs:
 
       - name: Run tests
         run: |
+          set +e
           set -uo pipefail
           mkdir -p build
           xcodebuild \
