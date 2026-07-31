@@ -22,6 +22,7 @@ final class DisplayControlController: ObservableObject {
     private var screenChangeObserver: NSObjectProtocol?
     private var didWakeObserver: NSObjectProtocol?
     private var screensDidWakeObserver: NSObjectProtocol?
+    private var powerEventBridge: DisplayPowerEventBridge?
     private var refreshWorkItem: DispatchWorkItem?
     private var wakeMaintenanceGeneration = 0
     private var displayCallbackRegistered = false
@@ -29,6 +30,8 @@ final class DisplayControlController: ObservableObject {
     private var nativeBrightnessSyncTask: Task<Void, Never>?
     private var nativeBrightnessSyncGeneration = 0
     private var nativeBrightnessReadsInFlight: Set<CGDirectDisplayID> = []
+    private var cachedBuiltInDisplay: ControlledDisplay?
+    private var builtInTopologyOperationPending = false
     private var isBuiltInBlackoutDesired: Bool {
         get {
             defaults.bool(forKey: Self.builtInBlackoutPreferenceKey)
@@ -65,6 +68,7 @@ final class DisplayControlController: ObservableObject {
             CGDisplayRemoveReconfigurationCallback(displayReconfigurationCallback, Unmanaged.passUnretained(self).toOpaque())
         }
         nativeBrightnessSyncTask?.cancel()
+        powerEventBridge?.stop()
         Task { @MainActor [service] in
             service.clearBuiltInBlackouts()
             service.clearSoftwareDimming()
@@ -76,7 +80,21 @@ final class DisplayControlController: ObservableObject {
         worker.refresh(service: service, activeControls: controls) { detectedDisplays in
             DispatchQueue.main.async {
                 AppLogger.ui.info("Display refresh completed, found \(detectedDisplays.count) displays")
-                let mergedDisplays = detectedDisplays.map { self.mergedDisplayValues(for: $0) }
+                if let builtInDisplay = detectedDisplays.first(where: \.isBuiltIn) {
+                    self.cachedBuiltInDisplay = builtInDisplay
+                }
+                var mergedDisplays = detectedDisplays.map { self.mergedDisplayValues(for: $0) }
+                if self.isBuiltInBlackoutDesired,
+                   !mergedDisplays.contains(where: \.isBuiltIn),
+                   var cachedBuiltInDisplay = self.cachedBuiltInDisplay
+                    ?? self.service.isolatedBuiltInPlaceholder() {
+                    cachedBuiltInDisplay.brightness = 0
+                    cachedBuiltInDisplay.supportsBrightness = false
+                    cachedBuiltInDisplay.brightnessUnavailableReason = "已关闭"
+                    mergedDisplays.insert(cachedBuiltInDisplay, at: 0)
+                    self.cachedBuiltInDisplay = cachedBuiltInDisplay
+                    self.builtInBlackoutDisplayIDs.insert(cachedBuiltInDisplay.id)
+                }
                 self.displays = mergedDisplays
                 for display in mergedDisplays {
                     self.seedFallbackValues(for: display)
@@ -106,13 +124,27 @@ final class DisplayControlController: ObservableObject {
         }
 
         let shouldEnable = !builtInBlackoutDisplayIDs.contains(displayID)
-        if service.setBuiltInBlackout(shouldEnable, display: display, displays: displays) {
-            if shouldEnable {
-                isBuiltInBlackoutDesired = true
-                builtInBlackoutDisplayIDs.insert(displayID)
-            } else {
-                isBuiltInBlackoutDesired = false
-                builtInBlackoutDisplayIDs.remove(displayID)
+        guard !builtInTopologyOperationPending else { return }
+        builtInTopologyOperationPending = true
+        worker.setBuiltInBlackout(
+            shouldEnable,
+            display: display,
+            displays: displays,
+            service: service
+        ) { [weak self] succeeded in
+            Task { @MainActor in
+                guard let self else { return }
+                self.builtInTopologyOperationPending = false
+                guard succeeded else { return }
+                if shouldEnable {
+                    self.cachedBuiltInDisplay = display
+                    self.isBuiltInBlackoutDesired = true
+                    self.builtInBlackoutDisplayIDs.insert(displayID)
+                } else {
+                    self.isBuiltInBlackoutDesired = false
+                    self.builtInBlackoutDisplayIDs.remove(displayID)
+                }
+                self.scheduleRefresh(delay: 0.2)
             }
         }
     }
@@ -157,6 +189,14 @@ final class DisplayControlController: ObservableObject {
             }
         }
 
+        if powerEventBridge == nil {
+            let bridge = DisplayPowerEventBridge { [weak self] event in
+                self?.handlePowerEvent(event)
+            }
+            powerEventBridge = bridge
+            bridge.start()
+        }
+
         guard !displayCallbackRegistered else { return }
         let pointer = Unmanaged.passUnretained(self).toOpaque()
         if CGDisplayRegisterReconfigurationCallback(displayReconfigurationCallback, pointer) == .success {
@@ -184,7 +224,15 @@ final class DisplayControlController: ObservableObject {
             CGDisplayRemoveReconfigurationCallback(displayReconfigurationCallback, Unmanaged.passUnretained(self).toOpaque())
             displayCallbackRegistered = false
         }
+        powerEventBridge?.stop()
+        powerEventBridge = nil
         stopNativeBrightnessSync()
+    }
+
+    func restoreBuiltInDisplayForTermination() {
+        wakeMaintenanceGeneration &+= 1
+        service.clearBuiltInBlackouts()
+        builtInBlackoutDisplayIDs.removeAll()
     }
 
     func setPanelVisible(_ isVisible: Bool) {
@@ -205,19 +253,14 @@ final class DisplayControlController: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
     }
 
-    func scheduleWakeRefreshes() {
+    func scheduleWakeRefreshes(early: Bool = false) {
         AppLogger.ui.notice("Display wake detected; reapplying display control state")
         worker.invalidateDiscoveryCache()
         wakeMaintenanceGeneration &+= 1
         let generation = wakeMaintenanceGeneration
-        let passes: [(delay: TimeInterval, fullRefresh: Bool)] = [
-            (0.15, false),
-            (0.8, true),
-            (1.8, false),
-            (3.2, true),
-            (6.0, false),
-            (10.0, true)
-        ]
+        let passes: [(delay: TimeInterval, fullRefresh: Bool)] = early
+            ? [(0, false), (0.08, false), (0.25, false), (0.8, true)]
+            : [(0, false), (0.2, false), (0.8, true), (2.0, true)]
 
         for pass in passes {
             DispatchQueue.main.asyncAfter(deadline: .now() + pass.delay) { [weak self] in
@@ -231,15 +274,37 @@ final class DisplayControlController: ObservableObject {
         }
     }
 
+    private func handlePowerEvent(_ event: DisplayPowerEvent) {
+        guard isBuiltInBlackoutDesired else { return }
+        switch event {
+        case .willSleep:
+            AppLogger.ui.notice("Preparing isolated built-in display for sleep")
+            performWakeMaintenancePass(
+                generation: wakeMaintenanceGeneration,
+                fullRefresh: false
+            )
+        case .willPowerOn:
+            scheduleWakeRefreshes(early: true)
+        case .hasPoweredOn:
+            scheduleWakeRefreshes()
+        }
+    }
+
     private func performWakeMaintenancePass(generation: Int, fullRefresh: Bool) {
         guard generation == wakeMaintenanceGeneration else {
             return
         }
 
-        if isBuiltInBlackoutDesired {
-            let appliedDisplayIDs = service.reapplyBuiltInBlackoutsToOnlineDisplays()
-            if !appliedDisplayIDs.isEmpty {
-                builtInBlackoutDisplayIDs.formUnion(appliedDisplayIDs)
+        if isBuiltInBlackoutDesired, !builtInTopologyOperationPending {
+            builtInTopologyOperationPending = true
+            worker.reapplyBuiltInBlackouts(service: service) { [weak self] appliedDisplayIDs in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.builtInTopologyOperationPending = false
+                    if !appliedDisplayIDs.isEmpty {
+                        self.builtInBlackoutDisplayIDs.formUnion(appliedDisplayIDs)
+                    }
+                }
             }
         }
 
@@ -661,21 +726,44 @@ final class DisplayControlController: ObservableObject {
     }
 
     private func syncBuiltInBlackouts() {
-        let displayIDs = Set(displays.map(\.id))
-        builtInBlackoutDisplayIDs = builtInBlackoutDisplayIDs.intersection(displayIDs)
-        guard displays.contains(where: { !$0.isBuiltIn }) else {
+        let externalDisplays = displays.filter { !$0.isBuiltIn }
+        guard !externalDisplays.isEmpty else {
+            guard isBuiltInBlackoutDesired || !builtInBlackoutDisplayIDs.isEmpty else { return }
+            guard !builtInTopologyOperationPending else { return }
+            builtInTopologyOperationPending = true
             builtInBlackoutDisplayIDs.removeAll()
-            service.clearBuiltInBlackouts()
+            isBuiltInBlackoutDesired = false
+            worker.clearBuiltInBlackouts(service: service) { [weak self] in
+                Task { @MainActor in
+                    self?.builtInTopologyOperationPending = false
+                    self?.scheduleRefresh(delay: 0.2)
+                }
+            }
             return
         }
         if isBuiltInBlackoutDesired {
             for display in displays where display.isBuiltIn {
-                if service.setBuiltInBlackout(true, display: display, displays: displays) {
-                    builtInBlackoutDisplayIDs.insert(display.id)
+                if !builtInBlackoutDisplayIDs.contains(display.id),
+                   !builtInTopologyOperationPending {
+                    builtInTopologyOperationPending = true
+                    worker.setBuiltInBlackout(
+                        true,
+                        display: display,
+                        displays: displays,
+                        service: service
+                    ) { [weak self] succeeded in
+                        Task { @MainActor in
+                            guard let self else { return }
+                            self.builtInTopologyOperationPending = false
+                            guard succeeded else { return }
+                            self.cachedBuiltInDisplay = display
+                            self.builtInBlackoutDisplayIDs.insert(display.id)
+                            self.scheduleRefresh(delay: 0.15)
+                        }
+                    }
                 }
             }
         }
-        service.syncBuiltInBlackouts(keeping: builtInBlackoutDisplayIDs, displays: displays)
     }
 
     private func markControlUnsupported(_ control: DisplayControlKind, displayID: CGDirectDisplayID) {
@@ -709,6 +797,10 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
     private let discoveryQueue = DispatchQueue(
         label: "fanshu.display-control.discovery",
         qos: .utility
+    )
+    private let topologyQueue = DispatchQueue(
+        label: "fanshu.display-control.topology",
+        qos: .userInitiated
     )
     private var writeQueuesByDisplayID: [CGDirectDisplayID: DispatchQueue] = [:]
     private var pendingWrites: [ControlKey: PendingWrite] = [:]
@@ -779,6 +871,37 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
                 }
                 completion(value)
             }
+        }
+    }
+
+    func setBuiltInBlackout(
+        _ enabled: Bool,
+        display: ControlledDisplay,
+        displays: [ControlledDisplay],
+        service: DisplayControlService,
+        completion: @escaping (Bool) -> Void
+    ) {
+        topologyQueue.async {
+            completion(service.setBuiltInBlackout(enabled, display: display, displays: displays))
+        }
+    }
+
+    func reapplyBuiltInBlackouts(
+        service: DisplayControlService,
+        completion: @escaping (Set<CGDirectDisplayID>) -> Void
+    ) {
+        topologyQueue.async {
+            completion(service.reapplyBuiltInBlackoutsToOnlineDisplays())
+        }
+    }
+
+    func clearBuiltInBlackouts(
+        service: DisplayControlService,
+        completion: @escaping () -> Void
+    ) {
+        topologyQueue.async {
+            service.clearBuiltInBlackouts()
+            completion()
         }
     }
 

@@ -39,6 +39,7 @@ This file is intended to preserve upstream notices for code that was copied, ada
 The following projects were reviewed as references only. Their source code is not intentionally copied into this repository.
 
 - BetterDisplay: https://github.com/waydabber/BetterDisplay
+- InternalDisplayOff: https://github.com/RonaldPark89/InternalDisplayOff
 - one-key-hidpi: https://github.com/xzhih/one-key-hidpi
 
 Note: one-key-hidpi did not expose a standalone license file at review time, so its code should remain reference-only unless its licensing status is clarified.

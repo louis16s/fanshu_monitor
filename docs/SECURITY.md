@@ -25,6 +25,7 @@ spctl --assess --type execute --verbose=4 /Applications/番薯Monitor.app
 
 - Accessibility and Input Monitoring are used only for optional F1/F2 takeover and mouse button mapping.
 - The Codex quota module reads `~/.codex/auth.json` only when the module is enabled, then sends its access token to `https://chatgpt.com/backend-api/wham/usage` to retrieve quota data.
+- While the panel is open and the Codex module is visible, task progress reads conversation names from `~/.codex/session_index.jsonl`. For a small set of recent local `~/.codex/sessions` rollout files it searches backward in 1 MiB chunks, up to 16 MiB, only until the latest task boundary is found; after that it follows appended bytes only. This data stays on the Mac and is never uploaded by Fanshu Monitor.
 - DDC, SMC, IOKit, and Logitech HID++ integrations access local hardware only.
 
 ## Reporting A Vulnerability

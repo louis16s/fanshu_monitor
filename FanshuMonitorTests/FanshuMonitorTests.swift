@@ -530,4 +530,78 @@ struct FanshuMonitorTests {
         #expect(presentation.hasFiveHourQuota)
         #expect(presentation.progressValue == 47)
     }
+
+    @Test func codexTaskProgressReadsEveryActiveConversationTitle() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let sessionDirectory = root.appendingPathComponent("2026/08/01", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let firstID = "019eba2a-524c-7c01-b14c-d378a9a01924"
+        let secondID = "019f7105-186e-71c3-a3a8-8f5621029630"
+        let firstRollout = sessionDirectory.appendingPathComponent("rollout-current-\(firstID).jsonl")
+        let secondRollout = sessionDirectory.appendingPathComponent("rollout-current-\(secondID).jsonl")
+        let firstRecords: [[String: Any]] = [
+            [
+                "type": "event_msg",
+                "payload": ["type": "task_started", "turn_id": "turn-1"]
+            ],
+            [
+                "type": "response_item",
+                "payload": [
+                    "type": "custom_tool_call",
+                    "name": "exec",
+                    "input": "const r = await tools.update_plan({plan:[{step:\"备份\",status:\"completed\"},{step:\"显示控制\",status:\"in_progress\"},{step:\"构建\",status:\"pending\"}]});"
+                ]
+            ]
+        ]
+        let secondRecords: [[String: Any]] = [[
+            "type": "event_msg",
+            "payload": ["type": "task_started", "turn_id": "turn-2"]
+        ]]
+        let firstData = try firstRecords
+            .map { try JSONSerialization.data(withJSONObject: $0) }
+            .reduce(into: Data()) { result, record in
+                result.append(record)
+                result.append(0x0A)
+            }
+        let secondData = try secondRecords
+            .map { try JSONSerialization.data(withJSONObject: $0) }
+            .reduce(into: Data()) { result, record in
+                result.append(record)
+                result.append(0x0A)
+            }
+        try firstData.write(to: firstRollout)
+        try secondData.write(to: secondRollout)
+
+        let sessionIndex = root.appendingPathComponent("session_index.jsonl")
+        let indexRecords = [
+            "{\"id\":\"\(firstID)\",\"thread_name\":\"番薯monitor\"}",
+            "{\"id\":\"\(secondID)\",\"thread_name\":\"构建 CF 博客\"}"
+        ].joined(separator: "\n") + "\n"
+        try indexRecords.write(to: sessionIndex, atomically: true, encoding: .utf8)
+
+        let reader = CodexTaskProgressReader(sessionsRoot: root, sessionIndexURL: sessionIndex)
+        let tasks = await reader.load()
+        #expect(Set(tasks.map(\.title)) == ["番薯monitor", "构建 CF 博客"])
+        let firstTask = tasks.first { $0.id == firstID }
+        #expect(firstTask?.completedSteps == 1)
+        #expect(firstTask?.totalSteps == 3)
+        #expect(firstTask?.activeStep == "显示控制")
+        #expect(Int(firstTask?.percent?.rounded() ?? -1) == 33)
+
+        let completion = try JSONSerialization.data(withJSONObject: [
+            "type": "event_msg",
+            "payload": ["type": "task_complete", "turn_id": "turn-1"]
+        ])
+        let handle = try FileHandle(forWritingTo: firstRollout)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: completion)
+        try handle.write(contentsOf: Data([0x0A]))
+        try handle.close()
+
+        let remainingTasks = await reader.load()
+        #expect(remainingTasks.map(\.title) == ["构建 CF 博客"])
+    }
 }

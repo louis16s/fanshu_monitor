@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import Darwin
 import Foundation
 import OSLog
 
@@ -32,10 +33,14 @@ final class MonitorStore: ObservableObject {
     private var samplingTask: Task<Void, Never>?
     private var pendingSamplingKinds: Set<MonitorKind> = []
     private var codexRefreshTask: Task<Void, Never>?
+    private var codexTaskProgressTask: Task<Void, Never>?
+    private var codexTaskProgressTimerCancellable: AnyCancellable?
+    private let codexTaskProgressReader = CodexTaskProgressReader()
     private var samplingGeneration = 0
     private var cancellables: Set<AnyCancellable> = []
     private var menuBarTargetComputeLoad = 0.0
     private var lastMenuBarIconKey = ""
+    private var terminationSignalSource: DispatchSourceSignal?
 
     init() {
         let settings = MonitorSettings()
@@ -72,6 +77,7 @@ final class MonitorStore: ObservableObject {
         #endif
         mouseController.configure(settings: settings)
         lockScreenController.configure(settings: settings)
+        configureTerminationSignalHandler()
         settings.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -139,6 +145,7 @@ final class MonitorStore: ObservableObject {
                 self.refreshSchedule.reset()
                 self.modules = self.visibleModules(from: self.allModules)
                 self.advance(kinds: activeKinds)
+                self.configureCodexTaskProgressMonitoring()
                 self.refreshMenuBarLoad()
             }
             .store(in: &cancellables)
@@ -146,6 +153,13 @@ final class MonitorStore: ObservableObject {
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
                 self?.refreshInputServicesAfterActivation()
+            }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
+            .sink { [weak self] _ in
+                #if DISPLAY_CONTROL
+                self?.displayController.restoreBuiltInDisplayForTermination()
+                #endif
             }
             .store(in: &cancellables)
         animationTimerCancellable = Timer.publish(every: MonitorConstants.animationInterval, on: .main, in: .common)
@@ -158,9 +172,25 @@ final class MonitorStore: ObservableObject {
     deinit {
         samplingTask?.cancel()
         codexRefreshTask?.cancel()
+        codexTaskProgressTask?.cancel()
+        codexTaskProgressTimerCancellable?.cancel()
         timerCancellable?.cancel()
         animationTimerCancellable?.cancel()
+        terminationSignalSource?.cancel()
         cancellables.removeAll()
+    }
+
+    private func configureTerminationSignalHandler() {
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        source.setEventHandler { [weak self] in
+            #if DISPLAY_CONTROL
+            self?.displayController.restoreBuiltInDisplayForTermination()
+            #endif
+            exit(EXIT_SUCCESS)
+        }
+        terminationSignalSource = source
+        source.resume()
     }
 
     var selectedModule: MonitorModule {
@@ -430,6 +460,7 @@ final class MonitorStore: ObservableObject {
         let visibleKinds = settings.visibleKinds
         refreshSchedule.markRefreshed(visibleKinds, at: Date())
         advance(kinds: visibleKinds)
+        configureCodexTaskProgressMonitoring()
     }
 
     func panelDidDisappear() {
@@ -441,6 +472,7 @@ final class MonitorStore: ObservableObject {
         #endif
         syncSamplerResidency()
         configureSamplingTimer()
+        configureCodexTaskProgressMonitoring()
     }
 
     private var activeSamplingKinds: Set<MonitorKind> {
@@ -483,7 +515,55 @@ final class MonitorStore: ObservableObject {
             }
             self.allModules = snapshot.modules
             self.modules = self.visibleModules(from: snapshot.modules)
+            self.refreshCodexTaskProgress()
         }
+    }
+
+    private func configureCodexTaskProgressMonitoring() {
+        codexTaskProgressTimerCancellable?.cancel()
+        codexTaskProgressTimerCancellable = nil
+        codexTaskProgressTask?.cancel()
+        codexTaskProgressTask = nil
+
+        guard isPanelVisible, settings.isVisible(.codex) else { return }
+        refreshCodexTaskProgress()
+        codexTaskProgressTimerCancellable = Timer.publish(
+            every: 2,
+            tolerance: 0.4,
+            on: .main,
+            in: .common
+        )
+        .autoconnect()
+        .sink { [weak self] _ in
+            self?.refreshCodexTaskProgress()
+        }
+    }
+
+    private func refreshCodexTaskProgress() {
+        guard isPanelVisible, settings.isVisible(.codex) else { return }
+        codexTaskProgressTask?.cancel()
+        codexTaskProgressTask = Task { [weak self] in
+            guard let self else { return }
+            let tasks = await codexTaskProgressReader.load()
+            guard !Task.isCancelled else { return }
+            applyCodexTaskProgress(tasks)
+        }
+    }
+
+    private func applyCodexTaskProgress(_ tasks: [CodexTaskProgress]) {
+        guard let index = allModules.firstIndex(where: { $0.kind == .codex }) else { return }
+        allModules[index].metrics.removeAll { $0.name.hasPrefix("active-task-") }
+        for (position, task) in tasks.enumerated() {
+            let progressText = task.percent.map {
+                "\(task.countText) · \(Int($0.rounded()))%"
+            } ?? task.countText
+            allModules[index].metrics.append(contentsOf: [
+                MonitorMetric(name: "active-task-title-\(position)", value: task.title),
+                MonitorMetric(name: "active-task-progress-\(position)", value: progressText),
+                MonitorMetric(name: "active-task-status-\(position)", value: task.activeStep ?? "执行中")
+            ])
+        }
+        modules = visibleModules(from: allModules)
     }
 
     private func enabledSamplingMetrics(

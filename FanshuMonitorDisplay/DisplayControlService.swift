@@ -1,9 +1,12 @@
 import AppKit
 import CoreGraphics
+import Darwin
 import Foundation
 import OSLog
 
 final class DisplayControlService {
+    private static let cachedBuiltInDisplayIDKey = "displayControl.cachedBuiltInDisplayID"
+    private static let cachedBuiltInBrightnessKey = "displayControl.cachedBuiltInBrightness"
     private let displayServices = DisplayServicesBridge()
     private let ddc = DisplayDDCBridge()
     private let defaults = UserDefaults.standard
@@ -36,6 +39,12 @@ final class DisplayControlService {
                 ddc.setValueRange(storedRange, for: .brightness, displayID: id)
             }
             let appleBrightness = usesNativeBrightness ? displayServices.getBrightness(displayID: id) : nil
+            if isBuiltIn {
+                defaults.set(Int(id), forKey: Self.cachedBuiltInDisplayIDKey)
+                if let appleBrightness {
+                    defaults.set(Double(appleBrightness), forKey: Self.cachedBuiltInBrightnessKey)
+                }
+            }
             let hasDDCService = usesDDC && ddc.hasService(for: id)
             let brightnessTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.brightness, displayID: id)
             let volumeTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.volume, displayID: id)
@@ -205,6 +214,7 @@ final class DisplayControlService {
             }
             let previousBrightness = displayServices.getBrightness(displayID: display.id)
                 ?? Float(display.brightness / 100)
+            defaults.set(Double(previousBrightness), forKey: Self.cachedBuiltInBrightnessKey)
             let didMirror = builtInBlackout.setEnabled(
                 true,
                 displayID: display.id,
@@ -214,14 +224,19 @@ final class DisplayControlService {
             guard didMirror else {
                 return false
             }
-            _ = displayServices.setBrightness(displayID: display.id, value: 0)
+            if builtInBlackout.isUsingMirrorFallback(displayID: display.id) {
+                _ = displayServices.setBrightness(displayID: display.id, value: 0)
+            }
             return didMirror
         }
 
         guard builtInBlackout.setEnabled(false, displayID: display.id, mirrorTargetID: nil, previousBrightness: nil) else {
             return false
         }
-        let restoredBrightness = builtInBlackout.restoreBrightness(for: display.id) ?? Float(display.brightness / 100)
+        let cachedBrightness = defaults.object(forKey: Self.cachedBuiltInBrightnessKey) as? Double
+        let restoredBrightness = builtInBlackout.restoreBrightness(for: display.id)
+            ?? cachedBrightness.map(Float.init)
+            ?? Float(display.brightness / 100)
         _ = displayServices.setBrightness(displayID: display.id, value: restoredBrightness)
         return true
     }
@@ -230,7 +245,12 @@ final class DisplayControlService {
         builtInBlackout.sync(keeping: displayIDs)
         guard let mirrorTarget = displays.first(where: { !$0.isBuiltIn })?.id else { return }
         for displayID in displayIDs {
-            _ = builtInBlackout.setEnabled(true, displayID: displayID, mirrorTargetID: mirrorTarget, previousBrightness: nil)
+            _ = builtInBlackout.setEnabled(
+                true,
+                displayID: displayID,
+                mirrorTargetID: mirrorTarget,
+                previousBrightness: displayServices.getBrightness(displayID: displayID)
+            )
         }
     }
 
@@ -256,7 +276,9 @@ final class DisplayControlService {
                 mirrorTargetID: mirrorTargetID,
                 previousBrightness: previousBrightness
             ) {
-                _ = displayServices.setBrightness(displayID: displayID, value: 0)
+                if builtInBlackout.isUsingMirrorFallback(displayID: displayID) {
+                    _ = displayServices.setBrightness(displayID: displayID, value: 0)
+                }
                 appliedDisplayIDs.insert(displayID)
             }
         }
@@ -268,6 +290,29 @@ final class DisplayControlService {
         for (displayID, brightness) in brightnessByDisplayID {
             _ = displayServices.setBrightness(displayID: displayID, value: brightness)
         }
+    }
+
+    func isolatedBuiltInPlaceholder() -> ControlledDisplay? {
+        guard let storedID = defaults.object(forKey: Self.cachedBuiltInDisplayIDKey) as? Int else {
+            return nil
+        }
+        let displayID = CGDirectDisplayID(storedID)
+        return ControlledDisplay(
+            id: displayID,
+            storageID: "built-in-\(displayID)",
+            name: "视网膜显示器",
+            isBuiltIn: true,
+            usesNativeBrightness: true,
+            supportsBrightness: false,
+            supportsVolume: false,
+            supportsContrast: false,
+            brightness: 0,
+            volume: DisplayControlKind.volume.defaultValue,
+            contrast: DisplayControlKind.contrast.defaultValue,
+            brightnessUnavailableReason: "已关闭",
+            volumeUnavailableReason: "内建显示器不支持此控制项",
+            contrastUnavailableReason: "内建显示器不支持此控制项"
+        )
     }
 
     private func displayName(for id: CGDirectDisplayID, isBuiltIn: Bool) -> String {
@@ -624,7 +669,38 @@ private final class DisplaySoftwareDimmingService {
 }
 
 private final class BuiltInDisplayBlackoutService {
-    private var previousBrightnessByDisplayID: [CGDirectDisplayID: Float] = [:]
+    private enum IsolationMode {
+        case disconnected
+        case mirrored
+    }
+
+    private struct IsolationState {
+        var previousBrightness: Float?
+        var mode: IsolationMode
+    }
+
+    private typealias ConfigureDisplayEnabledFunction = @convention(c) (
+        CGDisplayConfigRef?,
+        CGDirectDisplayID,
+        Int32
+    ) -> CGError
+
+    private let skyLightHandle = dlopen(
+        "/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight",
+        RTLD_LAZY | RTLD_LOCAL
+    )
+    private lazy var configureDisplayEnabled: ConfigureDisplayEnabledFunction? = {
+        guard let skyLightHandle else { return nil }
+        for symbolName in ["SLSConfigureDisplayEnabled", "CGSConfigureDisplayEnabled"] {
+            if let symbol = dlsym(skyLightHandle, symbolName) {
+                AppLogger.ui.notice("Using SkyLight display isolation API: \(symbolName, privacy: .public)")
+                return unsafeBitCast(symbol, to: ConfigureDisplayEnabledFunction.self)
+            }
+        }
+        AppLogger.ui.error("SkyLight display isolation API is unavailable; using mirror fallback")
+        return nil
+    }()
+    private var states: [CGDirectDisplayID: IsolationState] = [:]
 
     func setEnabled(
         _ enabled: Bool,
@@ -632,40 +708,117 @@ private final class BuiltInDisplayBlackoutService {
         mirrorTargetID: CGDirectDisplayID?,
         previousBrightness: Float?
     ) -> Bool {
-        guard CGDisplayIsBuiltin(displayID) != 0 else { return false }
-
         if enabled {
             guard let mirrorTargetID else { return false }
-            let didConfigure = configureMirroring(displayID: displayID, mirrorTargetID: mirrorTargetID)
-            if didConfigure, previousBrightnessByDisplayID[displayID] == nil {
-                previousBrightnessByDisplayID[displayID] = previousBrightness
+            guard CGDisplayIsBuiltin(displayID) != 0 || states[displayID] != nil else {
+                return false
             }
-            return didConfigure
+
+            if states[displayID]?.mode == .disconnected,
+               !onlineDisplayIDs().contains(displayID) {
+                return true
+            }
+
+            if configureDisplay(displayID: displayID, enabled: false) {
+                states[displayID] = IsolationState(
+                    previousBrightness: states[displayID]?.previousBrightness ?? previousBrightness,
+                    mode: .disconnected
+                )
+                return true
+            }
+
+            let didMirror = configureMirroring(displayID: displayID, mirrorTargetID: mirrorTargetID)
+            if didMirror {
+                states[displayID] = IsolationState(
+                    previousBrightness: states[displayID]?.previousBrightness ?? previousBrightness,
+                    mode: .mirrored
+                )
+            }
+            return didMirror
         }
 
-        return configureMirroring(displayID: displayID, mirrorTargetID: nil)
+        guard let state = states[displayID] else {
+            return configureDisplay(displayID: displayID, enabled: true)
+        }
+        let restored: Bool
+        switch state.mode {
+        case .disconnected:
+            restored = configureDisplay(displayID: displayID, enabled: true)
+        case .mirrored:
+            restored = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+        }
+        return restored
     }
 
     func restoreBrightness(for displayID: CGDirectDisplayID) -> Float? {
-        previousBrightnessByDisplayID.removeValue(forKey: displayID)
+        states.removeValue(forKey: displayID)?.previousBrightness
+    }
+
+    func isUsingMirrorFallback(displayID: CGDirectDisplayID) -> Bool {
+        states[displayID]?.mode == .mirrored
     }
 
     func sync(keeping displayIDs: Set<CGDirectDisplayID>) {
-        let removedIDs = Set(previousBrightnessByDisplayID.keys).subtracting(displayIDs)
+        let removedIDs = Set(states.keys).subtracting(displayIDs)
         for displayID in removedIDs {
-            _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+            guard let state = states[displayID] else { continue }
+            switch state.mode {
+            case .disconnected:
+                _ = configureDisplay(displayID: displayID, enabled: true)
+            case .mirrored:
+                _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+            }
         }
-        previousBrightnessByDisplayID = previousBrightnessByDisplayID.filter { displayIDs.contains($0.key) }
+        states = states.filter { displayIDs.contains($0.key) }
     }
 
     func clearAll() -> [CGDirectDisplayID: Float] {
-        let brightnessByDisplayID = previousBrightnessByDisplayID
-        previousBrightnessByDisplayID.removeAll()
-        for displayID in brightnessByDisplayID.keys {
-            _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+        let previousStates = states
+        states.removeAll()
+        for (displayID, state) in previousStates {
+            switch state.mode {
+            case .disconnected:
+                _ = configureDisplay(displayID: displayID, enabled: true)
+            case .mirrored:
+                _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+            }
         }
 
-        return brightnessByDisplayID
+        return previousStates.reduce(into: [:]) { result, entry in
+            if let brightness = entry.value.previousBrightness {
+                result[entry.key] = brightness
+            }
+        }
+    }
+
+    private func configureDisplay(displayID: CGDirectDisplayID, enabled: Bool) -> Bool {
+        guard let configureDisplayEnabled else { return false }
+        var config: CGDisplayConfigRef?
+        guard CGBeginDisplayConfiguration(&config) == .success, let config else {
+            return false
+        }
+
+        let configureResult = configureDisplayEnabled(config, displayID, enabled ? 1 : 0)
+        guard configureResult == .success else {
+            CGCancelDisplayConfiguration(config)
+            return false
+        }
+
+        let completionResult = CGCompleteDisplayConfiguration(config, .forSession)
+        if completionResult != .success {
+            CGCancelDisplayConfiguration(config)
+            return false
+        }
+        return true
+    }
+
+    private func onlineDisplayIDs() -> Set<CGDirectDisplayID> {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(UInt32(ids.count), &ids, &count) == .success else {
+            return []
+        }
+        return Set(ids.prefix(Int(count)))
     }
 
     private func configureMirroring(displayID: CGDirectDisplayID, mirrorTargetID: CGDirectDisplayID?) -> Bool {
@@ -682,6 +835,12 @@ private final class BuiltInDisplayBlackoutService {
             return false
         }
         return true
+    }
+
+    deinit {
+        if let skyLightHandle {
+            dlclose(skyLightHandle)
+        }
     }
 }
 

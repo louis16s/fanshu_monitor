@@ -33,7 +33,9 @@ struct MetricGlassRow: View {
                         StorageVolumeDetailList(volumes: storageVolumes, kind: module.kind, tint: tint, theme: theme)
                     } else if module.kind == .codex {
                         CodexMetricDetailGrid(
-                            metrics: details,
+                            metrics: details + module.metrics.filter {
+                                $0.name.hasPrefix("active-task-")
+                            },
                             presentation: CodexQuotaPresentation(metrics: module.metrics),
                             theme: theme
                         )
@@ -165,17 +167,88 @@ private struct CodexMetricDetailGrid: View {
     let presentation: CodexQuotaPresentation
     let theme: MonitorPanelTheme
 
+    private struct ActiveTask: Identifiable {
+        let id: Int
+        let title: String
+        let progressText: String
+        let status: String
+
+        var percent: Double? {
+            guard let percentPart = progressText.split(separator: "·").last?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: "%", with: ""),
+                  let percent = Double(percentPart)
+            else {
+                return nil
+            }
+            return min(100, max(0, percent))
+        }
+
+        var countText: String {
+            progressText.split(separator: "·").first.map(String.init) ?? progressText
+        }
+    }
+
+    private var activeTasks: [ActiveTask] {
+        metrics.compactMap { metric -> Int? in
+            guard metric.name.hasPrefix("active-task-title-") else { return nil }
+            return Int(metric.name.replacingOccurrences(of: "active-task-title-", with: ""))
+        }
+        .sorted()
+        .compactMap { index in
+            guard let title = metrics.first(where: { $0.name == "active-task-title-\(index)" })?.value,
+                  let progress = metrics.first(where: { $0.name == "active-task-progress-\(index)" })?.value
+            else {
+                return nil
+            }
+            let status = metrics.first(where: { $0.name == "active-task-status-\(index)" })?.value ?? "执行中"
+            return ActiveTask(id: index, title: title, progressText: progress, status: status)
+        }
+    }
+
+    private var quotaMetrics: [MonitorMetric] {
+        var result = metrics.filter { !$0.name.hasPrefix("active-task-") }
+        if !presentation.hasFiveHourQuota {
+            result.removeAll { $0.name == "five-hour" || $0.name == "five-hour-reset" }
+        }
+        return result
+    }
+
     var body: some View {
-        if presentation.hasFiveHourQuota {
-            MetricDetailGrid(metrics: metrics, kind: .codex, theme: theme)
-        } else {
-            MetricDetailGrid(
-                metrics: metrics.filter {
-                    $0.name != "five-hour" && $0.name != "five-hour-reset"
-                },
-                kind: .codex,
-                theme: theme
-            )
+        VStack(spacing: 7) {
+            ForEach(activeTasks) { task in
+                HStack(spacing: 6) {
+                    Image(systemName: "circle.dashed.inset.filled")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(theme.moduleTint(for: .codex))
+
+                    Text(task.title)
+                        .panelCaptionFont(size: 10)
+                        .foregroundStyle(theme.captionText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Spacer(minLength: 6)
+
+                    if let percent = task.percent {
+                        ProgressMeter(
+                            value: percent,
+                            tint: theme.moduleTint(for: .codex),
+                            theme: theme
+                        )
+                        .frame(width: 42, height: 3)
+                    }
+
+                    Text(task.countText)
+                        .panelMonoFont(size: 10, weight: .semibold)
+                        .foregroundStyle(theme.secondaryText)
+                        .lineLimit(1)
+                }
+                .padding(.leading, 28)
+                .help(task.status)
+            }
+
+            MetricDetailGrid(metrics: quotaMetrics, kind: .codex, theme: theme)
         }
     }
 }

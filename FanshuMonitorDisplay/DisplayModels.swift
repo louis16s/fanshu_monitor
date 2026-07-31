@@ -62,8 +62,9 @@ struct ControlledDisplay: Identifiable {
     }
 }
 
-nonisolated(unsafe) let displayReconfigurationCallback: CGDisplayReconfigurationCallBack = { _, _, userInfo in
+nonisolated(unsafe) let displayReconfigurationCallback: CGDisplayReconfigurationCallBack = { _, flags, userInfo in
     guard let userInfo else { return }
+    guard !flags.contains(.beginConfigurationFlag) else { return }
     let controller = Unmanaged<DisplayControlController>.fromOpaque(userInfo).takeUnretainedValue()
     Task { @MainActor in
         controller.scheduleRefresh()
