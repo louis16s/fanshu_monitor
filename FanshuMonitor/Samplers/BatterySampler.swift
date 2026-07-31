@@ -24,7 +24,7 @@ nonisolated final class BatterySampler: MonitorSampler {
               let source = sources.first,
               let description = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any] else {
             AppLogger.sampler.error("BatterySampler failed to read power source info")
-            return externalPowerModule(previous: previous, panelVisible: context.panelVisible)
+            return previous ?? MonitorModule.placeholder(kind: .battery)
         }
 
         let current = doubleValue(description[kIOPSCurrentCapacityKey]) ?? 0
@@ -57,12 +57,17 @@ nonisolated final class BatterySampler: MonitorSampler {
                         shouldCollect: shouldCollectTelemetry
                     )
                     : Self.adapterMetricValue(isConnected: false, watts: nil)),
-                MonitorMetric(name: "charging-power", value: telemetryValue(
-                    "charging-power",
-                    freshValue: connected ? wattStringAllowZero(chargingPower) : "--",
-                    previous: previous,
-                    shouldCollect: shouldCollectTelemetry
-                )),
+                MonitorMetric(
+                    name: "charging-power",
+                    value: connected
+                        ? telemetryValue(
+                            "charging-power",
+                            freshValue: wattStringAllowZero(chargingPower),
+                            previous: previous,
+                            shouldCollect: shouldCollectTelemetry
+                        )
+                        : "--"
+                ),
                 MonitorMetric(name: "power", value: telemetryValue(
                     "power",
                     freshValue: wattString(systemPower),
@@ -99,7 +104,10 @@ nonisolated final class BatterySampler: MonitorSampler {
         shouldCollect: Bool
     ) -> String {
         if shouldCollect {
-            return freshValue
+            if freshValue != "--" {
+                return freshValue
+            }
+            return previous?.metrics.first { $0.name == name }?.value ?? freshValue
         }
         return previous?.metrics.first { $0.name == name }?.value ?? "--"
     }
@@ -109,36 +117,6 @@ nonisolated final class BatterySampler: MonitorSampler {
             return "not-connected"
         }
         return wattString(watts, rounded: true)
-    }
-
-    private func externalPowerModule(
-        previous: MonitorModule?,
-        panelVisible: Bool
-    ) -> MonitorModule {
-        let adapterWatts = panelVisible ? externalAdapterWatts() : nil
-        let powerWatts = panelVisible ? powerTelemetryWatts() : nil
-        return MonitorModule(
-            kind: .battery,
-            value: 100,
-            summary: "ac-power",
-            metrics: [
-                MonitorMetric(name: "type", value: "ac-power"),
-                MonitorMetric(name: "status", value: "ac-power"),
-                MonitorMetric(name: "adapter", value: telemetryValue(
-                    "adapter",
-                    freshValue: wattString(adapterWatts, rounded: true),
-                    previous: previous,
-                    shouldCollect: panelVisible
-                )),
-                MonitorMetric(name: "power", value: telemetryValue(
-                    "power",
-                    freshValue: wattString(powerWatts),
-                    previous: previous,
-                    shouldCollect: panelVisible
-                ))
-            ],
-            samples: seedSamples(100)
-        )
     }
 
     private func smartBatteryInfo(at date: Date) -> SmartBatteryInfo {

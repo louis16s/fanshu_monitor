@@ -56,10 +56,33 @@ struct FanshuMonitorTests {
         #expect(module.severity == .calm)
     }
 
-    @Test func placeholderMetricNamesAreStableKeys() {
-        let module = MonitorModule.placeholder(kind: .cpu)
+    @Test func coreModulePlaceholdersMatchTheirPanelMetrics() {
+        let cpu = MonitorModule.placeholder(kind: .cpu)
+        let gpu = MonitorModule.placeholder(kind: .gpu)
+        let memory = MonitorModule.placeholder(kind: .memory)
+        let power = MonitorModule.placeholder(kind: .battery)
 
-        #expect(module.metrics.map(\.name) == ["current", "average", "peak"])
+        #expect(cpu.summary == "0%")
+        #expect(cpu.metrics.map(\.name) == ["system", "user", "idle", "temperature"])
+        #expect(gpu.summary == "0%")
+        #expect(gpu.metrics.map(\.name) == ["gpu-memory", "allocated", "render", "temperature", "tiler"])
+        #expect(memory.summary == "0%")
+        #expect(memory.metrics.map(\.name) == ["used", "pressure", "compressed", "app-memory", "cached", "total"])
+        #expect(power.summary == "0%")
+        #expect(power.metrics.first { $0.name == "power" }?.value == "0.0 W")
+    }
+
+    @Test func displayIdentityRecoverySelectsOnlyABuiltInCandidate() {
+        let recovered = DisplayControlService.firstBuiltInDisplayID(
+            in: [3, 1, 7],
+            isBuiltIn: { $0 == 1 }
+        )
+
+        #expect(recovered == 1)
+        #expect(DisplayControlService.firstBuiltInDisplayID(
+            in: [3, 7],
+            isBuiltIn: { _ in false }
+        ) == nil)
     }
 
     @Test func computeLoadCombinesCPUAndGPU() {

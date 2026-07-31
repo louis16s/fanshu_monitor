@@ -212,6 +212,7 @@ final class DisplayControlService {
             guard let mirrorTarget = displays.first(where: { !$0.isBuiltIn }) else {
                 return false
             }
+            defaults.set(Int(display.id), forKey: Self.cachedBuiltInDisplayIDKey)
             let previousBrightness = displayServices.getBrightness(displayID: display.id)
                 ?? Float(display.brightness / 100)
             defaults.set(Double(previousBrightness), forKey: Self.cachedBuiltInBrightnessKey)
@@ -269,6 +270,7 @@ final class DisplayControlService {
 
         var appliedDisplayIDs: Set<CGDirectDisplayID> = []
         for displayID in displayIDs where CGDisplayIsBuiltin(displayID) != 0 {
+            defaults.set(Int(displayID), forKey: Self.cachedBuiltInDisplayIDKey)
             let previousBrightness = displayServices.getBrightness(displayID: displayID)
             if builtInBlackout.setEnabled(
                 true,
@@ -293,10 +295,9 @@ final class DisplayControlService {
     }
 
     func isolatedBuiltInPlaceholder() -> ControlledDisplay? {
-        guard let storedID = defaults.object(forKey: Self.cachedBuiltInDisplayIDKey) as? Int else {
+        guard let displayID = cachedOrDiscoverableBuiltInDisplayID() else {
             return nil
         }
-        let displayID = CGDirectDisplayID(storedID)
         return ControlledDisplay(
             id: displayID,
             storageID: "built-in-\(displayID)",
@@ -313,6 +314,31 @@ final class DisplayControlService {
             volumeUnavailableReason: "内建显示器不支持此控制项",
             contrastUnavailableReason: "内建显示器不支持此控制项"
         )
+    }
+
+    private func cachedOrDiscoverableBuiltInDisplayID() -> CGDirectDisplayID? {
+        if let storedID = defaults.object(forKey: Self.cachedBuiltInDisplayIDKey) as? Int {
+            return CGDirectDisplayID(storedID)
+        }
+
+        // A display disabled through a session configuration is absent from the
+        // online list, but CoreGraphics still retains its identity for the session.
+        if let displayID = Self.firstBuiltInDisplayID(
+            in: (1...64).map(CGDirectDisplayID.init),
+            isBuiltIn: { CGDisplayIsBuiltin($0) == 1 }
+        ) {
+            defaults.set(Int(displayID), forKey: Self.cachedBuiltInDisplayIDKey)
+            AppLogger.ui.info("Recovered isolated built-in display identity: \(displayID)")
+            return displayID
+        }
+        return nil
+    }
+
+    nonisolated static func firstBuiltInDisplayID(
+        in candidates: [CGDirectDisplayID],
+        isBuiltIn: (CGDirectDisplayID) -> Bool
+    ) -> CGDirectDisplayID? {
+        candidates.first(where: isBuiltIn)
     }
 
     private func displayName(for id: CGDirectDisplayID, isBuiltIn: Bool) -> String {

@@ -229,17 +229,75 @@ nonisolated struct MonitorModule: Identifiable, Sendable {
     }
 
     nonisolated static func placeholder(kind: MonitorKind) -> MonitorModule {
-        MonitorModule(
-            kind: kind,
-            context: nil,
-            value: 0,
-            summary: "--",
-            metrics: [
+        let metrics: [MonitorMetric]
+        let summary: String
+        let pressure: MemoryPressureLevel?
+
+        switch kind {
+        case .cpu:
+            summary = "0%"
+            metrics = [
+                MonitorMetric(name: "system", value: "0%"),
+                MonitorMetric(name: "user", value: "0%"),
+                MonitorMetric(name: "idle", value: "100%"),
+                MonitorMetric(name: "temperature", value: "--")
+            ]
+            pressure = nil
+        case .gpu:
+            summary = "0%"
+            metrics = [
+                MonitorMetric(name: "gpu-memory", value: "0 B"),
+                MonitorMetric(name: "allocated", value: "0 B"),
+                MonitorMetric(name: "render", value: "0%"),
+                MonitorMetric(name: "temperature", value: "--"),
+                MonitorMetric(name: "tiler", value: "0%")
+            ]
+            pressure = nil
+        case .memory:
+            summary = "0%"
+            metrics = [
+                MonitorMetric(name: "used", value: "0 B"),
+                MonitorMetric(name: "pressure", value: "normal"),
+                MonitorMetric(name: "compressed", value: "0 B"),
+                MonitorMetric(name: "app-memory", value: "0 B"),
+                MonitorMetric(name: "cached", value: "0 B"),
+                MonitorMetric(
+                    name: "total",
+                    value: memoryBytes(Double(ProcessInfo.processInfo.physicalMemory))
+                )
+            ]
+            pressure = .normal
+        case .battery:
+            summary = "0%"
+            metrics = [
+                MonitorMetric(name: "type", value: "battery"),
+                MonitorMetric(name: "status", value: "unknown"),
+                MonitorMetric(name: "adapter", value: "not-connected"),
+                MonitorMetric(name: "charging-power", value: "0.0 W"),
+                MonitorMetric(name: "power", value: "0.0 W"),
+                MonitorMetric(name: "health", value: "0%"),
+                MonitorMetric(name: "cycle-count", value: "0"),
+                MonitorMetric(name: "temperature", value: "--")
+            ]
+            pressure = nil
+        case .storage, .network, .codex:
+            summary = "--"
+            metrics = [
                 MonitorMetric(name: "current", value: "--"),
                 MonitorMetric(name: "average", value: "--"),
                 MonitorMetric(name: "peak", value: "--")
-            ],
-            samples: Array(repeating: 0, count: 28)
+            ]
+            pressure = nil
+        }
+
+        return MonitorModule(
+            kind: kind,
+            context: nil,
+            value: 0,
+            summary: summary,
+            metrics: metrics,
+            samples: Array(repeating: 0, count: 28),
+            pressure: pressure
         )
     }
 }

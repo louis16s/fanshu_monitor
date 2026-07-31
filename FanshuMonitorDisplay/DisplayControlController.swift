@@ -94,6 +94,9 @@ final class DisplayControlController: ObservableObject {
                     mergedDisplays.insert(cachedBuiltInDisplay, at: 0)
                     self.cachedBuiltInDisplay = cachedBuiltInDisplay
                     self.builtInBlackoutDisplayIDs.insert(cachedBuiltInDisplay.id)
+                    AppLogger.ui.info(
+                        "Merged isolated built-in display row with ID \(cachedBuiltInDisplay.id)"
+                    )
                 }
                 self.displays = mergedDisplays
                 for display in mergedDisplays {

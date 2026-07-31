@@ -10,18 +10,40 @@ nonisolated final class GPUSampler: MonitorSampler {
     func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
         guard let reading = gpuReading() else {
             AppLogger.sampler.error("gpuReading() returned nil, GPU data unavailable")
-            return placeholderModule(.gpu, summary: "无法读取")
+            return previous ?? MonitorModule.placeholder(kind: .gpu)
         }
 
         let utilization = min(100, max(0, reading.utilization))
         var metrics = [
-            MonitorMetric(name: "gpu-memory", value: reading.usedMemory.map(bytes) ?? "--"),
-            MonitorMetric(name: "allocated", value: reading.allocatedMemory.map(bytes) ?? "--")
+            MonitorMetric(
+                name: "gpu-memory",
+                value: retainedMetric(
+                    "gpu-memory",
+                    freshValue: reading.usedMemory.map(bytes),
+                    previous: previous,
+                    initialValue: "0 B"
+                )
+            ),
+            MonitorMetric(
+                name: "allocated",
+                value: retainedMetric(
+                    "allocated",
+                    freshValue: reading.allocatedMemory.map(bytes),
+                    previous: previous,
+                    initialValue: "0 B"
+                )
+            )
         ]
 
-        if let renderUtilization = reading.renderUtilization {
-            metrics.append(MonitorMetric(name: "render", value: percent(renderUtilization)))
-        }
+        metrics.append(MonitorMetric(
+            name: "render",
+            value: retainedMetric(
+                "render",
+                freshValue: reading.renderUtilization.map(percent),
+                previous: previous,
+                initialValue: "0%"
+            )
+        ))
 
         if context.includes("temperature") {
             let temperature = context.shouldCollectExpensiveMetric("temperature")
@@ -30,8 +52,16 @@ nonisolated final class GPUSampler: MonitorSampler {
             metrics.append(MonitorMetric(name: "temperature", value: temperature ?? "--"))
         }
 
-        if let tilerUtilization = reading.tilerUtilization {
-            metrics.append(MonitorMetric(name: "tiler", value: percent(tilerUtilization)))
+        if context.includes("tiler") {
+            metrics.append(MonitorMetric(
+                name: "tiler",
+                value: retainedMetric(
+                    "tiler",
+                    freshValue: reading.tilerUtilization.map(percent),
+                    previous: previous,
+                    initialValue: "0%"
+                )
+            ))
         }
 
         return MonitorModule(
@@ -105,6 +135,17 @@ nonisolated final class GPUSampler: MonitorSampler {
 
     private func gpuTemperatureText() -> String? {
         smcReader?.gpuTemperature().map { "\(String(format: "%.0f", $0))°C" }
+    }
+
+    private func retainedMetric(
+        _ name: String,
+        freshValue: String?,
+        previous: MonitorModule?,
+        initialValue: String
+    ) -> String {
+        freshValue
+            ?? previous?.metrics.first { $0.name == name }?.value
+            ?? initialValue
     }
 }
 

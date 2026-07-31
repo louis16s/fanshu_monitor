@@ -18,7 +18,7 @@ nonisolated final class MemorySampler: MonitorSampler {
 
         guard result == KERN_SUCCESS else {
             AppLogger.sampler.error("host_statistics64 failed with result: \(result)")
-            return placeholderModule(.memory, summary: "无法读取")
+            return previous ?? MonitorModule.placeholder(kind: .memory)
         }
 
         let pageSize = Double(vm_kernel_page_size)
@@ -35,6 +35,9 @@ nonisolated final class MemorySampler: MonitorSampler {
         let percentage = total > 0 ? (used / total) * 100 : 0
         let pressure = memoryPressure()
         let appMemory = currentResidentMemory()
+        let previousMetric: (String) -> String? = { name in
+            previous?.metrics.first { $0.name == name }?.value
+        }
 
         return MonitorModule(
             kind: .memory,
@@ -42,9 +45,17 @@ nonisolated final class MemorySampler: MonitorSampler {
             summary: percent(percentage),
             metrics: [
                 MonitorMetric(name: "used", value: memoryBytes(used)),
-                MonitorMetric(name: "pressure", value: pressure.title),
+                MonitorMetric(
+                    name: "pressure",
+                    value: pressure == .unknown
+                        ? previousMetric("pressure") ?? MemoryPressureState.normal.title
+                        : pressure.title
+                ),
                 MonitorMetric(name: "compressed", value: memoryBytes(compressed)),
-                MonitorMetric(name: "app-memory", value: appMemory.map(memoryBytes) ?? "--"),
+                MonitorMetric(
+                    name: "app-memory",
+                    value: appMemory.map(memoryBytes) ?? previousMetric("app-memory") ?? "0 B"
+                ),
                 MonitorMetric(name: "cached", value: memoryBytes(cached)),
                 MonitorMetric(name: "total", value: memoryBytes(total))
             ],
@@ -102,7 +113,7 @@ nonisolated final class MemorySampler: MonitorSampler {
     }
 }
 
-nonisolated private enum MemoryPressureState {
+nonisolated private enum MemoryPressureState: Equatable {
     case normal
     case warning
     case critical

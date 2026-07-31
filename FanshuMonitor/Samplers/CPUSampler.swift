@@ -38,16 +38,10 @@ nonisolated final class CPUSampler: MonitorSampler {
             }
             metrics = currentMetrics
         } else {
-            total = 0
-            var currentMetrics = [
-                MonitorMetric(name: "system", value: "--"),
-                MonitorMetric(name: "user", value: "--"),
-                MonitorMetric(name: "idle", value: "--")
-            ]
-            if context.includes("temperature") {
-                currentMetrics.append(MonitorMetric(name: "temperature", value: temperature))
+            if let info {
+                self.previousCPUInfo = info
             }
-            metrics = currentMetrics
+            return previous ?? MonitorModule.placeholder(kind: .cpu)
         }
 
         if let info {
