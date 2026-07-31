@@ -96,9 +96,36 @@ struct FanshuMonitorTests {
 
     @Test func monitorRefreshScheduleTickInterval() {
         let schedule = MonitorRefreshSchedule()
-        #expect(schedule.tickInterval == 1.0)
-        #expect(schedule.timerInterval(panelVisible: true) == 1.0)
+        #expect(schedule.tickInterval == 0.8)
+        #expect(schedule.timerInterval(panelVisible: true) == 0.8)
         #expect(schedule.timerInterval(panelVisible: false) == 5.0)
+    }
+
+    @Test func visiblePanelUsesFastModuleSpecificRefreshIntervals() {
+        let schedule = MonitorRefreshSchedule()
+        let start = Date(timeIntervalSinceReferenceDate: 1_000)
+        let kinds: Set<MonitorKind> = [.cpu, .gpu, .memory, .network, .battery]
+
+        #expect(Set(schedule.dueKinds(
+            at: start,
+            visibleKinds: kinds,
+            panelVisible: true
+        )) == kinds)
+        #expect(Set(schedule.dueKinds(
+            at: start.addingTimeInterval(0.79),
+            visibleKinds: kinds,
+            panelVisible: true
+        )).isEmpty)
+        #expect(Set(schedule.dueKinds(
+            at: start.addingTimeInterval(0.81),
+            visibleKinds: kinds,
+            panelVisible: true
+        )) == [.cpu, .gpu, .memory, .network])
+        #expect(Set(schedule.dueKinds(
+            at: start.addingTimeInterval(2),
+            visibleKinds: kinds,
+            panelVisible: true
+        )) == kinds)
     }
 
     @Test func expensiveMetricsRequireSelectionAndAVisiblePanel() {
@@ -373,18 +400,25 @@ struct FanshuMonitorTests {
         #expect(monotonicCounterDelta(current: 100, previous: 9_000) == 0)
     }
 
-    @Test func networkSamplerSleepsWithThePanelUnlessItDrivesTheMenuBarRing() {
-        let visibleKinds: Set<MonitorKind> = [.cpu, .network]
+    @Test func hiddenPanelOnlyKeepsMenuBarRingDependenciesActive() {
+        let visibleKinds: Set<MonitorKind> = [
+            .cpu, .gpu, .memory, .storage, .network, .battery, .codex
+        ]
         #expect(MonitorSamplingPolicy.activeKinds(
             visibleKinds: visibleKinds,
             panelVisible: false,
             ringSource: .combined
-        ) == [.cpu])
+        ) == [.cpu, .gpu, .memory])
         #expect(MonitorSamplingPolicy.activeKinds(
             visibleKinds: visibleKinds,
             panelVisible: false,
             ringSource: .network
-        ) == visibleKinds)
+        ) == [.network])
+        #expect(MonitorSamplingPolicy.activeKinds(
+            visibleKinds: visibleKinds,
+            panelVisible: false,
+            ringSource: .codexWeekly
+        ) == [.codex])
         #expect(MonitorSamplingPolicy.activeKinds(
             visibleKinds: visibleKinds,
             panelVisible: true,

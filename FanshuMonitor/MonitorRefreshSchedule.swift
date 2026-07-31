@@ -6,10 +6,30 @@ nonisolated enum MonitorSamplingPolicy {
         panelVisible: Bool,
         ringSource: HaloRingSource
     ) -> Set<MonitorKind> {
-        guard !panelVisible, ringSource != .network else {
+        guard !panelVisible else {
             return visibleKinds
         }
-        return visibleKinds.subtracting([.network])
+
+        let ringKinds: Set<MonitorKind>
+        switch ringSource {
+        case .combined:
+            ringKinds = [.cpu, .gpu, .memory]
+        case .cpu:
+            ringKinds = [.cpu]
+        case .gpu:
+            ringKinds = [.gpu]
+        case .memory:
+            ringKinds = [.memory]
+        case .storage:
+            ringKinds = [.storage]
+        case .network:
+            ringKinds = [.network]
+        case .battery:
+            ringKinds = [.battery]
+        case .codex, .codexWeekly:
+            ringKinds = [.codex]
+        }
+        return visibleKinds.intersection(ringKinds)
     }
 }
 
@@ -20,10 +40,10 @@ final class MonitorRefreshSchedule {
     private var lastRefreshDates: [MonitorKind: Date] = [:]
 
     init(
-        tickInterval: TimeInterval = 1,
+        tickInterval: TimeInterval = 0.8,
         intervals: [MonitorKind: TimeInterval] = [
-            .cpu: 1, .gpu: 2, .memory: 3,
-            .storage: 10, .network: 1, .battery: 5, .codex: 5
+            .cpu: 0.8, .gpu: 0.8, .memory: 0.8,
+            .storage: 10, .network: 0.8, .battery: 2, .codex: 5
         ]
     ) {
         self.tickInterval = tickInterval
