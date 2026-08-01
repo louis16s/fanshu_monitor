@@ -69,7 +69,7 @@ struct FanshuMonitorTests {
         #expect(memory.summary == "0%")
         #expect(memory.metrics.map(\.name) == ["used", "pressure", "compressed", "app-memory", "cached", "total"])
         #expect(power.summary == "0%")
-        #expect(power.metrics.first { $0.name == "power" }?.value == "0.0 W")
+        #expect(power.metrics.first { $0.name == "power" }?.value == "--")
     }
 
     @Test func displayIdentityRecoverySelectsOnlyABuiltInCandidate() {
@@ -416,6 +416,29 @@ struct FanshuMonitorTests {
             systemPowerInMilliwatts: 0,
             batteryPowerMilliwatts: -7_300
         ) == 7.3)
+    }
+
+    @Test func batteryPowerKeepsTheLastKnownGoodValueDuringTransientFailures() {
+        #expect(BatterySampler.stableSystemPowerWatts(
+            fresh: 10.374,
+            cached: 8.2,
+            previousMetric: "7.1 W"
+        ) == 10.374)
+        #expect(BatterySampler.stableSystemPowerWatts(
+            fresh: nil,
+            cached: 8.2,
+            previousMetric: "7.1 W"
+        ) == 8.2)
+        #expect(BatterySampler.stableSystemPowerWatts(
+            fresh: 0,
+            cached: nil,
+            previousMetric: "7.1 W"
+        ) == 7.1)
+        #expect(BatterySampler.stableSystemPowerWatts(
+            fresh: .nan,
+            cached: 0,
+            previousMetric: "0.0 W"
+        ) == nil)
     }
 
     @Test func networkCounterResetDoesNotCreateAnOverflowSpike() {

@@ -273,10 +273,10 @@ nonisolated struct MonitorModule: Identifiable, Sendable {
                 MonitorMetric(name: "type", value: "battery"),
                 MonitorMetric(name: "status", value: "unknown"),
                 MonitorMetric(name: "adapter", value: "not-connected"),
-                MonitorMetric(name: "charging-power", value: "0.0 W"),
-                MonitorMetric(name: "power", value: "0.0 W"),
-                MonitorMetric(name: "health", value: "0%"),
-                MonitorMetric(name: "cycle-count", value: "0"),
+                MonitorMetric(name: "charging-power", value: "--"),
+                MonitorMetric(name: "power", value: "--"),
+                MonitorMetric(name: "health", value: "--"),
+                MonitorMetric(name: "cycle-count", value: "--"),
                 MonitorMetric(name: "temperature", value: "--")
             ]
             pressure = nil

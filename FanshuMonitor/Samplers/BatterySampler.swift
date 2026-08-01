@@ -8,7 +8,8 @@ nonisolated final class BatterySampler: MonitorSampler {
     var kind: MonitorKind { .battery }
 
     private var powerTelemetryService: io_service_t = IO_OBJECT_NULL
-    private var didSearchPowerTelemetryService = false
+    private var lastKnownSystemPowerWatts: Double?
+    private var didReportPowerSourceFailure = false
     private var cachedSmartBatteryInfo: (value: SmartBatteryInfo, refreshedAt: Date)?
     private let smartBatteryRefreshInterval: TimeInterval = 5
 
@@ -23,9 +24,13 @@ nonisolated final class BatterySampler: MonitorSampler {
               let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef],
               let source = sources.first,
               let description = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any] else {
-            AppLogger.sampler.error("BatterySampler failed to read power source info")
+            if !didReportPowerSourceFailure {
+                AppLogger.sampler.error("BatterySampler failed to read power source info")
+                didReportPowerSourceFailure = true
+            }
             return previous ?? MonitorModule.placeholder(kind: .battery)
         }
+        didReportPowerSourceFailure = false
 
         let current = doubleValue(description[kIOPSCurrentCapacityKey]) ?? 0
         let maxCapacity = doubleValue(description[kIOPSMaxCapacityKey]) ?? 100
@@ -38,9 +43,12 @@ nonisolated final class BatterySampler: MonitorSampler {
         let smart = shouldCollectTelemetry ? smartBatteryInfo(at: Date()) : nil
         let adapterWatts = smart?.adapterWatts ?? (shouldCollectTelemetry ? externalAdapterWatts() : nil)
         let chargingPower = connected
-            ? smart?.chargingPowerWatts
+            ? (isCharging ? smart?.chargingPowerWatts : 0)
             : nil
-        let systemPower = smart?.systemPowerWatts ?? (shouldCollectTelemetry ? powerTelemetryWatts() : nil)
+        let systemPower = stableSystemPowerWatts(
+            fresh: shouldCollectTelemetry ? powerTelemetryWatts() : nil,
+            previous: previous
+        )
 
         return MonitorModule(
             kind: .battery,
@@ -119,6 +127,45 @@ nonisolated final class BatterySampler: MonitorSampler {
         return wattString(watts, rounded: true)
     }
 
+    private func stableSystemPowerWatts(
+        fresh: Double?,
+        previous: MonitorModule?
+    ) -> Double? {
+        let previousMetric = previous?.metrics.first { $0.name == "power" }?.value
+        let stableValue = Self.stableSystemPowerWatts(
+            fresh: fresh,
+            cached: lastKnownSystemPowerWatts,
+            previousMetric: previousMetric
+        )
+        lastKnownSystemPowerWatts = stableValue
+        return stableValue
+    }
+
+    static func stableSystemPowerWatts(
+        fresh: Double?,
+        cached: Double?,
+        previousMetric: String?
+    ) -> Double? {
+        validSystemPowerWatts(fresh)
+            ?? validSystemPowerWatts(cached)
+            ?? systemPowerWatts(from: previousMetric)
+    }
+
+    private static func validSystemPowerWatts(_ value: Double?) -> Double? {
+        guard let value, value.isFinite, value >= 0.05 else {
+            return nil
+        }
+        return value
+    }
+
+    private static func systemPowerWatts(from metric: String?) -> Double? {
+        guard let metric,
+              let value = Double(metric.split(separator: " ").first ?? "") else {
+            return nil
+        }
+        return validSystemPowerWatts(value)
+    }
+
     private func smartBatteryInfo(at date: Date) -> SmartBatteryInfo {
         if let cachedSmartBatteryInfo,
            date.timeIntervalSince(cachedSmartBatteryInfo.refreshedAt) < smartBatteryRefreshInterval {
@@ -142,7 +189,6 @@ nonisolated final class BatterySampler: MonitorSampler {
         let maxCapacity = doubleRegistryValue(service, "AppleRawMaxCapacity")
             ?? doubleRegistryValue(service, "MaxCapacity")
         let adapterWatts = adapterWatts(service)
-        let systemPowerWatts = systemPowerWatts(service)
         let chargingPowerWatts = chargingPowerWatts(service)
         let temperature = doubleRegistryValue(service, "Temperature").map { $0 / 100 }
         let health = if let maxCapacity, let designCapacity, designCapacity > 0 {
@@ -154,7 +200,6 @@ nonisolated final class BatterySampler: MonitorSampler {
             cycleCount: cycleCount,
             healthPercent: health,
             adapterWatts: adapterWatts,
-            systemPowerWatts: systemPowerWatts,
             chargingPowerWatts: chargingPowerWatts,
             temperatureCelsius: temperature
         )
@@ -199,14 +244,23 @@ nonisolated final class BatterySampler: MonitorSampler {
     }
 
     private func powerTelemetryWatts() -> Double? {
-        if powerTelemetryService == IO_OBJECT_NULL, !didSearchPowerTelemetryService {
-            powerTelemetryService = serviceWithProperty("PowerTelemetryData")
-            didSearchPowerTelemetryService = true
+        for _ in 0..<2 {
+            if powerTelemetryService == IO_OBJECT_NULL {
+                powerTelemetryService = IOServiceGetMatchingService(
+                    kIOMainPortDefault,
+                    IOServiceMatching("AppleSmartBattery")
+                )
+            }
+            guard powerTelemetryService != IO_OBJECT_NULL else {
+                return nil
+            }
+            if let watts = Self.validSystemPowerWatts(systemPowerWatts(powerTelemetryService)) {
+                return watts
+            }
+            IOObjectRelease(powerTelemetryService)
+            powerTelemetryService = IO_OBJECT_NULL
         }
-        guard powerTelemetryService != IO_OBJECT_NULL else {
-            return nil
-        }
-        return systemPowerWatts(powerTelemetryService)
+        return nil
     }
 
     private func systemPowerWatts(_ service: io_service_t) -> Double? {
@@ -249,28 +303,6 @@ nonisolated final class BatterySampler: MonitorSampler {
         return nil
     }
 
-    private func serviceWithProperty(_ key: String) -> io_service_t {
-        var iterator: io_iterator_t = 0
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOService"), &iterator) == KERN_SUCCESS else {
-            return IO_OBJECT_NULL
-        }
-        defer { IOObjectRelease(iterator) }
-
-        while true {
-            let service = IOIteratorNext(iterator)
-            guard service != IO_OBJECT_NULL else {
-                return IO_OBJECT_NULL
-            }
-
-            if let value = IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0) {
-                value.release()
-                return service
-            }
-
-            IOObjectRelease(service)
-        }
-    }
-
     private func intRegistryValue(_ service: io_service_t, _ key: String) -> Int? {
         guard let value = IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() else {
             return nil
@@ -290,7 +322,6 @@ nonisolated private struct SmartBatteryInfo {
     var cycleCount: Int?
     var healthPercent: Double?
     var adapterWatts: Double?
-    var systemPowerWatts: Double?
     var chargingPowerWatts: Double?
     var temperatureCelsius: Double?
 }
