@@ -292,6 +292,28 @@ final class DisplayControlService {
         for (displayID, brightness) in brightnessByDisplayID {
             _ = displayServices.setBrightness(displayID: displayID, value: brightness)
         }
+
+        guard let cachedDisplayID = cachedBuiltInDisplayID() else { return }
+        if CGDisplayIsOnline(cachedDisplayID) != 1 {
+            let restored = builtInBlackout.setEnabled(
+                false,
+                displayID: cachedDisplayID,
+                mirrorTargetID: nil,
+                previousBrightness: nil
+            )
+            if restored {
+                AppLogger.ui.notice("Restored cached built-in display ID \(cachedDisplayID)")
+            } else {
+                AppLogger.ui.error("Failed to restore cached built-in display ID \(cachedDisplayID)")
+            }
+        }
+
+        if let cachedBrightness = defaults.object(forKey: Self.cachedBuiltInBrightnessKey) as? Double {
+            _ = displayServices.setBrightness(
+                displayID: cachedDisplayID,
+                value: Float(cachedBrightness)
+            )
+        }
     }
 
     func isolatedBuiltInPlaceholder() -> ControlledDisplay? {
@@ -317,8 +339,8 @@ final class DisplayControlService {
     }
 
     private func cachedOrDiscoverableBuiltInDisplayID() -> CGDirectDisplayID? {
-        if let storedID = defaults.object(forKey: Self.cachedBuiltInDisplayIDKey) as? Int {
-            return CGDirectDisplayID(storedID)
+        if let cachedDisplayID = cachedBuiltInDisplayID() {
+            return cachedDisplayID
         }
 
         // A display disabled through a session configuration is absent from the
@@ -332,6 +354,13 @@ final class DisplayControlService {
             return displayID
         }
         return nil
+    }
+
+    private func cachedBuiltInDisplayID() -> CGDirectDisplayID? {
+        guard let storedID = defaults.object(forKey: Self.cachedBuiltInDisplayIDKey) as? Int else {
+            return nil
+        }
+        return CGDirectDisplayID(storedID)
     }
 
     nonisolated static func firstBuiltInDisplayID(

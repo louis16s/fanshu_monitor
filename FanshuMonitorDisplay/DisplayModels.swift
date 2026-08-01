@@ -128,6 +128,17 @@ nonisolated enum DisplayNativeBrightnessSyncPolicy {
     }
 }
 
+nonisolated enum BuiltInDisplayRestorePolicy {
+    static func shouldRestore(
+        externalDisplayCount: Int,
+        blackoutDesired: Bool,
+        isolatedDisplayCount: Int
+    ) -> Bool {
+        externalDisplayCount == 0
+            && (blackoutDesired || isolatedDisplayCount > 0)
+    }
+}
+
 struct RecentDisplayValue {
     let value: Double
     let date: Date

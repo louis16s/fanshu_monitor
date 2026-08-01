@@ -234,6 +234,34 @@ struct DisplayValueChangePolicyTests {
     }
 }
 
+struct BuiltInDisplayRestorePolicyTests {
+    @Test func restoresWhenTheLastExternalDisplayDisconnects() {
+        #expect(BuiltInDisplayRestorePolicy.shouldRestore(
+            externalDisplayCount: 0,
+            blackoutDesired: true,
+            isolatedDisplayCount: 1
+        ))
+        #expect(BuiltInDisplayRestorePolicy.shouldRestore(
+            externalDisplayCount: 0,
+            blackoutDesired: false,
+            isolatedDisplayCount: 1
+        ))
+    }
+
+    @Test func leavesTheTopologyAloneWhenAnExternalDisplayRemains() {
+        #expect(!BuiltInDisplayRestorePolicy.shouldRestore(
+            externalDisplayCount: 1,
+            blackoutDesired: true,
+            isolatedDisplayCount: 1
+        ))
+        #expect(!BuiltInDisplayRestorePolicy.shouldRestore(
+            externalDisplayCount: 0,
+            blackoutDesired: false,
+            isolatedDisplayCount: 0
+        ))
+    }
+}
+
 struct DisplayControlWorkerTests {
     private let key = ControlKey(displayID: 1, control: .brightness)
 

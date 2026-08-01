@@ -113,9 +113,11 @@ struct GeneralSettingsView: View {
         }
         .onAppear {
             refreshPermissionState()
+            settings.refreshLaunchAtLoginStatus()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshPermissionState()
+            settings.refreshLaunchAtLoginStatus()
         }
         .confirmationDialog(
             "重置所有设置",

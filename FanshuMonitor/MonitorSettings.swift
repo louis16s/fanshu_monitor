@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import OSLog
 import ServiceManagement
 import SwiftUI
 
@@ -187,9 +188,13 @@ final class MonitorSettings: ObservableObject {
         }
         enabledMetrics = loadedMetrics
 
+        let launchAtLoginDesired = defaults.object(forKey: Keys.launchAtLoginDesired) as? Bool
         launchAtLogin = SMAppService.mainApp.status == .enabled
 
         setupBindings()
+        if launchAtLoginDesired == true, !launchAtLogin {
+            updateLaunchAtLogin(true)
+        }
     }
 
     func isVisible(_ kind: MonitorKind) -> Bool {
@@ -202,6 +207,14 @@ final class MonitorSettings: ObservableObject {
         } else {
             visibleKinds.remove(kind)
         }
+    }
+
+    func refreshLaunchAtLoginStatus() {
+        let isEnabled = SMAppService.mainApp.status == .enabled
+        guard launchAtLogin != isEnabled else { return }
+        isUpdatingLaunchAtLogin = true
+        launchAtLogin = isEnabled
+        isUpdatingLaunchAtLogin = false
     }
 
     func isMetricEnabled(_ id: String, for kind: MonitorKind) -> Bool {
@@ -605,6 +618,7 @@ final class MonitorSettings: ObservableObject {
     }
 
     private func updateLaunchAtLogin(_ newValue: Bool) {
+        defaults.set(newValue, forKey: Keys.launchAtLoginDesired)
         do {
             if newValue {
                 if SMAppService.mainApp.status != .enabled {
@@ -613,10 +627,15 @@ final class MonitorSettings: ObservableObject {
             } else if SMAppService.mainApp.status == .enabled {
                 try SMAppService.mainApp.unregister()
             }
+            refreshLaunchAtLoginStatus()
         } catch {
+            AppLogger.settings.error(
+                "Unable to update launch-at-login status: \(error.localizedDescription, privacy: .public)"
+            )
             isUpdatingLaunchAtLogin = true
-            launchAtLogin.toggle()
+            launchAtLogin = SMAppService.mainApp.status == .enabled
             isUpdatingLaunchAtLogin = false
+            defaults.set(launchAtLogin, forKey: Keys.launchAtLoginDesired)
         }
     }
 
@@ -652,6 +671,7 @@ final class MonitorSettings: ObservableObject {
 }
 
 private enum Keys {
+    static let launchAtLoginDesired = "settings.launchAtLoginDesired"
     static let themePreference = "settings.themePreference"
     static let languagePreference = "settings.languagePreference"
     static let colorSchemePreference = "settings.colorSchemePreference"

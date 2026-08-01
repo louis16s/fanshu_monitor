@@ -730,9 +730,13 @@ final class DisplayControlController: ObservableObject {
 
     private func syncBuiltInBlackouts() {
         let externalDisplays = displays.filter { !$0.isBuiltIn }
-        guard !externalDisplays.isEmpty else {
-            guard isBuiltInBlackoutDesired || !builtInBlackoutDisplayIDs.isEmpty else { return }
+        guard !BuiltInDisplayRestorePolicy.shouldRestore(
+            externalDisplayCount: externalDisplays.count,
+            blackoutDesired: isBuiltInBlackoutDesired,
+            isolatedDisplayCount: builtInBlackoutDisplayIDs.count
+        ) else {
             guard !builtInTopologyOperationPending else { return }
+            AppLogger.ui.notice("No external display remains; restoring the built-in display")
             builtInTopologyOperationPending = true
             builtInBlackoutDisplayIDs.removeAll()
             isBuiltInBlackoutDesired = false
