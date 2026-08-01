@@ -470,6 +470,26 @@ struct FanshuMonitorTests {
         )))
     }
 
+    @Test func standardMouseButtonsDoNotDependOnHIDPPDetection() {
+        #expect(MouseInputListenerPolicy.shouldRunEventTap(mouseControlEnabled: true))
+        #expect(!MouseInputListenerPolicy.shouldRunEventTap(mouseControlEnabled: false))
+        #expect(!MouseInputListenerPolicy.shouldRunHIDPPGesture(
+            mouseControlEnabled: true,
+            devicePresent: false,
+            action: .commandTab
+        ))
+        #expect(MouseInputListenerPolicy.shouldRunHIDPPGesture(
+            mouseControlEnabled: true,
+            devicePresent: true,
+            action: .commandTab
+        ))
+        #expect(!MouseInputListenerPolicy.shouldRunHIDPPGesture(
+            mouseControlEnabled: true,
+            devicePresent: true,
+            action: .passThrough
+        ))
+    }
+
     @Test func codexTransportTimeoutUsesResponsiveError() {
         #expect(CodexUsageClient.requestTimeout == 12)
         #expect(CodexUsageClient.mapTransportError(URLError(.timedOut)) == .networkTimedOut)

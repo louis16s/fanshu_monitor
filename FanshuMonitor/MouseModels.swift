@@ -77,3 +77,17 @@ struct LogitechMouseDevice: Identifiable, Equatable {
         return productName.isEmpty ? "Logitech 鼠标" : productName
     }
 }
+
+enum MouseInputListenerPolicy {
+    static func shouldRunEventTap(mouseControlEnabled: Bool) -> Bool {
+        mouseControlEnabled
+    }
+
+    static func shouldRunHIDPPGesture(
+        mouseControlEnabled: Bool,
+        devicePresent: Bool,
+        action: MouseButtonAction
+    ) -> Bool {
+        mouseControlEnabled && devicePresent && action != .passThrough
+    }
+}

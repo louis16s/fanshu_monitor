@@ -1,5 +1,6 @@
 import Foundation
 import IOKit.hid
+import OSLog
 
 nonisolated struct LogitechMouseDescriptor: Equatable, Sendable {
     let productID: Int
@@ -87,6 +88,7 @@ final class LogitechMousePresenceMonitor: @unchecked Sendable {
             handler(false)
             return
         }
+        IOHIDManagerActivate(manager)
         enqueuePresenceRefresh(force: false)
     }
 
@@ -110,6 +112,7 @@ final class LogitechMousePresenceMonitor: @unchecked Sendable {
         }
         guard let manager else { return }
         _ = queue.sync {
+            IOHIDManagerCancel(manager)
             IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         }
     }
@@ -127,6 +130,7 @@ final class LogitechMousePresenceMonitor: @unchecked Sendable {
             return true
         }
         guard shouldNotify else { return }
+        AppLogger.mouse.info("Logitech mouse presence changed: \(isPresent, privacy: .public)")
         handler(isPresent)
     }
 
