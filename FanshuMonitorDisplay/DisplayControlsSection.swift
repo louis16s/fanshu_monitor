@@ -24,11 +24,12 @@ struct DisplayControlsSection: View {
         let hasControls = settings.displayBrightnessControlEnabled
             || settings.displayVolumeControlEnabled
             || settings.displayContrastControlEnabled
+        let hasContent = hasControls || settings.displayCapabilitiesEnabled
 
         VStack(spacing: 0) {
             PanelModuleHeader(
                 title: "Display:",
-                value: summary(for: visibleDisplays, hasControls: hasControls),
+                value: summary(for: visibleDisplays, hasContent: hasContent),
                 titleColor: palette.primaryText,
                 valueColor: palette.valueText
             ) {
@@ -51,7 +52,7 @@ struct DisplayControlsSection: View {
             if isExpanded {
                 detailContent(
                     visibleDisplays: visibleDisplays,
-                    hasControls: hasControls,
+                    hasContent: hasContent,
                     palette: palette,
                     tint: tint
                 )
@@ -67,12 +68,12 @@ struct DisplayControlsSection: View {
     @ViewBuilder
     private func detailContent(
         visibleDisplays: [ControlledDisplay],
-        hasControls: Bool,
+        hasContent: Bool,
         palette: MonitorPalette,
         tint: Color
     ) -> some View {
-        if !hasControls {
-            DisplayEmptyState(text: "设置中未启用控制项", palette: palette)
+        if !hasContent {
+            DisplayEmptyState(text: "设置中未启用显示内容", palette: palette)
         } else if visibleDisplays.isEmpty {
             DisplayEmptyState(text: settings.showBuiltInDisplays ? "未发现显示器" : "未发现外接显示器", palette: palette)
         } else {
@@ -102,8 +103,8 @@ struct DisplayControlsSection: View {
         }
     }
 
-    private func summary(for displays: [ControlledDisplay], hasControls: Bool) -> String {
-        guard hasControls else {
+    private func summary(for displays: [ControlledDisplay], hasContent: Bool) -> String {
+        guard hasContent else {
             return "Off"
         }
 
@@ -170,7 +171,7 @@ private struct DisplayControlGroup: View {
                         .help(controller.isBuiltInBlackoutEnabled(displayID: display.id) ? "恢复内建显示器" : "关闭内建显示器")
                     }
 
-                    Text(display.isBuiltIn ? "内置" : "外接")
+                    Text(display.capabilities?.connection ?? (display.isBuiltIn ? "内置" : "外接"))
                         .font(.system(size: 9, weight: .semibold, design: .rounded))
                         .foregroundStyle(palette.secondaryText)
                         .lineLimit(1)
@@ -180,6 +181,16 @@ private struct DisplayControlGroup: View {
                             Capsule()
                                 .fill(palette.displayBadgeFill)
                         }
+                }
+
+                if settings.displayCapabilitiesEnabled,
+                   let capabilities = display.capabilities {
+                    Text(capabilities.summary)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(palette.captionText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(capabilities.summary)
                 }
 
                 VStack(spacing: 5) {

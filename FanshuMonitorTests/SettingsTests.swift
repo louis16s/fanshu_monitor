@@ -65,6 +65,19 @@ struct SettingsTests {
         let settings = MonitorSettings(defaults: defaults)
 
         #expect(settings.displayModuleVisible)
+        #expect(settings.displayCapabilitiesEnabled)
+    }
+
+    @Test func displayCapabilitiesPreferencePersists() {
+        let suite = "displayCapabilitiesPreferencePersists"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+
+        settings.displayCapabilitiesEnabled = false
+
+        let reloaded = MonitorSettings(defaults: defaults)
+        #expect(!reloaded.displayCapabilitiesEnabled)
     }
 
     @Test func codexModuleAppearsForExistingVisibleModuleSettings() {

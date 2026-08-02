@@ -26,7 +26,9 @@ final class DisplayControlService {
 
         let displayIDs = Array(ids.prefix(Int(count)))
         AppLogger.ui.info("Detected \(displayIDs.count) online displays")
-        ddc.refresh(displayIDs: displayIDs)
+        if !activeControls.isEmpty {
+            ddc.refresh(displayIDs: displayIDs)
+        }
 
         return displayIDs.map { id in
             let displayKind = displayClassifier.classify(displayID: id)
@@ -38,7 +40,9 @@ final class DisplayControlService {
             if usesDDC, let storedRange = ddcRangeStore.range(displayStorageID: storageID) {
                 ddc.setValueRange(storedRange, for: .brightness, displayID: id)
             }
-            let appleBrightness = usesNativeBrightness ? displayServices.getBrightness(displayID: id) : nil
+            let appleBrightness = usesNativeBrightness && activeControls.contains(.brightness)
+                ? displayServices.getBrightness(displayID: id)
+                : nil
             if isBuiltIn {
                 defaults.set(Int(id), forKey: Self.cachedBuiltInDisplayIDKey)
                 if let appleBrightness {
@@ -91,6 +95,7 @@ final class DisplayControlService {
                 id: id,
                 storageID: storageID,
                 name: name,
+                kind: displayKind,
                 isBuiltIn: isBuiltIn,
                 usesNativeBrightness: usesNativeBrightness,
                 supportsBrightness: supportsBrightness,
@@ -128,7 +133,8 @@ final class DisplayControlService {
                     displayKind: displayKind,
                     hasDDCService: hasDDCService,
                     isTemporarilyDisabled: contrastTemporarilyDisabled
-                )
+                ),
+                capabilities: nil
             )
         }
     }
@@ -324,6 +330,7 @@ final class DisplayControlService {
             id: displayID,
             storageID: "built-in-\(displayID)",
             name: "视网膜显示器",
+            kind: .builtIn,
             isBuiltIn: true,
             usesNativeBrightness: true,
             supportsBrightness: false,
@@ -334,7 +341,8 @@ final class DisplayControlService {
             contrast: DisplayControlKind.contrast.defaultValue,
             brightnessUnavailableReason: "已关闭",
             volumeUnavailableReason: "内建显示器不支持此控制项",
-            contrastUnavailableReason: "内建显示器不支持此控制项"
+            contrastUnavailableReason: "内建显示器不支持此控制项",
+            capabilities: nil
         )
     }
 

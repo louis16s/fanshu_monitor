@@ -184,6 +184,14 @@ struct DisplayModuleSettingsView: View {
             }
 
             SettingsGroup("面板显示") {
+                SettingsRow(title: "显示器能力", subtitle: "显示分辨率、刷新率、动态范围与色彩空间") {
+                    Toggle("", isOn: $settings.displayCapabilitiesEnabled)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+
+                SettingsDivider()
+
                 SettingsRow(title: "显示可用性提示", subtitle: "显示“亮度可用/不可用原因”等诊断文字") {
                     Toggle("", isOn: $settings.displayAvailabilityHintsEnabled)
                         .toggleStyle(.switch)

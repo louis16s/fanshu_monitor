@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-nonisolated enum DisplayKind: Equatable {
+nonisolated enum DisplayKind: Equatable, Sendable {
     case builtIn
     case appleNative
     case externalDDC

@@ -5,6 +5,7 @@ struct ControlledDisplay: Identifiable {
     let id: CGDirectDisplayID
     let storageID: String
     let name: String
+    let kind: DisplayKind
     let isBuiltIn: Bool
     let usesNativeBrightness: Bool
     var supportsBrightness: Bool
@@ -16,6 +17,7 @@ struct ControlledDisplay: Identifiable {
     var brightnessUnavailableReason: String?
     var volumeUnavailableReason: String?
     var contrastUnavailableReason: String?
+    var capabilities: DisplayCapabilities?
 
     func supports(_ control: DisplayControlKind) -> Bool {
         switch control {
@@ -58,6 +60,64 @@ struct ControlledDisplay: Identifiable {
             supportsVolume = isSupported
         case .contrast:
             supportsContrast = isSupported
+        }
+    }
+}
+
+nonisolated struct DisplayCapabilities: Equatable, Sendable {
+    let resolution: String
+    let refreshRate: String
+    let dynamicRange: String
+    let colorSpace: String
+    let connection: String
+
+    var summary: String {
+        [resolution, refreshRate, dynamicRange, colorSpace]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+}
+
+nonisolated enum DisplayCapabilityFormatter {
+    static func resolution(width: Int, height: Int) -> String {
+        guard width > 0, height > 0 else { return "--" }
+        return "\(width)×\(height)"
+    }
+
+    static func refreshRate(
+        current: Double,
+        maximumFramesPerSecond: Int,
+        maximumRefreshInterval: TimeInterval
+    ) -> String {
+        let maximum = maximumFramesPerSecond > 0
+            ? maximumFramesPerSecond
+            : Int(current.rounded())
+        guard maximum > 0 else { return "-- Hz" }
+
+        let minimum = maximumRefreshInterval > 0
+            ? Int((1 / maximumRefreshInterval).rounded())
+            : maximum
+        if minimum >= 24, minimum < maximum {
+            return "\(minimum)–\(maximum) Hz"
+        }
+        return "\(maximum) Hz"
+    }
+
+    static func colorSpace(_ localizedName: String?) -> String {
+        guard let localizedName, !localizedName.isEmpty else { return "--" }
+        if localizedName.localizedCaseInsensitiveContains("display p3") { return "Display P3" }
+        if localizedName.localizedCaseInsensitiveContains("srgb") { return "sRGB" }
+        if localizedName.localizedCaseInsensitiveContains("adobe rgb") { return "Adobe RGB" }
+        return localizedName
+    }
+
+    static func connection(for kind: DisplayKind) -> String {
+        switch kind {
+        case .builtIn: "内置"
+        case .appleNative: "原生"
+        case .externalDDC: "DDC"
+        case .virtual, .dummy: "虚拟"
+        case .unsupported: "外接"
         }
     }
 }

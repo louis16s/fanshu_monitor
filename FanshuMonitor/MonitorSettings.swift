@@ -93,6 +93,7 @@ final class MonitorSettings: ObservableObject {
     @Published var displayVolumeControlEnabled: Bool = true
     @Published var displayContrastControlEnabled: Bool = false
     @Published var displayAvailabilityHintsEnabled: Bool = true
+    @Published var displayCapabilitiesEnabled: Bool = true
     @Published var displayNativeOSDEnabled: Bool = true
     @Published var displaySoftwareDimmingEnabled: Bool = true
     @Published var brightnessKeyStepPercent: Double = 5
@@ -143,6 +144,7 @@ final class MonitorSettings: ObservableObject {
         displayVolumeControlEnabled = defaults.object(forKey: Keys.displayVolumeControlEnabled) as? Bool ?? true
         displayContrastControlEnabled = defaults.object(forKey: Keys.displayContrastControlEnabled) as? Bool ?? false
         displayAvailabilityHintsEnabled = defaults.object(forKey: Keys.displayAvailabilityHintsEnabled) as? Bool ?? true
+        displayCapabilitiesEnabled = defaults.object(forKey: Keys.displayCapabilitiesEnabled) as? Bool ?? true
         displayNativeOSDEnabled = defaults.object(forKey: Keys.displayNativeOSDEnabled) as? Bool ?? true
         displaySoftwareDimmingEnabled = defaults.object(forKey: Keys.displaySoftwareDimmingEnabled) as? Bool ?? true
         brightnessKeyStepPercent = defaults.object(forKey: Keys.brightnessKeyStepPercent) as? Double ?? 5
@@ -501,6 +503,13 @@ final class MonitorSettings: ObservableObject {
             }
             .store(in: &cancellables)
 
+        $displayCapabilitiesEnabled
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(newValue, forKey: Keys.displayCapabilitiesEnabled)
+            }
+            .store(in: &cancellables)
+
         $displayNativeOSDEnabled
             .dropFirst()
             .sink { [weak self] newValue in
@@ -668,6 +677,7 @@ final class MonitorSettings: ObservableObject {
         displayVolumeControlEnabled = true
         displayContrastControlEnabled = false
         displayAvailabilityHintsEnabled = true
+        displayCapabilitiesEnabled = true
         displayNativeOSDEnabled = true
         displaySoftwareDimmingEnabled = true
         brightnessKeyStepPercent = 5
@@ -700,6 +710,7 @@ private enum Keys {
     static let displayVolumeControlEnabled = "settings.display.volumeControlEnabled"
     static let displayContrastControlEnabled = "settings.display.contrastControlEnabled"
     static let displayAvailabilityHintsEnabled = "settings.display.availabilityHintsEnabled"
+    static let displayCapabilitiesEnabled = "settings.display.capabilitiesEnabled"
     static let displayNativeOSDEnabled = "settings.display.nativeOSDEnabled"
     static let displaySoftwareDimmingEnabled = "settings.display.softwareDimmingEnabled"
     static let brightnessKeyStepPercent = "settings.display.brightnessKeyStepPercent"

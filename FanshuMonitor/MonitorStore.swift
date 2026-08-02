@@ -90,6 +90,7 @@ final class MonitorStore: ObservableObject {
             settings.$displayBrightnessControlEnabled.map { _ in () }.eraseToAnyPublisher(),
             settings.$displayVolumeControlEnabled.map { _ in () }.eraseToAnyPublisher(),
             settings.$displayContrastControlEnabled.map { _ in () }.eraseToAnyPublisher(),
+            settings.$displayCapabilitiesEnabled.map { _ in () }.eraseToAnyPublisher(),
             settings.$brightnessKeyInterceptionEnabled.map { _ in () }.eraseToAnyPublisher()
         )
         .dropFirst()
@@ -420,6 +421,7 @@ final class MonitorStore: ObservableObject {
                     settings.displayBrightnessControlEnabled
                     || settings.displayVolumeControlEnabled
                     || settings.displayContrastControlEnabled
+                    || settings.displayCapabilitiesEnabled
                 )
             )
     }

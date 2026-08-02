@@ -234,6 +234,34 @@ struct DisplayValueChangePolicyTests {
     }
 }
 
+struct DisplayCapabilityFormatterTests {
+    @Test func formatsFixedAndVariableRefreshRates() {
+        #expect(DisplayCapabilityFormatter.refreshRate(
+            current: 60,
+            maximumFramesPerSecond: 60,
+            maximumRefreshInterval: 1.0 / 60.0
+        ) == "60 Hz")
+        #expect(DisplayCapabilityFormatter.refreshRate(
+            current: 0,
+            maximumFramesPerSecond: 120,
+            maximumRefreshInterval: 1.0 / 48.0
+        ) == "48–120 Hz")
+    }
+
+    @Test func buildsCompactCapabilitySummary() {
+        let capabilities = DisplayCapabilities(
+            resolution: DisplayCapabilityFormatter.resolution(width: 2560, height: 1440),
+            refreshRate: "144 Hz",
+            dynamicRange: "HDR",
+            colorSpace: DisplayCapabilityFormatter.colorSpace("Display P3"),
+            connection: DisplayCapabilityFormatter.connection(for: .externalDDC)
+        )
+
+        #expect(capabilities.summary == "2560×1440 · 144 Hz · HDR · Display P3")
+        #expect(capabilities.connection == "DDC")
+    }
+}
+
 struct BuiltInDisplayRestorePolicyTests {
     @Test func restoresWhenTheLastExternalDisplayDisconnects() {
         #expect(BuiltInDisplayRestorePolicy.shouldRestore(

@@ -83,7 +83,16 @@ final class DisplayControlController: ObservableObject {
                 if let builtInDisplay = detectedDisplays.first(where: \.isBuiltIn) {
                     self.cachedBuiltInDisplay = builtInDisplay
                 }
-                var mergedDisplays = detectedDisplays.map { self.mergedDisplayValues(for: $0) }
+                var mergedDisplays = detectedDisplays.map { detectedDisplay in
+                    var display = self.mergedDisplayValues(for: detectedDisplay)
+                    if self.settings?.displayCapabilitiesEnabled == true {
+                        display.capabilities = DisplayCapabilityProbe.snapshot(
+                            displayID: display.id,
+                            kind: display.kind
+                        )
+                    }
+                    return display
+                }
                 if self.isBuiltInBlackoutDesired,
                    !mergedDisplays.contains(where: \.isBuiltIn),
                    var cachedBuiltInDisplay = self.cachedBuiltInDisplay
