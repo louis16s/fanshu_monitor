@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import AppKit
+import IOKit.ps
 import OSLog
 
 struct LockScreenAttemptTiming: Sendable {
@@ -113,6 +114,7 @@ final class LockScreenPolicyController: ObservableObject {
     private var lockAttemptTask: Task<Void, Never>?
     private var recoveryTask: Task<Void, Never>?
     private var environmentMaintenanceTimer: Timer?
+    private var powerSourceRunLoopSource: CFRunLoopSource?
     private var lastAppliedConfiguration: AppliedConfiguration?
     private var baselineIsRestored = false
     private var didRequestLockForCurrentIdlePeriod = false
@@ -120,6 +122,7 @@ final class LockScreenPolicyController: ObservableObject {
     private let requestNativeLock: @MainActor @Sendable () -> Bool
     private let requestKeyboardLock: @MainActor @Sendable () -> Bool
     private let screenLockedProvider: @MainActor @Sendable () -> Bool
+    private let powerSourceProvider: @MainActor @Sendable () -> SystemPowerSourceState
     private let attemptTiming: LockScreenAttemptTiming
     private let recoveryDelay: Duration
     private let environment: LockScreenSystemEnvironment
@@ -135,6 +138,7 @@ final class LockScreenPolicyController: ObservableObject {
         requestNativeLock: @escaping @MainActor @Sendable () -> Bool = DirectScreenLocker.requestNativeLock,
         requestKeyboardLock: @escaping @MainActor @Sendable () -> Bool = DirectScreenLocker.requestKeyboardLock,
         screenLockedProvider: @escaping @MainActor @Sendable () -> Bool = SystemSessionState.isScreenLocked,
+        powerSourceProvider: @escaping @MainActor @Sendable () -> SystemPowerSourceState = SystemPowerSource.currentState,
         attemptTiming: LockScreenAttemptTiming = .standard,
         recoveryDelay: Duration = .seconds(1),
         environment: LockScreenSystemEnvironment? = nil
@@ -144,6 +148,7 @@ final class LockScreenPolicyController: ObservableObject {
         self.requestNativeLock = requestNativeLock
         self.requestKeyboardLock = requestKeyboardLock
         self.screenLockedProvider = screenLockedProvider
+        self.powerSourceProvider = powerSourceProvider
         self.attemptTiming = attemptTiming
         self.recoveryDelay = recoveryDelay
         self.environment = resolvedEnvironment
@@ -232,7 +237,9 @@ final class LockScreenPolicyController: ObservableObject {
 
         setSystemEventObserving(true)
 
-        guard let policy = settings.lockScreenPolicies.first(where: { $0.isActive(at: now) }) else {
+        let timeActivePolicies = settings.lockScreenPolicies.filter { $0.isActive(at: now) }
+        let powerSource = powerSourceProvider()
+        guard let policy = timeActivePolicies.first(where: { $0.powerCondition.matches(powerSource) }) else {
             cancelIdleLockTimer()
             cancelLockAttempt()
             stopDirectLockEnvironment()
@@ -241,6 +248,8 @@ final class LockScreenPolicyController: ObservableObject {
             activePolicy = nil
             if restored, settings.lockScreenPolicies.isEmpty {
                 status = .noRules
+            } else if restored, let waitingPolicy = timeActivePolicies.first {
+                status = .waitingForPower(waitingPolicy.powerCondition)
             } else if restored, let next = settings.lockScreenPolicies
                 .flatMap({ $0.transitionDates(after: now) })
                 .min() {
@@ -446,6 +455,7 @@ final class LockScreenPolicyController: ObservableObject {
             || !distributedObservers.isEmpty
         guard enabled != isObserving else { return }
         if !enabled {
+            setPowerSourceObserving(false)
             workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
             systemObservers.forEach(NotificationCenter.default.removeObserver)
             distributedObservers.forEach(DistributedNotificationCenter.default().removeObserver)
@@ -456,6 +466,8 @@ final class LockScreenPolicyController: ObservableObject {
             sessionWatchdogTimer = nil
             return
         }
+
+        setPowerSourceObserving(true)
 
         let workspaceCenter = NSWorkspace.shared.notificationCenter
         workspaceObservers = [
@@ -522,6 +534,31 @@ final class LockScreenPolicyController: ObservableObject {
             }
         }
         sessionWatchdogTimer?.tolerance = 5
+    }
+
+    private func setPowerSourceObserving(_ enabled: Bool) {
+        if !enabled {
+            if let powerSourceRunLoopSource {
+                CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)
+            }
+            powerSourceRunLoopSource = nil
+            return
+        }
+        guard powerSourceRunLoopSource == nil else { return }
+
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        powerSourceRunLoopSource = IOPSCreateLimitedPowerNotification({ context in
+            guard let context else { return }
+            let controller = Unmanaged<LockScreenPolicyController>
+                .fromOpaque(context)
+                .takeUnretainedValue()
+            Task { @MainActor in
+                controller.reevaluate()
+            }
+        }, context)?.takeRetainedValue()
+        if let powerSourceRunLoopSource {
+            CFRunLoopAddSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)
+        }
     }
 
     func handleSystemWillSleep() {
@@ -625,6 +662,7 @@ final class LockScreenPolicyController: ObservableObject {
         workspaceObservers.removeAll()
         systemObservers.removeAll()
         distributedObservers.removeAll()
+        setPowerSourceObserving(false)
     }
 
     deinit {
@@ -637,5 +675,8 @@ final class LockScreenPolicyController: ObservableObject {
         workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
         systemObservers.forEach(NotificationCenter.default.removeObserver)
         distributedObservers.forEach(DistributedNotificationCenter.default().removeObserver)
+        if let powerSourceRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)
+        }
     }
 }

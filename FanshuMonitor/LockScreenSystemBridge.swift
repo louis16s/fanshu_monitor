@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Darwin
 import Foundation
+import IOKit.ps
 import IOKit.pwr_mgt
 import OSLog
 
@@ -30,6 +31,23 @@ enum SystemSessionState {
         guard let value = dictionary?[screenLockedKey] else { return false }
         if let number = value as? NSNumber { return number.boolValue }
         return value as? Bool ?? false
+    }
+}
+
+enum SystemPowerSource {
+    static func currentState() -> SystemPowerSourceState {
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else {
+            return .unknown
+        }
+        let state = IOPSGetProvidingPowerSourceType(info).takeUnretainedValue() as String
+        switch state {
+        case kIOPSACPowerValue:
+            return .connected
+        case kIOPSBatteryPowerValue:
+            return .battery
+        default:
+            return .unknown
+        }
     }
 }
 

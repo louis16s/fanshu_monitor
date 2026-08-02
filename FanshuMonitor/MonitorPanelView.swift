@@ -170,6 +170,7 @@ struct MonitorPanelView: View {
                 theme: theme,
                 detail: module.summary,
                 details: enabledMetrics(for: module),
+                showsCodexTasks: store.settings.isMetricEnabled("active-tasks", for: .codex),
                 isExpanded: expandedKinds.contains(module.kind)
             ) {
                 toggleExpansion(for: module.kind)

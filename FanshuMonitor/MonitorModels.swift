@@ -170,6 +170,7 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
             ]
         case .codex:
             return [
+                MetricSwitch(id: "active-tasks", title: "活动任务", isDefault: true),
                 MetricSwitch(id: "plan", title: "套餐", isDefault: false),
                 MetricSwitch(id: "five-hour", title: "5H", isDefault: true),
                 MetricSwitch(id: "weekly", title: "一周", isDefault: true),

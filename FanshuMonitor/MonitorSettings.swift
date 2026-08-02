@@ -114,6 +114,10 @@ final class MonitorSettings: ObservableObject {
     static let maximumEnabledMetricsPerKind = 4
     static let maximumLockScreenPolicies = 4
 
+    static func enabledMetricLimit(for kind: MonitorKind) -> Int? {
+        kind == .codex ? nil : maximumEnabledMetricsPerKind
+    }
+
     private let defaults: UserDefaults
     private var isUpdatingLaunchAtLogin = false
     private var cancellables = Set<AnyCancellable>()
@@ -186,6 +190,10 @@ final class MonitorSettings: ObservableObject {
                 loadedMetrics[kind] = Set(migrated)
             }
         }
+        if !defaults.bool(forKey: Keys.codexActiveTasksMetricMigrated) {
+            loadedMetrics[.codex, default: defaultMetricIds(for: .codex)].insert("active-tasks")
+            defaults.set(true, forKey: Keys.codexActiveTasksMetricMigrated)
+        }
         enabledMetrics = loadedMetrics
 
         let launchAtLoginDesired = defaults.object(forKey: Keys.launchAtLoginDesired) as? Bool
@@ -225,15 +233,18 @@ final class MonitorSettings: ObservableObject {
     }
 
     func canEnableMetric(_ id: String, for kind: MonitorKind) -> Bool {
+        guard kind.availableMetrics.contains(where: { $0.id == id }) else { return false }
         let current = enabledMetrics[kind] ?? defaultMetricIds(for: kind)
-        return current.contains(id) || current.count < Self.maximumEnabledMetricsPerKind
+        guard let limit = Self.enabledMetricLimit(for: kind) else { return true }
+        return current.contains(id) || current.count < limit
     }
 
     func setMetric(_ id: String, enabled: Bool, for kind: MonitorKind) {
+        guard kind.availableMetrics.contains(where: { $0.id == id }) else { return }
         var current = enabledMetrics[kind] ?? defaultMetricIds(for: kind)
         if enabled {
-            guard current.contains(id) || current.count < Self.maximumEnabledMetricsPerKind else {
-                return
+            if let limit = Self.enabledMetricLimit(for: kind) {
+                guard current.contains(id) || current.count < limit else { return }
             }
             current.insert(id)
         } else {
@@ -281,6 +292,7 @@ final class MonitorSettings: ObservableObject {
             newPolicy = LockScreenPolicy(
                 name: defaultName,
                 dayScope: last.dayScope,
+                powerCondition: last.powerCondition,
                 startMinutes: startMinutes,
                 endMinutes: startMinutes == 0 ? 60 : 1_440,
                 idleMinutes: last.idleMinutes
@@ -375,6 +387,9 @@ final class MonitorSettings: ObservableObject {
                     "5H刷新": "five-hour-reset",
                     "周刷新": "weekly-reset",
                     "重置卡": "reset-credits",
+                    "运行中的任务": "active-tasks",
+                    "进行中任务": "active-tasks",
+                    "活动任务": "active-tasks",
                     "next-reset": "five-hour-reset",
                     "status": "weekly-reset"
                 ]
@@ -398,7 +413,10 @@ final class MonitorSettings: ObservableObject {
             return Array(defaultMetricIds(for: kind))
         }
 
-        return Array(filtered.prefix(Self.maximumEnabledMetricsPerKind))
+        guard let limit = Self.enabledMetricLimit(for: kind) else {
+            return filtered
+        }
+        return Array(filtered.prefix(limit))
     }
 
     private func defaultMetricIds(for kind: MonitorKind) -> Set<String> {
@@ -700,5 +718,6 @@ private enum Keys {
     static let lockScreenBaseline = "settings.lockScreen.baseline"
     static let visibleKinds = "settings.visibleKinds"
     static let codexVisibilityMigrated = "settings.codexVisibilityMigrated"
+    static let codexActiveTasksMetricMigrated = "settings.codex.activeTasksMetricMigrated"
     static let enabledMetricsPrefix = "settings.enabledMetrics."
 }

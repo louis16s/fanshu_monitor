@@ -17,6 +17,7 @@ private final class LockAttemptProbe {
     var restoreRequests = 0
     var baseline = ScreenSaverLockBaseline(idleTime: 600, askForPassword: true, askForPasswordDelay: 0)
     var restoredBaseline: ScreenSaverLockBaseline?
+    var powerSourceState = SystemPowerSourceState.connected
 
     var environment: LockScreenSystemEnvironment {
         LockScreenSystemEnvironment(
@@ -66,6 +67,14 @@ struct LockScreenPolicyTests {
         #expect(policy.isActive(at: date(2026, 7, 13, 9, 0), calendar: calendar))
         #expect(policy.isActive(at: date(2026, 7, 13, 17, 59), calendar: calendar))
         #expect(!policy.isActive(at: date(2026, 7, 13, 18, 0), calendar: calendar))
+    }
+
+    @Test func lockScreenPowerConditionsMatchOnlyTheirSelectedSource() {
+        #expect(LockScreenPowerCondition.any.matches(.unknown))
+        #expect(LockScreenPowerCondition.connected.matches(.connected))
+        #expect(!LockScreenPowerCondition.connected.matches(.battery))
+        #expect(LockScreenPowerCondition.battery.matches(.battery))
+        #expect(!LockScreenPowerCondition.battery.matches(.unknown))
     }
 
     @Test func overnightWeekdayPolicyUsesItsStartDay() {
@@ -392,6 +401,31 @@ struct LockScreenPolicyTests {
         )
         #expect(LockScreenPolicyStatus.locking.text == "已达到闲置时间，正在直接锁定")
         #expect(LockScreenPolicyStatus.lockFailed.text == "系统未响应锁定请求，将自动重试")
+        #expect(LockScreenPolicyStatus.waitingForPower(.connected).text == "等待接通电源")
+    }
+
+    @Test @MainActor func controllerReevaluatesPolicyAgainstPowerSource() {
+        let probe = LockAttemptProbe()
+        let settings = activeSettings(suite: "LockScreenPolicyTests.controllerReevaluatesPolicyAgainstPowerSource")
+        let id = settings.lockScreenPolicies[0].id
+        settings.updateLockScreenPolicy(id: id) { $0.powerCondition = .connected }
+        probe.powerSourceState = .battery
+        let controller = LockScreenPolicyController(
+            idleSecondsProvider: { 0 },
+            requestNativeLock: { false },
+            requestKeyboardLock: { false },
+            screenLockedProvider: { false },
+            powerSourceProvider: { probe.powerSourceState },
+            environment: probe.environment
+        )
+
+        controller.configure(settings: settings)
+        #expect(controller.activePolicy == nil)
+        #expect(controller.status == .waitingForPower(.connected))
+
+        probe.powerSourceState = .connected
+        controller.reevaluate()
+        #expect(controller.activePolicy?.id == id)
     }
 
     @Test func customWeekdaysMatchOnlySelectedDays() {
@@ -468,6 +502,7 @@ struct LockScreenPolicyTests {
         let policy = try JSONDecoder().decode(LockScreenPolicy.self, from: Data(json.utf8))
         #expect(policy.name.isEmpty)
         #expect(policy.customWeekdays == Set(2...6))
+        #expect(policy.powerCondition == .any)
         #expect(policy.endMinutes == 1_440)
     }
 
@@ -491,13 +526,17 @@ struct LockScreenPolicyTests {
         #expect(!settings.lockScreenPoliciesEnabled)
         settings.addLockScreenPolicy()
         let id = settings.lockScreenPolicies[0].id
-        settings.updateLockScreenPolicy(id: id) { $0.name = "深夜专注" }
+        settings.updateLockScreenPolicy(id: id) {
+            $0.name = "深夜专注"
+            $0.powerCondition = .connected
+        }
         settings.lockScreenPoliciesEnabled = true
 
         let loaded = MonitorSettings(defaults: defaults)
         #expect(loaded.lockScreenPoliciesEnabled)
         #expect(loaded.lockScreenPolicies.count == 1)
         #expect(loaded.lockScreenPolicies.first?.name == "深夜专注")
+        #expect(loaded.lockScreenPolicies.first?.powerCondition == .connected)
         #expect(loaded.lockScreenPolicies.first?.idleMinutes == 10)
     }
 

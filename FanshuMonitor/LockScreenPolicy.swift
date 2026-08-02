@@ -18,6 +18,43 @@ enum LockScreenDayScope: String, CaseIterable, Codable, Identifiable, Sendable {
     }
 }
 
+enum LockScreenPowerCondition: String, CaseIterable, Codable, Identifiable, Sendable {
+    case any
+    case connected
+    case battery
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .any: "电源不限"
+        case .connected: "接通电源"
+        case .battery: "使用电池"
+        }
+    }
+
+    func matches(_ state: SystemPowerSourceState) -> Bool {
+        switch (self, state) {
+        case (.any, _), (.connected, .connected), (.battery, .battery): true
+        default: false
+        }
+    }
+
+    var waitingText: String {
+        switch self {
+        case .any: "等待规则生效"
+        case .connected: "等待接通电源"
+        case .battery: "等待切换到电池供电"
+        }
+    }
+}
+
+enum SystemPowerSourceState: Equatable, Sendable {
+    case connected
+    case battery
+    case unknown
+}
+
 enum LockScreenPolicyStatus: Equatable, Sendable {
     case disabled
     case restored
@@ -25,6 +62,7 @@ enum LockScreenPolicyStatus: Equatable, Sendable {
     case systemSettingsBlocked
     case noRules
     case waiting(nextTransition: Date?)
+    case waitingForPower(LockScreenPowerCondition)
     case active(timeRange: String, idleMinutes: Int)
     case locking
     case locked
@@ -49,6 +87,8 @@ enum LockScreenPolicyStatus: Equatable, Sendable {
             } else {
                 "已开启，等待下一个时间段"
             }
+        case .waitingForPower(let condition):
+            condition.waitingText
         case .active(let timeRange, let idleMinutes):
             "正在执行：\(timeRange)，闲置 \(idleMinutes) 分钟后直接锁定"
         case .locking:
@@ -77,6 +117,7 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
     var isEnabled: Bool
     var dayScope: LockScreenDayScope
     var customWeekdays: Set<Int>
+    var powerCondition: LockScreenPowerCondition
     var startMinutes: Int
     var endMinutes: Int
     var idleMinutes: Int
@@ -87,6 +128,7 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         isEnabled: Bool = true,
         dayScope: LockScreenDayScope = .everyDay,
         customWeekdays: Set<Int>? = nil,
+        powerCondition: LockScreenPowerCondition = .any,
         startMinutes: Int = 9 * 60,
         endMinutes: Int = 18 * 60,
         idleMinutes: Int = 10
@@ -96,6 +138,7 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         self.isEnabled = isEnabled
         self.dayScope = dayScope
         self.customWeekdays = Self.validWeekdays(customWeekdays ?? Self.defaultWeekdays(for: dayScope))
+        self.powerCondition = powerCondition
         self.startMinutes = Self.clampedStartMinutes(startMinutes)
         self.endMinutes = Self.normalizedEndMinutes(endMinutes, relativeTo: self.startMinutes)
         self.idleMinutes = min(1_440, max(1, idleMinutes))
@@ -215,7 +258,7 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, isEnabled, dayScope, customWeekdays, startMinutes, endMinutes, idleMinutes
+        case id, name, isEnabled, dayScope, customWeekdays, powerCondition, startMinutes, endMinutes, idleMinutes
     }
 
     init(from decoder: Decoder) throws {
@@ -228,6 +271,7 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
             try container.decodeIfPresent(Set<Int>.self, forKey: .customWeekdays)
                 ?? Self.defaultWeekdays(for: dayScope)
         )
+        powerCondition = try container.decodeIfPresent(LockScreenPowerCondition.self, forKey: .powerCondition) ?? .any
         startMinutes = Self.clampedStartMinutes(try container.decode(Int.self, forKey: .startMinutes))
         endMinutes = Self.normalizedEndMinutes(
             try container.decode(Int.self, forKey: .endMinutes),

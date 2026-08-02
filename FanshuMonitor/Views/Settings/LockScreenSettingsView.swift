@@ -261,7 +261,7 @@ struct LockScreenSettingsView: View {
             "arrow.uturn.backward.circle.fill"
         case .systemSettingsChanged:
             "checkmark.circle.fill"
-        case .disabled, .noRules, .waiting:
+        case .disabled, .noRules, .waiting, .waitingForPower:
             "clock"
         }
     }
@@ -272,7 +272,7 @@ struct LockScreenSettingsView: View {
             .orange
         case .active, .locking, .locked, .restored, .systemSettingsChanged:
             Color.accentColor
-        case .disabled, .noRules, .waiting:
+        case .disabled, .noRules, .waiting, .waitingForPower:
             .secondary
         }
     }
@@ -419,6 +419,15 @@ private struct LockScreenPolicyEditor: View {
                     Image(systemName: idleStatusIcon)
                         .foregroundStyle(idleStatusColor)
                         .help(idleStatusText)
+
+                    Picker("电源条件", selection: powerConditionBinding) {
+                        ForEach(LockScreenPowerCondition.allCases) { condition in
+                            Text(condition.title).tag(condition)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 104)
                 }
             }
 
@@ -491,6 +500,13 @@ private struct LockScreenPolicyEditor: View {
                     }
                 }
             }
+        )
+    }
+
+    private var powerConditionBinding: Binding<LockScreenPowerCondition> {
+        Binding(
+            get: { policy.powerCondition },
+            set: { value in update { $0.powerCondition = value } }
         )
     }
 

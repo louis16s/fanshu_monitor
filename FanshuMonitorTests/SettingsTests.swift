@@ -37,6 +37,16 @@ struct SettingsTests {
         #expect(!settings.isMetricEnabled("reset-credits", for: .codex))
     }
 
+    @Test func codexActiveTasksAreEnabledByDefault() {
+        let suite = "codexActiveTasksAreEnabledByDefault"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(settings.isMetricEnabled("active-tasks", for: .codex))
+    }
+
     @Test func codexRefreshIntervalLoadsPersistedValue() {
         let suite = "codexRefreshIntervalLoadsPersistedValue"
         let defaults = UserDefaults(suiteName: suite)!
@@ -95,6 +105,38 @@ struct SettingsTests {
         #expect(!settings.isMetricEnabled("temperature-status", for: .cpu))
         #expect(!settings.isMetricEnabled("missing", for: .cpu))
         #expect(!settings.canEnableMetric("missing", for: .cpu))
+    }
+
+    @Test func codexMetricSelectionHasNoCountLimit() {
+        let suite = "codexMetricSelectionHasNoCountLimit"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+
+        for metric in MonitorKind.codex.availableMetrics {
+            settings.setMetric(metric.id, enabled: true, for: .codex)
+        }
+
+        #expect(MonitorKind.codex.availableMetrics.allSatisfy {
+            settings.isMetricEnabled($0.id, for: .codex)
+        })
+        #expect(!settings.canEnableMetric("missing", for: .codex))
+        settings.setMetric("missing", enabled: true, for: .codex)
+        #expect(!settings.isMetricEnabled("missing", for: .codex))
+    }
+
+    @Test func codexActiveTaskMigrationRunsOnlyOnce() {
+        let suite = "codexActiveTaskMigrationRunsOnlyOnce"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(["five-hour", "weekly"], forKey: "settings.enabledMetrics.codex")
+
+        let migrated = MonitorSettings(defaults: defaults)
+        #expect(migrated.isMetricEnabled("active-tasks", for: .codex))
+        migrated.setMetric("active-tasks", enabled: false, for: .codex)
+
+        let reloaded = MonitorSettings(defaults: defaults)
+        #expect(!reloaded.isMetricEnabled("active-tasks", for: .codex))
     }
 
     @Test func memoryDefaultsShowCompressed() {

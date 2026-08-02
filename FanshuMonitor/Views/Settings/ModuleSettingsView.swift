@@ -49,11 +49,12 @@ struct ModuleSettingsView: View {
                     }
                 }
 
-                if kind.availableMetrics.count > MonitorSettings.maximumEnabledMetricsPerKind {
+                if let limit = MonitorSettings.enabledMetricLimit(for: kind),
+                   kind.availableMetrics.count > limit {
                     SettingsDivider()
 
                     HStack {
-                        Text(String(localized: "settings.metrics-limit") + "\(MonitorSettings.maximumEnabledMetricsPerKind)" + String(localized: "settings.metrics-limit-suffix"))
+                        Text(String(localized: "settings.metrics-limit") + "\(limit)" + String(localized: "settings.metrics-limit-suffix"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 0)

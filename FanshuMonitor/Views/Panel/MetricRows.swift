@@ -7,6 +7,7 @@ struct MetricGlassRow: View {
     let detail: String
     var samples: [Double] = []
     var details: [MonitorMetric] = []
+    var showsCodexTasks = false
     var isExpanded = false
     var toggleExpansion: (() -> Void)?
 
@@ -27,15 +28,13 @@ struct MetricGlassRow: View {
                 trailingView(theme: theme)
             }
 
-            if isExpanded, !details.isEmpty {
+            if isExpanded, hasExpandedDetails {
                 Group {
                     if let storageVolumes {
                         StorageVolumeDetailList(volumes: storageVolumes, kind: module.kind, tint: tint, theme: theme)
                     } else if module.kind == .codex {
                         CodexMetricDetailGrid(
-                            metrics: details + module.metrics.filter {
-                                $0.name.hasPrefix("active-task-")
-                            },
+                            metrics: details + codexTaskMetrics,
                             presentation: CodexQuotaPresentation(metrics: module.metrics),
                             theme: theme
                         )
@@ -53,6 +52,15 @@ struct MetricGlassRow: View {
             toggleExpansion?()
         }
         .glassEffect(.regular.tint(theme.rowGlassTint(for: module.kind)), in: .rect(cornerRadius: MonitorConstants.rowCornerRadius, style: .continuous))
+    }
+
+    private var codexTaskMetrics: [MonitorMetric] {
+        guard showsCodexTasks else { return [] }
+        return module.metrics.filter { $0.name.hasPrefix("active-task-") }
+    }
+
+    private var hasExpandedDetails: Bool {
+        !details.isEmpty || (module.kind == .codex && showsCodexTasks)
     }
 
     private var titleText: String {

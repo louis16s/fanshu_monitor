@@ -111,7 +111,7 @@ final class LogitechMousePresenceMonitor: @unchecked Sendable {
             return value
         }
         guard let manager else { return }
-        _ = queue.sync {
+        queue.sync {
             IOHIDManagerCancel(manager)
             IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         }

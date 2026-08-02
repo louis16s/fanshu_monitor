@@ -119,6 +119,22 @@ final class MonitorStore: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+        settings.$enabledMetrics
+            .map { enabledMetrics in
+                let defaults = Set(
+                    MonitorKind.codex.availableMetrics
+                        .filter(\.isDefault)
+                        .map(\.id)
+                )
+                return (enabledMetrics[.codex] ?? defaults).contains("active-tasks")
+            }
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.configureCodexTaskProgressMonitoring()
+            }
+            .store(in: &cancellables)
         settings.$ringSource
             .dropFirst()
             .receive(on: DispatchQueue.main)
@@ -528,7 +544,12 @@ final class MonitorStore: ObservableObject {
         codexTaskProgressTask?.cancel()
         codexTaskProgressTask = nil
 
-        guard isPanelVisible, settings.isVisible(.codex) else { return }
+        guard isPanelVisible,
+              settings.isVisible(.codex),
+              settings.isMetricEnabled("active-tasks", for: .codex) else {
+            clearCodexTaskProgress()
+            return
+        }
         refreshCodexTaskProgress()
         codexTaskProgressTimerCancellable = Timer.publish(
             every: 2,
@@ -543,7 +564,11 @@ final class MonitorStore: ObservableObject {
     }
 
     private func refreshCodexTaskProgress() {
-        guard isPanelVisible, settings.isVisible(.codex) else { return }
+        guard isPanelVisible,
+              settings.isVisible(.codex),
+              settings.isMetricEnabled("active-tasks", for: .codex) else {
+            return
+        }
         codexTaskProgressTask?.cancel()
         codexTaskProgressTask = Task { [weak self] in
             guard let self else { return }
@@ -554,6 +579,10 @@ final class MonitorStore: ObservableObject {
     }
 
     private func applyCodexTaskProgress(_ tasks: [CodexTaskProgress]) {
+        guard settings.isMetricEnabled("active-tasks", for: .codex) else {
+            clearCodexTaskProgress()
+            return
+        }
         guard let index = allModules.firstIndex(where: { $0.kind == .codex }) else { return }
         allModules[index].metrics.removeAll { $0.name.hasPrefix("active-task-") }
         for (position, task) in tasks.enumerated() {
@@ -566,6 +595,15 @@ final class MonitorStore: ObservableObject {
                 MonitorMetric(name: "active-task-status-\(position)", value: task.activeStep ?? "执行中")
             ])
         }
+        modules = visibleModules(from: allModules)
+    }
+
+    private func clearCodexTaskProgress() {
+        guard let index = allModules.firstIndex(where: { $0.kind == .codex }),
+              allModules[index].metrics.contains(where: { $0.name.hasPrefix("active-task-") }) else {
+            return
+        }
+        allModules[index].metrics.removeAll { $0.name.hasPrefix("active-task-") }
         modules = visibleModules(from: allModules)
     }
 
