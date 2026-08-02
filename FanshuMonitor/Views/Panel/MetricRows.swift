@@ -110,6 +110,7 @@ struct MetricGlassRow: View {
             used: metricValue("used"),
             free: metricValue("free"),
             total: metricValue("total"),
+            health: details.first { $0.name == "health" }.map { localizedDiskHealth($0.value) },
             percentage: Int(module.value.rounded()),
             isExternal: false
         )
@@ -280,10 +281,10 @@ private func chineseMetricName(kind: MonitorKind, id: String) -> String? {
     case (.network, "ipv6"): return "IPv6 地址"
     case (.network, "upload"): return "上传"
     case (.network, "download"): return "下载"
+    case (.storage, "health"): return String(localized: "metric.storage.health")
     case (.battery, "charging-power"): return "充电功率"
     case (.battery, "adapter"): return "适配器"
     case (.gpu, "temperature"): return "温度"
-    case (.codex, "plan"): return "套餐"
     case (.codex, "five-hour"): return "5H"
     case (.codex, "weekly"): return "一周"
     case (.codex, "five-hour-reset"): return "5H刷新"
@@ -301,6 +302,8 @@ private func localizedMetricValue(kind: MonitorKind, metric: MonitorMetric) -> S
         return localizedMemoryPressure(metric.value)
     case (.battery, "adapter"):
         return localizedBatteryState(metric.value)
+    case (.storage, "health"):
+        return localizedDiskHealth(metric.value)
     default:
         return metric.value
     }
@@ -387,6 +390,9 @@ private struct StorageVolumeRow: View {
                     StorageVolumeStat(label: String(localized: "metric.storage.used"), value: volume.used, theme: theme)
                     StorageVolumeStat(label: String(localized: "metric.storage.free"), value: volume.free, theme: theme)
                     StorageVolumeStat(label: String(localized: "metric.storage.total"), value: volume.total, theme: theme)
+                    if let health = volume.health {
+                        StorageVolumeStat(label: String(localized: "metric.storage.health"), value: health, theme: theme)
+                    }
                 }
             }
         }
@@ -421,6 +427,7 @@ struct StorageVolumeInfo: Identifiable {
     let used: String
     let free: String
     let total: String
+    let health: String?
     let percentage: Int
 
     var isExternal: Bool
@@ -666,6 +673,12 @@ private func localizedBatteryState(_ id: String) -> String {
     return localized == key ? id : localized
 }
 
+private func localizedDiskHealth(_ id: String) -> String {
+    let key = "disk-health.\(id)"
+    let localized = String(localized: String.LocalizationValue(key))
+    return localized == key ? id : localized
+}
+
 private func parseExternalVolumes(_ context: String?) -> [StorageVolumeInfo] {
     guard let context, let data = context.data(using: .utf8) else {
         return []
@@ -682,6 +695,7 @@ private func parseExternalVolumes(_ context: String?) -> [StorageVolumeInfo] {
             used: volume.used,
             free: volume.free,
             total: volume.total,
+            health: nil,
             percentage: volume.percentage,
             isExternal: true
         )

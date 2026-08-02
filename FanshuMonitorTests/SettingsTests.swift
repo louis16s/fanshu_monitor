@@ -169,17 +169,39 @@ struct SettingsTests {
         #expect(settings.canEnableMetric("temperature", for: .gpu))
     }
 
-    @Test func codexPlanIsOptionalByDefault() {
-        let defaults = UserDefaults(suiteName: "codexPlanIsOptionalByDefault")!
-        defaults.removePersistentDomain(forName: "codexPlanIsOptionalByDefault")
+    @Test func codexPlanIsNotASelectableMetric() {
+        let defaults = UserDefaults(suiteName: "codexPlanIsNotASelectableMetric")!
+        defaults.removePersistentDomain(forName: "codexPlanIsNotASelectableMetric")
         let settings = MonitorSettings(defaults: defaults)
 
+        #expect(!MonitorKind.codex.availableMetrics.contains { $0.id == "plan" })
         #expect(!settings.isMetricEnabled("plan", for: .codex))
-        #expect(settings.canEnableMetric("plan", for: .codex))
+        #expect(!settings.canEnableMetric("plan", for: .codex))
         settings.setMetric("plan", enabled: true, for: .codex)
-        #expect(settings.isMetricEnabled("plan", for: .codex))
-        settings.setMetric("plan", enabled: false, for: .codex)
         #expect(!settings.isMetricEnabled("plan", for: .codex))
+    }
+
+    @Test func storageDefaultsIncludeDiskHealth() {
+        let suite = "storageDefaultsIncludeDiskHealth"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(settings.isMetricEnabled("health", for: .storage))
+    }
+
+    @Test func storageDiskHealthMigrationRunsOnlyOnce() {
+        let suite = "storageDiskHealthMigrationRunsOnlyOnce"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(["used", "free", "total"], forKey: "settings.enabledMetrics.storage")
+
+        let migrated = MonitorSettings(defaults: defaults)
+        #expect(migrated.isMetricEnabled("health", for: .storage))
+        migrated.setMetric("health", enabled: false, for: .storage)
+
+        let reloaded = MonitorSettings(defaults: defaults)
+        #expect(!reloaded.isMetricEnabled("health", for: .storage))
     }
 
     @Test func mouseControlDefaultsAreLowOverhead() {

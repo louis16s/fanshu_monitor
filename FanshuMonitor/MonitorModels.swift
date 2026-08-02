@@ -151,6 +151,7 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
                 MetricSwitch(id: "used", title: String(localized: "metric.storage.used"), isDefault: true),
                 MetricSwitch(id: "free", title: String(localized: "metric.storage.free"), isDefault: true),
                 MetricSwitch(id: "total", title: String(localized: "metric.storage.total"), isDefault: true),
+                MetricSwitch(id: "health", title: String(localized: "metric.storage.health"), isDefault: true),
             ]
         case .network:
             return [
@@ -171,7 +172,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
         case .codex:
             return [
                 MetricSwitch(id: "active-tasks", title: "活动任务", isDefault: true),
-                MetricSwitch(id: "plan", title: "套餐", isDefault: false),
                 MetricSwitch(id: "five-hour", title: "5H", isDefault: true),
                 MetricSwitch(id: "weekly", title: "一周", isDefault: true),
                 MetricSwitch(id: "five-hour-reset", title: "5H刷新", isDefault: true),

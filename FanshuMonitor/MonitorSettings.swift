@@ -196,6 +196,10 @@ final class MonitorSettings: ObservableObject {
             loadedMetrics[.codex, default: defaultMetricIds(for: .codex)].insert("active-tasks")
             defaults.set(true, forKey: Keys.codexActiveTasksMetricMigrated)
         }
+        if !defaults.bool(forKey: Keys.storageDiskHealthMetricMigrated) {
+            loadedMetrics[.storage, default: defaultMetricIds(for: .storage)].insert("health")
+            defaults.set(true, forKey: Keys.storageDiskHealthMetricMigrated)
+        }
         enabledMetrics = loadedMetrics
 
         let launchAtLoginDesired = defaults.object(forKey: Keys.launchAtLoginDesired) as? Bool
@@ -375,7 +379,7 @@ final class MonitorSettings: ObservableObject {
             case .memory:
                 return ["已用": "used", "压力": "pressure", "总量": "total", "App 占用": "app-memory", "缓存": "cached", "已压缩": "compressed"]
             case .storage:
-                return ["已用": "used", "可用": "free", "总量": "total"]
+                return ["已用": "used", "可用": "free", "总量": "total", "健康度": "health", "磁盘健康度": "health"]
             case .network:
                 return ["IP 地址": "ipv4", "上传": "upload", "下载": "download", "SSID": "ssid", "IPv4": "ipv4", "IPv6": "ipv6"]
             case .battery:
@@ -730,5 +734,6 @@ private enum Keys {
     static let visibleKinds = "settings.visibleKinds"
     static let codexVisibilityMigrated = "settings.codexVisibilityMigrated"
     static let codexActiveTasksMetricMigrated = "settings.codex.activeTasksMetricMigrated"
+    static let storageDiskHealthMetricMigrated = "settings.storage.diskHealthMetricMigrated"
     static let enabledMetricsPrefix = "settings.enabledMetrics."
 }

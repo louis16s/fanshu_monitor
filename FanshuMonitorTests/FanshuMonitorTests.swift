@@ -181,6 +181,41 @@ struct FanshuMonitorTests {
         #expect(module.metrics.map(\.name) == ["upload"])
     }
 
+    @Test func diskHealthIsOnDemandAndCached() {
+        let reads = ThreadSafeCounter()
+        let sampler = StorageSampler(healthReader: {
+            reads.increment()
+            return "normal"
+        })
+        let hiddenContext = MonitorSamplingContext(
+            enabledMetricIDs: ["health"],
+            panelVisible: false
+        )
+        let visibleContext = MonitorSamplingContext(
+            enabledMetricIDs: ["health"],
+            panelVisible: true
+        )
+
+        let hidden = sampler.sample(previous: nil, context: hiddenContext)
+        #expect(reads.value == 0)
+        #expect(hidden.metrics.first { $0.name == "health" }?.value == "--")
+
+        let firstVisible = sampler.sample(previous: hidden, context: visibleContext)
+        let secondVisible = sampler.sample(previous: firstVisible, context: visibleContext)
+        #expect(reads.value == 1)
+        #expect(secondVisible.metrics.first { $0.name == "health" }?.value == "normal")
+    }
+
+    @Test func diskHealthParsesSMARTStatus() throws {
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: ["SMARTStatus": "Verified"],
+            format: .xml,
+            options: 0
+        )
+
+        #expect(DiskHealthReader.status(fromPropertyList: data) == "normal")
+    }
+
     @Test func codexRefreshScheduleUsesConfiguredInterval() {
         let schedule = MonitorRefreshSchedule()
         let start = Date(timeIntervalSinceReferenceDate: 1_000)
@@ -669,5 +704,20 @@ struct FanshuMonitorTests {
 
         let remainingTasks = await reader.load()
         #expect(remainingTasks.map(\.title) == ["构建 CF 博客"])
+    }
+}
+
+private final class ThreadSafeCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = 0
+
+    var value: Int {
+        lock.withLock { storage }
+    }
+
+    func increment() {
+        lock.withLock {
+            storage += 1
+        }
     }
 }
