@@ -349,6 +349,8 @@ private struct LockScreenPolicyEditor: View {
     @State private var endTimeText = ""
     @State private var nameSaveTask: Task<Void, Never>?
     @State private var idleSaveTask: Task<Void, Never>?
+    @State private var conflictFlashTask: Task<Void, Never>?
+    @State private var conflictFlashVisible = false
     @FocusState private var focusedField: EditorField?
     @State private var previousFocusedField: EditorField?
 
@@ -422,7 +424,8 @@ private struct LockScreenPolicyEditor: View {
 
                     Picker("电源条件", selection: powerConditionBinding) {
                         ForEach(LockScreenPowerCondition.allCases) { condition in
-                            Text(condition.title).tag(condition)
+                            Label(condition.title, systemImage: condition.symbolName)
+                                .tag(condition)
                         }
                     }
                     .labelsHidden()
@@ -454,6 +457,19 @@ private struct LockScreenPolicyEditor: View {
                     .padding(.vertical, 9)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+        .overlay {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.red.opacity(conflictFlashVisible ? 0.12 : 0))
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.red.opacity(conflictFlashVisible ? 0.95 : 0), lineWidth: 2)
+            }
+            .shadow(
+                color: Color.red.opacity(conflictFlashVisible ? 0.28 : 0),
+                radius: 6
+            )
+            .allowsHitTesting(false)
         }
         .onAppear { syncEditorText() }
         .onChange(of: policy.name) { _, newValue in
@@ -493,6 +509,7 @@ private struct LockScreenPolicyEditor: View {
         .onDisappear {
             nameSaveTask?.cancel()
             idleSaveTask?.cancel()
+            conflictFlashTask?.cancel()
             if let focusedField { finishEditing(focusedField) }
         }
     }
@@ -539,7 +556,47 @@ private struct LockScreenPolicyEditor: View {
     }
 
     private func update(_ mutate: (inout LockScreenPolicy) -> Void) {
+        guard let currentPolicy = settings.lockScreenPolicies.first(where: { $0.id == policy.id }) else {
+            return
+        }
+        var updatedPolicy = currentPolicy
+        mutate(&updatedPolicy)
+        updatedPolicy.normalize()
+        let newConflictIDs = LockScreenPolicyResolver.newlyConflictingPolicyIDs(
+            for: updatedPolicy,
+            replacing: currentPolicy,
+            in: settings.lockScreenPolicies
+        )
+        if !newConflictIDs.isEmpty {
+            flashConflict()
+        }
         settings.updateLockScreenPolicy(id: policy.id, mutate)
+    }
+
+    private func flashConflict() {
+        conflictFlashTask?.cancel()
+        conflictFlashTask = Task { @MainActor in
+            for _ in 0..<3 {
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    conflictFlashVisible = true
+                }
+                do {
+                    try await Task.sleep(for: .milliseconds(180))
+                } catch {
+                    return
+                }
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    conflictFlashVisible = false
+                }
+                do {
+                    try await Task.sleep(for: .milliseconds(180))
+                } catch {
+                    return
+                }
+            }
+            conflictFlashTask = nil
+        }
     }
 
     private var parsedIdleMinutes: Int? {

@@ -183,6 +183,50 @@ struct LockScreenPolicyTests {
         #expect(!LockScreenPolicyResolver.policiesOverlap(saturdayNight, mondayMorning))
     }
 
+    @Test func newlyIntroducedConflictsOnlyReportAddedRelationships() {
+        let morning = LockScreenPolicy(
+            name: "上午",
+            powerCondition: .battery,
+            startMinutes: 8 * 60,
+            endMinutes: 12 * 60,
+            idleMinutes: 10
+        )
+        let afternoon = LockScreenPolicy(
+            name: "下午",
+            powerCondition: .battery,
+            startMinutes: 13 * 60,
+            endMinutes: 18 * 60,
+            idleMinutes: 10
+        )
+        var overlappingAfternoon = afternoon
+        overlappingAfternoon.setStartMinutes(11 * 60)
+
+        let introduced = LockScreenPolicyResolver.newlyConflictingPolicyIDs(
+            for: overlappingAfternoon,
+            replacing: afternoon,
+            in: [morning, afternoon]
+        )
+        #expect(introduced == [morning.id])
+
+        var stillOverlapping = overlappingAfternoon
+        stillOverlapping.setStartMinutes(10 * 60)
+        let existing = LockScreenPolicyResolver.newlyConflictingPolicyIDs(
+            for: stillOverlapping,
+            replacing: overlappingAfternoon,
+            in: [morning, overlappingAfternoon]
+        )
+        #expect(existing.isEmpty)
+
+        var connectedAfternoon = overlappingAfternoon
+        connectedAfternoon.powerCondition = .connected
+        let removed = LockScreenPolicyResolver.newlyConflictingPolicyIDs(
+            for: connectedAfternoon,
+            replacing: overlappingAfternoon,
+            in: [morning, overlappingAfternoon]
+        )
+        #expect(removed.isEmpty)
+    }
+
     @Test func screenshotPoliciesHaveDeterministicBoundariesAndPriority() {
         let night = LockScreenPolicy(
             name: "夜间",

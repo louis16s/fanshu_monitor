@@ -33,6 +33,14 @@ nonisolated enum LockScreenPowerCondition: String, CaseIterable, Codable, Identi
         }
     }
 
+    var symbolName: String {
+        switch self {
+        case .any: "bolt.circle"
+        case .connected: "powerplug"
+        case .battery: "battery.100percent"
+        }
+    }
+
     func matches(_ state: SystemPowerSourceState) -> Bool {
         switch (self, state) {
         case (.any, _), (.connected, .connected), (.battery, .battery): true
@@ -395,6 +403,26 @@ nonisolated enum LockScreenPolicyResolver {
         policies
             .filter { $0.id != policy.id && policiesOverlap(policy, $0) }
             .sorted(by: policyComesBefore)
+    }
+
+    static func newlyConflictingPolicyIDs(
+        for updatedPolicy: LockScreenPolicy,
+        replacing originalPolicy: LockScreenPolicy,
+        in policies: [LockScreenPolicy]
+    ) -> Set<LockScreenPolicy.ID> {
+        let originalConflicts = Set(
+            conflictingPolicies(for: originalPolicy, in: policies).map(\.id)
+        )
+        var updatedPolicies = policies
+        if let index = updatedPolicies.firstIndex(where: { $0.id == originalPolicy.id }) {
+            updatedPolicies[index] = updatedPolicy
+        } else {
+            updatedPolicies.append(updatedPolicy)
+        }
+        let updatedConflicts = Set(
+            conflictingPolicies(for: updatedPolicy, in: updatedPolicies).map(\.id)
+        )
+        return updatedConflicts.subtracting(originalConflicts)
     }
 
     static func policiesOverlap(_ lhs: LockScreenPolicy, _ rhs: LockScreenPolicy) -> Bool {

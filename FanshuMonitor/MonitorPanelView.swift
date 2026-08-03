@@ -65,6 +65,11 @@ struct MonitorPanelView: View {
                 Text("番薯monitor · v\(appVersion)")
                     .panelLabelFont(size: 9, tracking: 1.1)
                     .foregroundStyle(theme.captionText)
+
+                LockScreenExecutionIndicator(
+                    controller: store.lockScreenController,
+                    color: theme.captionText
+                )
             }
 
             Spacer()
@@ -210,4 +215,61 @@ struct MonitorPanelView: View {
         formatter.dateFormat = "HH:mm"
         return formatter
     }()
+}
+
+private struct LockScreenExecutionIndicator: View {
+    @ObservedObject var controller: LockScreenPolicyController
+    let color: Color
+
+    var body: some View {
+        if showsIndicator, let activePolicy = controller.activePolicy {
+            Image(systemName: symbolName)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(indicatorColor)
+                .frame(width: 14, height: 14)
+                .contentShape(Rectangle())
+                .help(helpText(for: activePolicy))
+                .accessibilityLabel("锁屏策略执行中")
+                .accessibilityValue(activePolicy.timeRangeText)
+        }
+    }
+
+    private var showsIndicator: Bool {
+        switch controller.status {
+        case .active, .locking, .locked, .lockFailed, .environmentFailed:
+            true
+        case .disabled, .restored, .systemSettingsChanged, .systemSettingsBlocked,
+             .noRules, .waiting, .waitingForPower, .waitingForPowerSource, .sessionInactive:
+            false
+        }
+    }
+
+    private var symbolName: String {
+        switch controller.status {
+        case .lockFailed, .environmentFailed:
+            "exclamationmark.triangle.fill"
+        case .locking, .locked:
+            "lock.fill"
+        default:
+            "lock.badge.clock"
+        }
+    }
+
+    private var indicatorColor: Color {
+        switch controller.status {
+        case .lockFailed, .environmentFailed:
+            .orange
+        default:
+            color
+        }
+    }
+
+    private func helpText(for policy: LockScreenPolicy) -> String {
+        switch controller.status {
+        case .lockFailed, .environmentFailed:
+            controller.statusText
+        default:
+            "锁屏策略执行中 · \(policy.timeRangeText) · 闲置 \(policy.idleMinutes) 分钟"
+        }
+    }
 }
