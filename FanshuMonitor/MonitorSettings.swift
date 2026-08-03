@@ -323,7 +323,7 @@ final class MonitorSettings: ObservableObject {
     func updateLockScreenPolicy(_ policy: LockScreenPolicy) {
         guard let index = lockScreenPolicies.firstIndex(where: { $0.id == policy.id }) else { return }
         var normalizedPolicy = policy
-        normalizedPolicy.name = LockScreenPolicy.normalizedName(policy.name)
+        normalizedPolicy.normalize()
         lockScreenPolicies[index] = normalizedPolicy
     }
 
@@ -334,7 +334,7 @@ final class MonitorSettings: ObservableObject {
         guard let index = lockScreenPolicies.firstIndex(where: { $0.id == id }) else { return }
         var policy = lockScreenPolicies[index]
         update(&policy)
-        policy.name = LockScreenPolicy.normalizedName(policy.name)
+        policy.normalize()
         guard policy != lockScreenPolicies[index] else { return }
         lockScreenPolicies[index] = policy
     }

@@ -261,7 +261,7 @@ struct LockScreenSettingsView: View {
             "arrow.uturn.backward.circle.fill"
         case .systemSettingsChanged:
             "checkmark.circle.fill"
-        case .disabled, .noRules, .waiting, .waitingForPower:
+        case .disabled, .noRules, .waiting, .waitingForPower, .waitingForPowerSource, .sessionInactive:
             "clock"
         }
     }
@@ -272,7 +272,7 @@ struct LockScreenSettingsView: View {
             .orange
         case .active, .locking, .locked, .restored, .systemSettingsChanged:
             Color.accentColor
-        case .disabled, .noRules, .waiting, .waitingForPower:
+        case .disabled, .noRules, .waiting, .waitingForPower, .waitingForPowerSource, .sessionInactive:
             .secondary
         }
     }
@@ -445,6 +445,14 @@ private struct LockScreenPolicyEditor: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            } else if !conflictingPolicies.isEmpty {
+                SettingsDivider()
+                Label(conflictText, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .onAppear { syncEditorText() }
@@ -508,6 +516,26 @@ private struct LockScreenPolicyEditor: View {
             get: { policy.powerCondition },
             set: { value in update { $0.powerCondition = value } }
         )
+    }
+
+    private var conflictingPolicies: [LockScreenPolicy] {
+        LockScreenPolicyResolver.conflictingPolicies(
+            for: policy,
+            in: settings.lockScreenPolicies
+        )
+    }
+
+    private var conflictText: String {
+        let names = conflictingPolicies.map(displayName(for:)).joined(separator: "、")
+        return "与\(names)重叠，重叠时采用较短的闲置时长"
+    }
+
+    private func displayName(for conflictingPolicy: LockScreenPolicy) -> String {
+        if !conflictingPolicy.name.isEmpty {
+            return "“\(conflictingPolicy.name)”"
+        }
+        let position = settings.lockScreenPolicies.firstIndex { $0.id == conflictingPolicy.id } ?? 0
+        return "“时间段 \(position + 1)”"
     }
 
     private func update(_ mutate: (inout LockScreenPolicy) -> Void) {
@@ -601,7 +629,7 @@ private struct LockScreenPolicyEditor: View {
 
     private func applyStartTimeIfValid() {
         guard let minutes = LockScreenPolicy.minutes(from: startTimeText) else { return }
-        update { $0.startMinutes = minutes }
+        update { $0.setStartMinutes(minutes) }
     }
 
     private func applyEndTimeIfValid() {
@@ -609,7 +637,7 @@ private struct LockScreenPolicyEditor: View {
             from: endTimeText,
             maximumHour: LockScreenPolicy.maximumExtendedHour
         ) else { return }
-        update { $0.endMinutes = minutes }
+        update { $0.setEndMinutes(minutes) }
     }
 
     private func finishEditing(_ field: EditorField) {

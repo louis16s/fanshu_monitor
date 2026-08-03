@@ -77,6 +77,174 @@ struct LockScreenPolicyTests {
         #expect(!LockScreenPowerCondition.battery.matches(.unknown))
     }
 
+    @Test func resolverUsesTheStrictestMatchingPolicyInsteadOfArrayOrder() {
+        let day = LockScreenPolicy(
+            name: "白天",
+            powerCondition: .battery,
+            startMinutes: 7 * 60,
+            endMinutes: 24 * 60,
+            idleMinutes: 20
+        )
+        let strictDay = LockScreenPolicy(
+            name: "时间段 1",
+            powerCondition: .battery,
+            startMinutes: 7 * 60,
+            endMinutes: 24 * 60,
+            idleMinutes: 5
+        )
+        let now = date(2026, 7, 13, 12, 0)
+
+        let forward = LockScreenPolicyResolver.resolve(
+            policies: [day, strictDay],
+            at: now,
+            powerSource: .battery,
+            calendar: calendar
+        )
+        let reversed = LockScreenPolicyResolver.resolve(
+            policies: [strictDay, day],
+            at: now,
+            powerSource: .battery,
+            calendar: calendar
+        )
+
+        #expect(forward.selectedPolicy?.id == strictDay.id)
+        #expect(reversed.selectedPolicy?.id == strictDay.id)
+        #expect(forward.matchingPolicies.count == 2)
+    }
+
+    @Test func conflictDetectionMatchesScheduleAndPowerIntersections() {
+        let night = LockScreenPolicy(
+            name: "夜间",
+            powerCondition: .any,
+            startMinutes: 0,
+            endMinutes: 7 * 60,
+            idleMinutes: 5
+        )
+        let day = LockScreenPolicy(
+            name: "白天",
+            powerCondition: .battery,
+            startMinutes: 7 * 60,
+            endMinutes: 24 * 60,
+            idleMinutes: 20
+        )
+        let duplicateDay = LockScreenPolicy(
+            name: "时间段 1",
+            powerCondition: .battery,
+            startMinutes: 7 * 60,
+            endMinutes: 24 * 60,
+            idleMinutes: 5
+        )
+        let connectedDay = LockScreenPolicy(
+            name: "接电白天",
+            powerCondition: .connected,
+            startMinutes: 7 * 60,
+            endMinutes: 24 * 60,
+            idleMinutes: 5
+        )
+
+        #expect(!LockScreenPolicyResolver.policiesOverlap(night, day))
+        #expect(LockScreenPolicyResolver.policiesOverlap(day, duplicateDay))
+        #expect(!LockScreenPolicyResolver.policiesOverlap(day, connectedDay))
+        #expect(
+            LockScreenPolicyResolver.conflictingPolicies(
+                for: day,
+                in: [night, day, duplicateDay, connectedDay]
+            ).map(\.id) == [duplicateDay.id]
+        )
+    }
+
+    @Test func conflictDetectionHandlesCrossMidnightAndWeekBoundary() {
+        let saturdayNight = LockScreenPolicy(
+            dayScope: .custom,
+            customWeekdays: [7],
+            powerCondition: .any,
+            startMinutes: 23 * 60,
+            endMinutes: 25 * 60,
+            idleMinutes: 5
+        )
+        let sundayMorning = LockScreenPolicy(
+            dayScope: .custom,
+            customWeekdays: [1],
+            powerCondition: .battery,
+            startMinutes: 30,
+            endMinutes: 2 * 60,
+            idleMinutes: 10
+        )
+        let mondayMorning = LockScreenPolicy(
+            dayScope: .custom,
+            customWeekdays: [2],
+            powerCondition: .battery,
+            startMinutes: 30,
+            endMinutes: 2 * 60,
+            idleMinutes: 10
+        )
+
+        #expect(LockScreenPolicyResolver.policiesOverlap(saturdayNight, sundayMorning))
+        #expect(!LockScreenPolicyResolver.policiesOverlap(saturdayNight, mondayMorning))
+    }
+
+    @Test func screenshotPoliciesHaveDeterministicBoundariesAndPriority() {
+        let night = LockScreenPolicy(
+            name: "夜间",
+            powerCondition: .any,
+            startMinutes: 0,
+            endMinutes: 7 * 60,
+            idleMinutes: 5
+        )
+        let day = LockScreenPolicy(
+            name: "白天",
+            powerCondition: .battery,
+            startMinutes: 7 * 60,
+            endMinutes: 24 * 60,
+            idleMinutes: 20
+        )
+        let strictDay = LockScreenPolicy(
+            name: "时间段 1",
+            powerCondition: .battery,
+            startMinutes: 7 * 60,
+            endMinutes: 24 * 60,
+            idleMinutes: 5
+        )
+        let policies = [night, day, strictDay]
+
+        let beforeBoundary = LockScreenPolicyResolver.resolve(
+            policies: policies,
+            at: date(2026, 7, 13, 6, 59),
+            powerSource: .connected,
+            calendar: calendar
+        )
+        let batteryDay = LockScreenPolicyResolver.resolve(
+            policies: policies,
+            at: date(2026, 7, 13, 7, 0),
+            powerSource: .battery,
+            calendar: calendar
+        )
+        let connectedDay = LockScreenPolicyResolver.resolve(
+            policies: policies,
+            at: date(2026, 7, 13, 7, 0),
+            powerSource: .connected,
+            calendar: calendar
+        )
+        let beforeMidnight = LockScreenPolicyResolver.resolve(
+            policies: policies,
+            at: date(2026, 7, 13, 23, 59),
+            powerSource: .battery,
+            calendar: calendar
+        )
+        let atMidnight = LockScreenPolicyResolver.resolve(
+            policies: policies,
+            at: date(2026, 7, 14, 0, 0),
+            powerSource: .battery,
+            calendar: calendar
+        )
+
+        #expect(beforeBoundary.selectedPolicy?.id == night.id)
+        #expect(batteryDay.selectedPolicy?.id == strictDay.id)
+        #expect(connectedDay.selectedPolicy == nil)
+        #expect(beforeMidnight.selectedPolicy?.id == strictDay.id)
+        #expect(atMidnight.selectedPolicy?.id == night.id)
+    }
+
     @Test func overnightWeekdayPolicyUsesItsStartDay() {
         let policy = LockScreenPolicy(dayScope: .weekdays, startMinutes: 22 * 60, endMinutes: 6 * 60, idleMinutes: 5)
 
@@ -428,6 +596,213 @@ struct LockScreenPolicyTests {
         #expect(controller.activePolicy?.id == id)
     }
 
+    @Test @MainActor func unknownPowerSourceHasAnExplicitWaitingState() {
+        let probe = LockAttemptProbe()
+        let settings = activeSettings(suite: "LockScreenPolicyTests.unknownPowerSourceHasAnExplicitWaitingState")
+        let id = settings.lockScreenPolicies[0].id
+        settings.updateLockScreenPolicy(id: id) { $0.powerCondition = .battery }
+        probe.powerSourceState = .unknown
+        let controller = LockScreenPolicyController(
+            idleSecondsProvider: { 0 },
+            requestNativeLock: { false },
+            requestKeyboardLock: { false },
+            screenLockedProvider: { false },
+            powerSourceProvider: { probe.powerSourceState },
+            environment: probe.environment
+        )
+
+        controller.configure(settings: settings)
+
+        #expect(controller.activePolicy == nil)
+        #expect(controller.status == .waitingForPowerSource)
+    }
+
+    @Test @MainActor func sleepPausesEveryReevaluationUntilWakeRecovery() async {
+        let probe = LockAttemptProbe()
+        let settings = activeSettings(suite: "LockScreenPolicyTests.sleepPausesEveryReevaluationUntilWakeRecovery")
+        let controller = LockScreenPolicyController(
+            idleSecondsProvider: { probe.idleSeconds },
+            requestNativeLock: {
+                probe.nativeRequests += 1
+                return true
+            },
+            requestKeyboardLock: { false },
+            screenLockedProvider: { false },
+            powerSourceProvider: { probe.powerSourceState },
+            recoveryDelay: .milliseconds(30),
+            environment: probe.environment
+        )
+
+        controller.configure(settings: settings)
+        let acquisitionsBeforeSleep = probe.assertionAcquisitions
+        controller.handleSystemWillSleep()
+        probe.idleSeconds = 120
+        controller.reevaluate()
+        settings.updateLockScreenPolicy(id: settings.lockScreenPolicies[0].id) {
+            $0.idleMinutes = 2
+        }
+        try? await Task.sleep(for: .milliseconds(150))
+
+        #expect(probe.assertionAcquisitions == acquisitionsBeforeSleep)
+        #expect(probe.nativeRequests == 0)
+
+        controller.handleSystemDidWake()
+        try? await Task.sleep(for: .milliseconds(60))
+        #expect(probe.assertionAcquisitions > acquisitionsBeforeSleep)
+        #expect(probe.nativeRequests == 1)
+    }
+
+    @Test @MainActor func waitingPeriodClearsBaselineAndRecapturesExternalChanges() {
+        let probe = LockAttemptProbe()
+        let settings = activeSettings(
+            suite: "LockScreenPolicyTests.waitingPeriodClearsBaselineAndRecapturesExternalChanges"
+        )
+        let id = settings.lockScreenPolicies[0].id
+        settings.updateLockScreenPolicy(id: id) { $0.powerCondition = .connected }
+        probe.powerSourceState = .connected
+        let controller = LockScreenPolicyController(
+            idleSecondsProvider: { 0 },
+            requestNativeLock: { false },
+            requestKeyboardLock: { false },
+            screenLockedProvider: { false },
+            powerSourceProvider: { probe.powerSourceState },
+            environment: probe.environment
+        )
+
+        controller.configure(settings: settings)
+        #expect(settings.lockScreenBaseline == probe.baseline)
+
+        probe.powerSourceState = .battery
+        controller.reevaluate()
+        #expect(settings.lockScreenBaseline == nil)
+
+        let externallyChangedBaseline = ScreenSaverLockBaseline(
+            idleTime: 1_200,
+            askForPassword: true,
+            askForPasswordDelay: 30
+        )
+        probe.baseline = externallyChangedBaseline
+        probe.powerSourceState = .connected
+        controller.reevaluate()
+        #expect(settings.lockScreenBaseline == externallyChangedBaseline)
+
+        settings.setLockScreenPoliciesEnabled(false)
+        #expect(probe.restoredBaseline == externallyChangedBaseline)
+    }
+
+    @Test @MainActor func failedBaselineRestoreRetriesWithoutNormalPolling() async {
+        let probe = LockAttemptProbe()
+        let settings = activeSettings(
+            suite: "LockScreenPolicyTests.failedBaselineRestoreRetriesWithoutNormalPolling"
+        )
+        let controller = LockScreenPolicyController(
+            idleSecondsProvider: { 0 },
+            requestNativeLock: { false },
+            requestKeyboardLock: { false },
+            screenLockedProvider: { false },
+            baselineRestoreRetryInterval: 0.02,
+            environment: probe.environment
+        )
+
+        controller.configure(settings: settings)
+        probe.restoreSucceeds = false
+        settings.setLockScreenPoliciesEnabled(false)
+        #expect(controller.status.isEnvironmentFailure)
+        #expect(settings.lockScreenBaseline != nil)
+
+        probe.restoreSucceeds = true
+        try? await Task.sleep(for: .milliseconds(80))
+
+        #expect(controller.status == .disabled)
+        #expect(settings.lockScreenBaseline == nil)
+        #expect(probe.restoreRequests >= 2)
+    }
+
+    @Test @MainActor func inactiveUnlockedSessionIsPausedInsteadOfReportedAsLocked() {
+        let probe = LockAttemptProbe()
+        let settings = activeSettings(
+            suite: "LockScreenPolicyTests.inactiveUnlockedSessionIsPausedInsteadOfReportedAsLocked"
+        )
+        let controller = LockScreenPolicyController(
+            idleSecondsProvider: { 0 },
+            requestNativeLock: { false },
+            requestKeyboardLock: { false },
+            screenLockedProvider: { probe.isLocked },
+            environment: probe.environment
+        )
+
+        controller.configure(settings: settings)
+        probe.isLocked = false
+        controller.handleSessionDidResignActive()
+        #expect(controller.status == .sessionInactive)
+        let acquisitionsWhileInactive = probe.assertionAcquisitions
+        controller.reevaluate()
+        #expect(controller.status == .sessionInactive)
+        #expect(probe.assertionAcquisitions == acquisitionsWhileInactive)
+
+        probe.isLocked = true
+        controller.handleScreenDidLock()
+        #expect(controller.status == .locked)
+    }
+
+    @Test @MainActor func powerChangeCancelsAnObsoleteLockAttempt() async {
+        let probe = LockAttemptProbe()
+        probe.idleSeconds = 120
+        probe.powerSourceState = .connected
+        let suite = "LockScreenPolicyTests.powerChangeCancelsAnObsoleteLockAttempt"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+        settings.addLockScreenPolicy()
+        let connectedID = settings.lockScreenPolicies[0].id
+        settings.updateLockScreenPolicy(id: connectedID) {
+            $0.startMinutes = 0
+            $0.endMinutes = 40 * 60
+            $0.idleMinutes = 1
+            $0.powerCondition = .connected
+        }
+        settings.addLockScreenPolicy()
+        let batteryID = settings.lockScreenPolicies[1].id
+        settings.updateLockScreenPolicy(id: batteryID) {
+            $0.startMinutes = 0
+            $0.endMinutes = 40 * 60
+            $0.idleMinutes = 20
+            $0.powerCondition = .battery
+        }
+        settings.setLockScreenPoliciesEnabled(true)
+        let controller = LockScreenPolicyController(
+            idleSecondsProvider: { probe.idleSeconds },
+            requestNativeLock: {
+                probe.nativeRequests += 1
+                return true
+            },
+            requestKeyboardLock: {
+                probe.keyboardRequests += 1
+                return true
+            },
+            screenLockedProvider: { false },
+            powerSourceProvider: { probe.powerSourceState },
+            attemptTiming: LockScreenAttemptTiming(
+                pollInterval: .milliseconds(10),
+                maximumPollCount: 20,
+                keyboardFallbackPoll: 2,
+                retryDelay: 1
+            ),
+            environment: probe.environment
+        )
+
+        controller.configure(settings: settings)
+        try? await Task.sleep(for: .milliseconds(5))
+        probe.powerSourceState = .battery
+        controller.reevaluate()
+        try? await Task.sleep(for: .milliseconds(50))
+
+        #expect(probe.nativeRequests == 1)
+        #expect(probe.keyboardRequests == 0)
+        #expect(controller.activePolicy?.id == batteryID)
+        #expect(controller.status == .active(timeRange: "00:00 - 40:00", idleMinutes: 20))
+    }
+
     @Test func customWeekdaysMatchOnlySelectedDays() {
         let policy = LockScreenPolicy(
             dayScope: .custom,
@@ -491,6 +866,27 @@ struct LockScreenPolicyTests {
         #expect(policy.timeRangeText == "12:00 - 24:00")
         #expect(policy.isActive(at: date(2026, 7, 13, 23, 59), calendar: calendar))
         #expect(!policy.isActive(at: date(2026, 7, 14, 0, 0), calendar: calendar))
+    }
+
+    @Test func endOfDayUsesLocalMidnightAcrossDaylightSavingTime() {
+        var newYorkCalendar = Calendar(identifier: .gregorian)
+        newYorkCalendar.timeZone = TimeZone(identifier: "America/New_York")!
+        let policy = LockScreenPolicy(
+            dayScope: .custom,
+            customWeekdays: [1],
+            startMinutes: 0,
+            endMinutes: 24 * 60,
+            idleMinutes: 5
+        )
+
+        #expect(policy.isActive(
+            at: date(2026, 3, 8, 23, 59, calendar: newYorkCalendar),
+            calendar: newYorkCalendar
+        ))
+        #expect(!policy.isActive(
+            at: date(2026, 3, 9, 0, 0, calendar: newYorkCalendar),
+            calendar: newYorkCalendar
+        ))
     }
 
     @Test @MainActor func legacyPolicyDataDecodesWithoutCustomWeekdays() throws {
@@ -576,6 +972,26 @@ struct LockScreenPolicyTests {
         #expect(policy.name == "工作时间")
     }
 
+    @Test func overnightInputIsNormalizedBeforePersistence() {
+        let suite = "LockScreenPolicyTests.overnightInputIsNormalizedBeforePersistence"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+        settings.addLockScreenPolicy()
+        let id = settings.lockScreenPolicies[0].id
+
+        settings.updateLockScreenPolicy(id: id) {
+            $0.setStartMinutes(22 * 60)
+            $0.setEndMinutes(6 * 60)
+        }
+
+        #expect(settings.lockScreenPolicies[0].endMinutes == 30 * 60)
+        #expect(settings.lockScreenPolicies[0].timeRangeText == "22:00 - 30:00")
+        let loaded = MonitorSettings(defaults: defaults)
+        #expect(loaded.lockScreenPolicies[0].endMinutes == 30 * 60)
+        #expect(loaded.lockScreenPolicies[0].timeRangeText == "22:00 - 30:00")
+    }
+
     @Test func addedPolicyContinuesThroughEndOfDay() {
         let suite = "LockScreenPolicyTests.addedPolicyContinuesThroughEndOfDay"
         let defaults = UserDefaults(suiteName: suite)!
@@ -646,9 +1062,20 @@ struct LockScreenPolicyTests {
     }
 
     private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int) -> Date {
+        date(year, month, day, hour, minute, calendar: calendar)
+    }
+
+    private func date(
+        _ year: Int,
+        _ month: Int,
+        _ day: Int,
+        _ hour: Int,
+        _ minute: Int,
+        calendar: Calendar
+    ) -> Date {
         var components = DateComponents()
         components.calendar = calendar
-        components.timeZone = TimeZone(secondsFromGMT: 0)
+        components.timeZone = calendar.timeZone
         components.year = year
         components.month = month
         components.day = day

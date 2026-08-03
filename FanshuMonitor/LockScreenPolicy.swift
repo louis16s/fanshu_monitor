@@ -1,6 +1,6 @@
 import Foundation
 
-enum LockScreenDayScope: String, CaseIterable, Codable, Identifiable, Sendable {
+nonisolated enum LockScreenDayScope: String, CaseIterable, Codable, Identifiable, Sendable {
     case everyDay
     case weekdays
     case weekends
@@ -18,7 +18,7 @@ enum LockScreenDayScope: String, CaseIterable, Codable, Identifiable, Sendable {
     }
 }
 
-enum LockScreenPowerCondition: String, CaseIterable, Codable, Identifiable, Sendable {
+nonisolated enum LockScreenPowerCondition: String, CaseIterable, Codable, Identifiable, Sendable {
     case any
     case connected
     case battery
@@ -40,6 +40,13 @@ enum LockScreenPowerCondition: String, CaseIterable, Codable, Identifiable, Send
         }
     }
 
+    func overlaps(_ other: LockScreenPowerCondition) -> Bool {
+        switch (self, other) {
+        case (.connected, .battery), (.battery, .connected): false
+        default: true
+        }
+    }
+
     var waitingText: String {
         switch self {
         case .any: "等待规则生效"
@@ -49,13 +56,13 @@ enum LockScreenPowerCondition: String, CaseIterable, Codable, Identifiable, Send
     }
 }
 
-enum SystemPowerSourceState: Equatable, Sendable {
+nonisolated enum SystemPowerSourceState: Equatable, Sendable {
     case connected
     case battery
     case unknown
 }
 
-enum LockScreenPolicyStatus: Equatable, Sendable {
+nonisolated enum LockScreenPolicyStatus: Equatable, Sendable {
     case disabled
     case restored
     case systemSettingsChanged
@@ -63,6 +70,8 @@ enum LockScreenPolicyStatus: Equatable, Sendable {
     case noRules
     case waiting(nextTransition: Date?)
     case waitingForPower(LockScreenPowerCondition)
+    case waitingForPowerSource
+    case sessionInactive
     case active(timeRange: String, idleMinutes: Int)
     case locking
     case locked
@@ -89,6 +98,10 @@ enum LockScreenPolicyStatus: Equatable, Sendable {
             }
         case .waitingForPower(let condition):
             condition.waitingText
+        case .waitingForPowerSource:
+            "正在识别电源状态"
+        case .sessionInactive:
+            "用户会话未激活，已暂停"
         case .active(let timeRange, let idleMinutes):
             "正在执行：\(timeRange)，闲置 \(idleMinutes) 分钟后直接锁定"
         case .locking:
@@ -108,7 +121,7 @@ enum LockScreenPolicyStatus: Equatable, Sendable {
     }
 }
 
-struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
+nonisolated struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
     static let maximumExtendedHour = 40
     static let maximumNameLength = 16
 
@@ -163,8 +176,8 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         for dayOffset in [-1, 0] {
             guard let policyDay = calendar.date(byAdding: .day, value: dayOffset, to: startOfToday),
                   applies(to: calendar.component(.weekday, from: policyDay)),
-                  let policyStart = calendar.date(byAdding: .minute, value: startMinutes, to: policyDay),
-                  let policyEnd = calendar.date(byAdding: .minute, value: effectiveEndMinutes, to: policyDay) else {
+                  let policyStart = policyDate(on: policyDay, atExtendedMinutes: startMinutes, calendar: calendar),
+                  let policyEnd = policyDate(on: policyDay, atExtendedMinutes: effectiveEndMinutes, calendar: calendar) else {
                 continue
             }
             if date >= policyStart && date < policyEnd {
@@ -182,14 +195,14 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         for dayOffset in -1...8 {
             guard let startDate = calendar.date(byAdding: .day, value: dayOffset, to: startOfToday),
                   applies(to: calendar.component(.weekday, from: startDate)),
-                  let policyStart = calendar.date(byAdding: .minute, value: startMinutes, to: startDate) else {
+                  let policyStart = policyDate(on: startDate, atExtendedMinutes: startMinutes, calendar: calendar) else {
                 continue
             }
 
-            guard let policyEnd = calendar.date(
-                byAdding: .minute,
-                value: effectiveEndMinutes,
-                to: startDate
+            guard let policyEnd = policyDate(
+                on: startDate,
+                atExtendedMinutes: effectiveEndMinutes,
+                calendar: calendar
             ) else {
                 continue
             }
@@ -231,6 +244,23 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         }
     }
 
+    mutating func setStartMinutes(_ value: Int) {
+        startMinutes = Self.clampedStartMinutes(value)
+        endMinutes = Self.normalizedEndMinutes(endMinutes, relativeTo: startMinutes)
+    }
+
+    mutating func setEndMinutes(_ value: Int) {
+        endMinutes = Self.normalizedEndMinutes(value, relativeTo: startMinutes)
+    }
+
+    mutating func normalize() {
+        name = Self.normalizedName(name)
+        customWeekdays = Self.validWeekdays(customWeekdays)
+        startMinutes = Self.clampedStartMinutes(startMinutes)
+        endMinutes = Self.normalizedEndMinutes(endMinutes, relativeTo: startMinutes)
+        idleMinutes = min(1_440, max(1, idleMinutes))
+    }
+
     private func applies(to weekday: Int) -> Bool {
         switch dayScope {
         case .everyDay:
@@ -255,6 +285,27 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
 
     private static func validWeekdays(_ weekdays: Set<Int>) -> Set<Int> {
         Set(weekdays.filter { (1...7).contains($0) })
+    }
+
+    private func policyDate(
+        on policyDay: Date,
+        atExtendedMinutes minutes: Int,
+        calendar: Calendar
+    ) -> Date? {
+        let dayOffset = minutes / (24 * 60)
+        let clockMinutes = minutes % (24 * 60)
+        guard let localDay = calendar.date(byAdding: .day, value: dayOffset, to: policyDay) else {
+            return nil
+        }
+        return calendar.date(
+            bySettingHour: clockMinutes / 60,
+            minute: clockMinutes % 60,
+            second: 0,
+            of: localDay,
+            matchingPolicy: .nextTime,
+            repeatedTimePolicy: .first,
+            direction: .forward
+        )
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -284,7 +335,7 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         min(23 * 60 + 59, max(0, value))
     }
 
-    private var effectiveEndMinutes: Int {
+    var effectiveEndMinutes: Int {
         let clamped = min(Self.maximumExtendedHour * 60, max(0, endMinutes))
         if clamped < startMinutes {
             return min(Self.maximumExtendedHour * 60, clamped + 24 * 60)
@@ -299,7 +350,124 @@ struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
-struct ScreenSaverLockBaseline: Codable, Equatable, Sendable {
+nonisolated struct LockScreenPolicyResolution: Equatable, Sendable {
+    let timeActivePolicies: [LockScreenPolicy]
+    let matchingPolicies: [LockScreenPolicy]
+    let selectedPolicy: LockScreenPolicy?
+
+    var waitingPolicy: LockScreenPolicy? {
+        LockScreenPolicyResolver.preferredPolicy(from: timeActivePolicies)
+    }
+}
+
+nonisolated enum LockScreenPolicyResolver {
+    private struct WeeklyInterval {
+        let lowerBound: Int
+        let upperBound: Int
+
+        func overlaps(_ other: WeeklyInterval) -> Bool {
+            lowerBound < other.upperBound && other.lowerBound < upperBound
+        }
+    }
+
+    private static let minutesPerDay = 24 * 60
+    private static let minutesPerWeek = 7 * minutesPerDay
+
+    static func resolve(
+        policies: [LockScreenPolicy],
+        at date: Date,
+        powerSource: SystemPowerSourceState,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> LockScreenPolicyResolution {
+        let timeActivePolicies = policies.filter { $0.isActive(at: date, calendar: calendar) }
+        let matchingPolicies = timeActivePolicies.filter { $0.powerCondition.matches(powerSource) }
+        return LockScreenPolicyResolution(
+            timeActivePolicies: timeActivePolicies,
+            matchingPolicies: matchingPolicies,
+            selectedPolicy: preferredPolicy(from: matchingPolicies)
+        )
+    }
+
+    static func conflictingPolicies(
+        for policy: LockScreenPolicy,
+        in policies: [LockScreenPolicy]
+    ) -> [LockScreenPolicy] {
+        policies
+            .filter { $0.id != policy.id && policiesOverlap(policy, $0) }
+            .sorted(by: policyComesBefore)
+    }
+
+    static func policiesOverlap(_ lhs: LockScreenPolicy, _ rhs: LockScreenPolicy) -> Bool {
+        guard lhs.isEnabled,
+              rhs.isEnabled,
+              lhs.hasValidTimeRange,
+              rhs.hasValidTimeRange,
+              lhs.powerCondition.overlaps(rhs.powerCondition) else {
+            return false
+        }
+
+        let lhsIntervals = weeklyIntervals(for: lhs)
+        let rhsIntervals = weeklyIntervals(for: rhs)
+        return lhsIntervals.contains { lhsInterval in
+            rhsIntervals.contains { lhsInterval.overlaps($0) }
+        }
+    }
+
+    static func preferredPolicy(from policies: [LockScreenPolicy]) -> LockScreenPolicy? {
+        policies.min(by: policyComesBefore)
+    }
+
+    nonisolated private static func policyComesBefore(
+        _ lhs: LockScreenPolicy,
+        _ rhs: LockScreenPolicy
+    ) -> Bool {
+        if lhs.idleMinutes != rhs.idleMinutes {
+            return lhs.idleMinutes < rhs.idleMinutes
+        }
+
+        let lhsPowerSpecificity = lhs.powerCondition == .any ? 0 : 1
+        let rhsPowerSpecificity = rhs.powerCondition == .any ? 0 : 1
+        if lhsPowerSpecificity != rhsPowerSpecificity {
+            return lhsPowerSpecificity > rhsPowerSpecificity
+        }
+
+        let lhsDuration = lhs.effectiveEndMinutes - lhs.startMinutes
+        let rhsDuration = rhs.effectiveEndMinutes - rhs.startMinutes
+        if lhsDuration != rhsDuration {
+            return lhsDuration < rhsDuration
+        }
+
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private static func weeklyIntervals(for policy: LockScreenPolicy) -> [WeeklyInterval] {
+        applicableWeekdays(for: policy).flatMap { weekday -> [WeeklyInterval] in
+            let dayOffset = (weekday - 1) * minutesPerDay
+            let lowerBound = dayOffset + policy.startMinutes
+            let upperBound = dayOffset + policy.effectiveEndMinutes
+            guard upperBound > lowerBound else { return [] }
+
+            if upperBound <= minutesPerWeek {
+                return [WeeklyInterval(lowerBound: lowerBound, upperBound: upperBound)]
+            }
+            return [
+                WeeklyInterval(lowerBound: lowerBound, upperBound: minutesPerWeek),
+                WeeklyInterval(lowerBound: 0, upperBound: upperBound - minutesPerWeek)
+            ]
+        }
+    }
+
+    private static func applicableWeekdays(for policy: LockScreenPolicy) -> Set<Int> {
+        switch policy.dayScope {
+        case .everyDay: Set(1...7)
+        case .weekdays: Set(2...6)
+        case .weekends: [1, 7]
+        case .custom: policy.customWeekdays
+        }
+    }
+}
+
+nonisolated struct ScreenSaverLockBaseline: Codable, Equatable, Sendable {
     var idleTime: Int?
     var askForPassword: Bool?
     var askForPasswordDelay: Int?

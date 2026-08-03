@@ -114,6 +114,7 @@ final class LockScreenPolicyController: ObservableObject {
     private var lockAttemptTask: Task<Void, Never>?
     private var recoveryTask: Task<Void, Never>?
     private var environmentMaintenanceTimer: Timer?
+    private var baselineRestoreRetryTimer: Timer?
     private var powerSourceRunLoopSource: CFRunLoopSource?
     private var lastAppliedConfiguration: AppliedConfiguration?
     private var baselineIsRestored = false
@@ -125,8 +126,10 @@ final class LockScreenPolicyController: ObservableObject {
     private let powerSourceProvider: @MainActor @Sendable () -> SystemPowerSourceState
     private let attemptTiming: LockScreenAttemptTiming
     private let recoveryDelay: Duration
+    private let baselineRestoreRetryInterval: TimeInterval
     private let environment: LockScreenSystemEnvironment
     private var isSleeping = false
+    private var isSessionActive = true
 
     private struct AppliedConfiguration: Equatable {
         let policyID: LockScreenPolicy.ID
@@ -141,6 +144,7 @@ final class LockScreenPolicyController: ObservableObject {
         powerSourceProvider: @escaping @MainActor @Sendable () -> SystemPowerSourceState = SystemPowerSource.currentState,
         attemptTiming: LockScreenAttemptTiming = .standard,
         recoveryDelay: Duration = .seconds(1),
+        baselineRestoreRetryInterval: TimeInterval = 60,
         environment: LockScreenSystemEnvironment? = nil
     ) {
         let resolvedEnvironment = environment ?? .live()
@@ -151,6 +155,7 @@ final class LockScreenPolicyController: ObservableObject {
         self.powerSourceProvider = powerSourceProvider
         self.attemptTiming = attemptTiming
         self.recoveryDelay = recoveryDelay
+        self.baselineRestoreRetryInterval = baselineRestoreRetryInterval
         self.environment = resolvedEnvironment
         systemSettings = resolvedEnvironment.readSettings()
     }
@@ -234,22 +239,29 @@ final class LockScreenPolicyController: ObservableObject {
             deactivatePolicies(using: settings)
             return
         }
+        guard !isSleeping, isSessionActive else { return }
 
         setSystemEventObserving(true)
 
-        let timeActivePolicies = settings.lockScreenPolicies.filter { $0.isActive(at: now) }
         let powerSource = powerSourceProvider()
-        guard let policy = timeActivePolicies.first(where: { $0.powerCondition.matches(powerSource) }) else {
+        let resolution = LockScreenPolicyResolver.resolve(
+            policies: settings.lockScreenPolicies,
+            at: now,
+            powerSource: powerSource
+        )
+        guard let policy = resolution.selectedPolicy else {
             cancelIdleLockTimer()
             cancelLockAttempt()
             stopDirectLockEnvironment()
             didRequestLockForCurrentIdlePeriod = false
-            let restored = restoreBaseline(using: settings, clear: false)
+            let restored = restoreBaseline(using: settings)
             activePolicy = nil
             if restored, settings.lockScreenPolicies.isEmpty {
                 status = .noRules
-            } else if restored, let waitingPolicy = timeActivePolicies.first {
-                status = .waitingForPower(waitingPolicy.powerCondition)
+            } else if restored, let waitingPolicy = resolution.waitingPolicy {
+                status = powerSource == .unknown
+                    ? .waitingForPowerSource
+                    : .waitingForPower(waitingPolicy.powerCondition)
             } else if restored, let next = settings.lockScreenPolicies
                 .flatMap({ $0.transitionDates(after: now) })
                 .min() {
@@ -261,12 +273,16 @@ final class LockScreenPolicyController: ObservableObject {
             return
         }
 
+        cancelBaselineRestoreRetry()
         captureBaselineIfNeeded(using: settings)
         let configuration = AppliedConfiguration(
             policyID: policy.id,
             idleSeconds: policy.idleMinutes * 60
         )
         if configuration != lastAppliedConfiguration {
+            cancelIdleLockTimer()
+            cancelLockAttempt()
+            didRequestLockForCurrentIdlePeriod = false
             lastAppliedConfiguration = configuration
         }
         activePolicy = policy
@@ -329,7 +345,7 @@ final class LockScreenPolicyController: ObservableObject {
             guard !didRequestLockForCurrentIdlePeriod else { return }
             didRequestLockForCurrentIdlePeriod = true
             status = .locking
-            startLockAttempt()
+            startLockAttempt(for: policy.id)
             return
         }
 
@@ -354,7 +370,7 @@ final class LockScreenPolicyController: ObservableObject {
         idleLockTimer = nil
     }
 
-    private func startLockAttempt() {
+    private func startLockAttempt(for policyID: LockScreenPolicy.ID) {
         cancelLockAttempt()
         lockAttemptTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -364,10 +380,16 @@ final class LockScreenPolicyController: ObservableObject {
                 requestKeyboardLock: self.requestKeyboardLock,
                 isScreenLocked: self.screenLockedProvider,
                 shouldContinue: { [weak self] in
-                    self?.settings?.lockScreenPoliciesEnabled == true && self?.status == .locking
+                    self?.settings?.lockScreenPoliciesEnabled == true
+                        && self?.activePolicy?.id == policyID
+                        && self?.status == .locking
                 }
             )
-            guard !Task.isCancelled, self.status == .locking else { return }
+            guard !Task.isCancelled,
+                  self.activePolicy?.id == policyID,
+                  self.status == .locking else {
+                return
+            }
 
             switch result {
             case .locked:
@@ -433,23 +455,59 @@ final class LockScreenPolicyController: ObservableObject {
 
     @discardableResult
     private func restoreBaseline(using settings: MonitorSettings, clear: Bool = true) -> Bool {
-        guard let baseline = settings.lockScreenBaseline else { return true }
+        guard let baseline = settings.lockScreenBaseline else {
+            cancelBaselineRestoreRetry()
+            return true
+        }
         if !baselineIsRestored {
             guard environment.restoreSettings(baseline) else {
                 status = .environmentFailed(reason: "无法恢复系统原设置")
                 AppLogger.lockScreen.error("Unable to restore the original system lock preferences")
+                scheduleBaselineRestoreRetry()
                 return false
             }
             lastAppliedConfiguration = nil
             baselineIsRestored = true
         }
+        cancelBaselineRestoreRetry()
         if clear {
             settings.lockScreenBaseline = nil
         }
         return true
     }
 
+    private func scheduleBaselineRestoreRetry() {
+        guard baselineRestoreRetryTimer == nil else { return }
+        baselineRestoreRetryTimer = Timer.scheduledTimer(
+            withTimeInterval: baselineRestoreRetryInterval,
+            repeats: false
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let settings = self.settings else { return }
+                self.baselineRestoreRetryTimer = nil
+                guard self.restoreBaseline(using: settings) else { return }
+
+                if !settings.lockScreenPoliciesEnabled {
+                    self.status = .disabled
+                } else if !self.isSessionActive {
+                    self.status = .sessionInactive
+                } else if !self.isSleeping {
+                    self.reevaluate()
+                }
+            }
+        }
+        baselineRestoreRetryTimer?.tolerance = min(5, baselineRestoreRetryInterval * 0.2)
+    }
+
+    private func cancelBaselineRestoreRetry() {
+        baselineRestoreRetryTimer?.invalidate()
+        baselineRestoreRetryTimer = nil
+    }
+
     private func setSystemEventObserving(_ enabled: Bool) {
+        if enabled {
+            setPowerSourceObserving(true)
+        }
         let isObserving = !workspaceObservers.isEmpty
             || !systemObservers.isEmpty
             || !distributedObservers.isEmpty
@@ -466,8 +524,6 @@ final class LockScreenPolicyController: ObservableObject {
             sessionWatchdogTimer = nil
             return
         }
-
-        setPowerSourceObserving(true)
 
         let workspaceCenter = NSWorkspace.shared.notificationCenter
         workspaceObservers = [
@@ -514,7 +570,7 @@ final class LockScreenPolicyController: ObservableObject {
                 queue: .main
             ) { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    self?.handleSessionDidResignActive()
+                    self?.handleScreenDidLock()
                 }
             },
             distributedCenter.addObserver(
@@ -565,9 +621,11 @@ final class LockScreenPolicyController: ObservableObject {
         AppLogger.lockScreen.notice("System will sleep; pausing lock policy")
         isSleeping = true
         cancelRecoveryTask()
+        cancelTransitionTimer()
         cancelIdleLockTimer()
         cancelLockAttempt()
         stopDirectLockEnvironment()
+        setPowerSourceObserving(false)
     }
 
     func handleSystemDidWake() {
@@ -578,6 +636,7 @@ final class LockScreenPolicyController: ObservableObject {
 
     func handleSessionDidBecomeActive() {
         AppLogger.lockScreen.notice("User session became active; resuming lock policy")
+        isSessionActive = true
         cancelLockAttempt()
         didRequestLockForCurrentIdlePeriod = false
         guard !isSleeping else {
@@ -590,6 +649,26 @@ final class LockScreenPolicyController: ObservableObject {
 
     func handleSessionDidResignActive() {
         AppLogger.lockScreen.notice("User session resigned active state")
+        isSessionActive = false
+        cancelTransitionTimer()
+        setPowerSourceObserving(false)
+        if screenLockedProvider() {
+            markSessionLocked()
+        } else {
+            cancelIdleLockTimer()
+            cancelLockAttempt()
+            stopDirectLockEnvironment()
+            didRequestLockForCurrentIdlePeriod = false
+            if let settings, restoreBaseline(using: settings) {
+                status = .sessionInactive
+            }
+        }
+    }
+
+    func handleScreenDidLock() {
+        isSessionActive = false
+        cancelTransitionTimer()
+        setPowerSourceObserving(false)
         markSessionLocked()
     }
 
@@ -598,7 +677,7 @@ final class LockScreenPolicyController: ObservableObject {
         let isLocked = screenLockedProvider()
         if isLocked, status != .locked {
             AppLogger.lockScreen.warning("Session watchdog recovered a missed lock notification")
-            handleSessionDidResignActive()
+            handleScreenDidLock()
         } else if !isLocked, status == .locked {
             AppLogger.lockScreen.warning("Session watchdog recovered a missed unlock notification")
             handleSessionDidBecomeActive()
@@ -609,10 +688,22 @@ final class LockScreenPolicyController: ObservableObject {
         cancelIdleLockTimer()
         cancelLockAttempt()
         cancelRecoveryTask()
+        cancelBaselineRestoreRetry()
         stopDirectLockEnvironment()
         if let settings {
-            restoreBaseline(using: settings, clear: false)
+            restoreBaselineForTermination(using: settings)
         }
+    }
+
+    private func restoreBaselineForTermination(using settings: MonitorSettings) {
+        guard let baseline = settings.lockScreenBaseline else { return }
+        guard environment.restoreSettings(baseline) else {
+            AppLogger.lockScreen.error("Unable to restore system lock preferences before termination")
+            return
+        }
+        settings.lockScreenBaseline = nil
+        baselineIsRestored = true
+        lastAppliedConfiguration = nil
     }
 
     private func scheduleRecovery(after delay: Duration) {
@@ -652,6 +743,7 @@ final class LockScreenPolicyController: ObservableObject {
         cancelIdleLockTimer()
         cancelLockAttempt()
         cancelRecoveryTask()
+        cancelBaselineRestoreRetry()
         stopDirectLockEnvironment()
         sessionWatchdogTimer?.invalidate()
         sessionWatchdogTimer = nil
@@ -670,6 +762,7 @@ final class LockScreenPolicyController: ObservableObject {
         idleLockTimer?.invalidate()
         lockAttemptTask?.cancel()
         recoveryTask?.cancel()
+        baselineRestoreRetryTimer?.invalidate()
         environmentMaintenanceTimer?.invalidate()
         sessionWatchdogTimer?.invalidate()
         workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
