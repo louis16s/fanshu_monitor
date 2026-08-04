@@ -66,13 +66,16 @@ struct MonitorPanelView: View {
                     .panelLabelFont(size: 9, tracking: 1.1)
                     .foregroundStyle(theme.captionText)
 
-                LockScreenExecutionIndicator(
-                    controller: store.lockScreenController,
-                    color: theme.captionText
-                )
             }
 
             Spacer()
+
+            LockScreenSettingsButton(
+                controller: store.lockScreenController,
+                color: theme.captionText
+            ) {
+                SettingsWindowPresenter.open(openSettings, tab: .lockScreen)
+            }
 
             Button {
                 SettingsWindowPresenter.open(openSettings)
@@ -217,31 +220,23 @@ struct MonitorPanelView: View {
     }()
 }
 
-private struct LockScreenExecutionIndicator: View {
+private struct LockScreenSettingsButton: View {
     @ObservedObject var controller: LockScreenPolicyController
     let color: Color
+    let action: () -> Void
 
     var body: some View {
-        if showsIndicator, let activePolicy = controller.activePolicy {
+        Button(action: action) {
             Image(systemName: symbolName)
-                .font(.system(size: 9, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(indicatorColor)
-                .frame(width: 14, height: 14)
+                .frame(width: 20, height: 20)
                 .contentShape(Rectangle())
-                .help(helpText(for: activePolicy))
-                .accessibilityLabel("锁屏策略执行中")
-                .accessibilityValue(activePolicy.timeRangeText)
         }
-    }
-
-    private var showsIndicator: Bool {
-        switch controller.status {
-        case .active, .locking, .locked, .lockFailed, .environmentFailed:
-            true
-        case .disabled, .restored, .systemSettingsChanged, .systemSettingsBlocked,
-             .noRules, .waiting, .waitingForPower, .waitingForPowerSource, .sessionInactive:
-            false
-        }
+        .buttonStyle(.plain)
+        .help(helpText)
+        .accessibilityLabel("锁屏设置")
+        .accessibilityValue(controller.statusText)
     }
 
     private var symbolName: String {
@@ -250,8 +245,10 @@ private struct LockScreenExecutionIndicator: View {
             "exclamationmark.triangle.fill"
         case .locking, .locked:
             "lock.fill"
-        default:
+        case .active:
             "lock.badge.clock"
+        default:
+            "lock"
         }
     }
 
@@ -264,12 +261,10 @@ private struct LockScreenExecutionIndicator: View {
         }
     }
 
-    private func helpText(for policy: LockScreenPolicy) -> String {
-        switch controller.status {
-        case .lockFailed, .environmentFailed:
-            controller.statusText
-        default:
-            "锁屏策略执行中 · \(policy.timeRangeText) · 闲置 \(policy.idleMinutes) 分钟"
+    private var helpText: String {
+        if let policy = controller.activePolicy {
+            return "锁屏设置 · \(policy.timeRangeText) · 闲置 \(policy.idleMinutes) 分钟"
         }
+        return "锁屏设置"
     }
 }

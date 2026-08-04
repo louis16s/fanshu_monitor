@@ -19,20 +19,21 @@ struct LockScreenSettingsView: View {
             bottomPadding: 18
         ) {
             SettingsGroup("系统锁屏设置") {
-                SettingsRow(
-                    title: "直接锁定",
-                    subtitle: "到达闲置时间后立即进入登录锁定界面"
-                ) {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("直接锁定")
+                            .font(.body.weight(.medium))
+                        Text("屏保 \(systemIdleDescription) · 密码 \(systemPasswordDescription)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 12)
+
                     Image(systemName: "lock.fill")
                         .foregroundStyle(Color.accentColor)
-                }
 
-                SettingsDivider()
-
-                SettingsRow(
-                    title: "当前设置",
-                    subtitle: "屏保 \(systemIdleDescription) · 密码 \(systemPasswordDescription)"
-                ) {
                     Button {
                         withAnimation(.easeInOut(duration: 0.16)) {
                             systemSettingsExpanded.toggle()
@@ -43,6 +44,9 @@ struct LockScreenSettingsView: View {
                     .buttonStyle(.borderless)
                     .help(systemSettingsExpanded ? "收起系统锁屏设置" : "展开系统锁屏设置")
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .frame(minHeight: 50)
 
                 if systemSettingsExpanded {
                     SettingsDivider()
@@ -109,26 +113,23 @@ struct LockScreenSettingsView: View {
             }
 
             SettingsGroup("自动锁屏") {
-                SettingsRow(
-                    title: "自动锁屏",
-                    subtitle: "按时间直接锁定，不启动屏保"
-                ) {
-                    Toggle("", isOn: policyMasterBinding)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                }
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("自动锁屏")
+                            .font(.body.weight(.medium))
+                        Text(controller.statusText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .layoutPriority(1)
 
-                SettingsDivider()
+                    Spacer(minLength: 10)
 
-                HStack(spacing: 10) {
                     Image(systemName: lockStatusIcon)
                         .foregroundStyle(lockStatusColor)
-                    Text(controller.statusText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 8)
+
                     if settings.lockScreenPoliciesEnabled {
                         Button {
                             showsRestoreConfirmation = true
@@ -138,9 +139,14 @@ struct LockScreenSettingsView: View {
                         .buttonStyle(.borderless)
                         .help("恢复原来的系统锁屏设置")
                     }
+
+                    Toggle("", isOn: policyMasterBinding)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 11)
+                .padding(.vertical, 9)
+                .frame(minHeight: 50)
             }
 
             lockScreenPolicySection
