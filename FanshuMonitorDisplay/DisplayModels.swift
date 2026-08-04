@@ -199,6 +199,16 @@ nonisolated enum BuiltInDisplayRestorePolicy {
     }
 }
 
+nonisolated enum BuiltInDisplayTopologyResult {
+    static func succeeded(
+        requestSucceeded: Bool,
+        targetBlackoutEnabled: Bool,
+        displayIsRestored: Bool
+    ) -> Bool {
+        requestSucceeded || (targetBlackoutEnabled ? !displayIsRestored : displayIsRestored)
+    }
+}
+
 struct RecentDisplayValue {
     let value: Double
     let date: Date

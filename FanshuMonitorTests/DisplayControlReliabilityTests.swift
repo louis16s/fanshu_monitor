@@ -290,6 +290,37 @@ struct BuiltInDisplayRestorePolicyTests {
     }
 }
 
+struct BuiltInDisplayTopologyResultTests {
+    @Test func acceptsAnAppliedRestoreWhenCoreGraphicsReturnsAnError() {
+        #expect(BuiltInDisplayTopologyResult.succeeded(
+            requestSucceeded: false,
+            targetBlackoutEnabled: false,
+            displayIsRestored: true
+        ))
+    }
+
+    @Test func acceptsAnAppliedBlackoutWhenCoreGraphicsReturnsAnError() {
+        #expect(BuiltInDisplayTopologyResult.succeeded(
+            requestSucceeded: false,
+            targetBlackoutEnabled: true,
+            displayIsRestored: false
+        ))
+    }
+
+    @Test func rejectsATopologyThatDidNotReachItsTargetState() {
+        #expect(!BuiltInDisplayTopologyResult.succeeded(
+            requestSucceeded: false,
+            targetBlackoutEnabled: false,
+            displayIsRestored: false
+        ))
+        #expect(!BuiltInDisplayTopologyResult.succeeded(
+            requestSucceeded: false,
+            targetBlackoutEnabled: true,
+            displayIsRestored: true
+        ))
+    }
+}
+
 struct DisplayControlWorkerTests {
     private let key = ControlKey(displayID: 1, control: .brightness)
 

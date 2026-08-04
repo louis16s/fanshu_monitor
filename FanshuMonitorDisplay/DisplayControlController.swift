@@ -8,6 +8,8 @@ import OSLog
 final class DisplayControlController: ObservableObject {
     @Published private(set) var displays: [ControlledDisplay] = []
     @Published private var builtInBlackoutDisplayIDs: Set<CGDirectDisplayID> = []
+    @Published private(set) var builtInBlackoutActionFailed = false
+    @Published private(set) var builtInBlackoutOperationPending = false
     @Published private var pendingValues: [CGDirectDisplayID: [DisplayControlKind: Double]] = [:]
 
     private static let builtInBlackoutPreferenceKey = "displayControl.builtInBlackoutDesired"
@@ -31,7 +33,6 @@ final class DisplayControlController: ObservableObject {
     private var nativeBrightnessSyncGeneration = 0
     private var nativeBrightnessReadsInFlight: Set<CGDirectDisplayID> = []
     private var cachedBuiltInDisplay: ControlledDisplay?
-    private var builtInTopologyOperationPending = false
     private var isBuiltInBlackoutDesired: Bool {
         get {
             defaults.bool(forKey: Self.builtInBlackoutPreferenceKey)
@@ -132,12 +133,20 @@ final class DisplayControlController: ObservableObject {
         guard let display = displays.first(where: { $0.id == displayID }),
               display.isBuiltIn
         else {
+            AppLogger.ui.error("Ignored built-in display toggle because display ID \(displayID) is unavailable")
             return
         }
 
         let shouldEnable = !builtInBlackoutDisplayIDs.contains(displayID)
-        guard !builtInTopologyOperationPending else { return }
-        builtInTopologyOperationPending = true
+        guard !builtInBlackoutOperationPending else {
+            AppLogger.ui.debug("Ignored duplicate built-in display topology request")
+            return
+        }
+        builtInBlackoutActionFailed = false
+        builtInBlackoutOperationPending = true
+        AppLogger.ui.notice(
+            "Requesting built-in display blackout: \(shouldEnable, privacy: .public), display ID: \(displayID)"
+        )
         worker.setBuiltInBlackout(
             shouldEnable,
             display: display,
@@ -146,8 +155,15 @@ final class DisplayControlController: ObservableObject {
         ) { [weak self] succeeded in
             Task { @MainActor in
                 guard let self else { return }
-                self.builtInTopologyOperationPending = false
-                guard succeeded else { return }
+                self.builtInBlackoutOperationPending = false
+                self.builtInBlackoutActionFailed = !succeeded
+                guard succeeded else {
+                    AppLogger.ui.error(
+                        "Built-in display topology request failed, blackout: \(shouldEnable, privacy: .public), display ID: \(displayID)"
+                    )
+                    self.scheduleRefresh(delay: 0.2)
+                    return
+                }
                 if shouldEnable {
                     self.cachedBuiltInDisplay = display
                     self.isBuiltInBlackoutDesired = true
@@ -156,6 +172,9 @@ final class DisplayControlController: ObservableObject {
                     self.isBuiltInBlackoutDesired = false
                     self.builtInBlackoutDisplayIDs.remove(displayID)
                 }
+                AppLogger.ui.notice(
+                    "Built-in display topology request completed, blackout: \(shouldEnable, privacy: .public), display ID: \(displayID)"
+                )
                 self.scheduleRefresh(delay: 0.2)
             }
         }
@@ -243,8 +262,11 @@ final class DisplayControlController: ObservableObject {
 
     func restoreBuiltInDisplayForTermination() {
         wakeMaintenanceGeneration &+= 1
+        isBuiltInBlackoutDesired = false
         service.clearBuiltInBlackouts()
         builtInBlackoutDisplayIDs.removeAll()
+        builtInBlackoutOperationPending = false
+        builtInBlackoutActionFailed = false
     }
 
     func setPanelVisible(_ isVisible: Bool) {
@@ -307,12 +329,12 @@ final class DisplayControlController: ObservableObject {
             return
         }
 
-        if isBuiltInBlackoutDesired, !builtInTopologyOperationPending {
-            builtInTopologyOperationPending = true
+        if isBuiltInBlackoutDesired, !builtInBlackoutOperationPending {
+            builtInBlackoutOperationPending = true
             worker.reapplyBuiltInBlackouts(service: service) { [weak self] appliedDisplayIDs in
                 Task { @MainActor in
                     guard let self else { return }
-                    self.builtInTopologyOperationPending = false
+                    self.builtInBlackoutOperationPending = false
                     if !appliedDisplayIDs.isEmpty {
                         self.builtInBlackoutDisplayIDs.formUnion(appliedDisplayIDs)
                     }
@@ -744,14 +766,14 @@ final class DisplayControlController: ObservableObject {
             blackoutDesired: isBuiltInBlackoutDesired,
             isolatedDisplayCount: builtInBlackoutDisplayIDs.count
         ) else {
-            guard !builtInTopologyOperationPending else { return }
+            guard !builtInBlackoutOperationPending else { return }
             AppLogger.ui.notice("No external display remains; restoring the built-in display")
-            builtInTopologyOperationPending = true
+            builtInBlackoutOperationPending = true
             builtInBlackoutDisplayIDs.removeAll()
             isBuiltInBlackoutDesired = false
             worker.clearBuiltInBlackouts(service: service) { [weak self] in
                 Task { @MainActor in
-                    self?.builtInTopologyOperationPending = false
+                    self?.builtInBlackoutOperationPending = false
                     self?.scheduleRefresh(delay: 0.2)
                 }
             }
@@ -760,8 +782,8 @@ final class DisplayControlController: ObservableObject {
         if isBuiltInBlackoutDesired {
             for display in displays where display.isBuiltIn {
                 if !builtInBlackoutDisplayIDs.contains(display.id),
-                   !builtInTopologyOperationPending {
-                    builtInTopologyOperationPending = true
+                   !builtInBlackoutOperationPending {
+                    builtInBlackoutOperationPending = true
                     worker.setBuiltInBlackout(
                         true,
                         display: display,
@@ -770,8 +792,14 @@ final class DisplayControlController: ObservableObject {
                     ) { [weak self] succeeded in
                         Task { @MainActor in
                             guard let self else { return }
-                            self.builtInTopologyOperationPending = false
-                            guard succeeded else { return }
+                            self.builtInBlackoutOperationPending = false
+                            self.builtInBlackoutActionFailed = !succeeded
+                            guard succeeded else {
+                                self.isBuiltInBlackoutDesired = false
+                                self.builtInBlackoutDisplayIDs.remove(display.id)
+                                AppLogger.ui.error("Automatic built-in display blackout failed; cleared stale desired state")
+                                return
+                            }
                             self.cachedBuiltInDisplay = display
                             self.builtInBlackoutDisplayIDs.insert(display.id)
                             self.scheduleRefresh(delay: 0.15)

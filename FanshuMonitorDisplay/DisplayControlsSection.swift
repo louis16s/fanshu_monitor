@@ -156,19 +156,26 @@ private struct DisplayControlGroup: View {
                         Button {
                             controller.toggleBuiltInBlackout(displayID: display.id)
                         } label: {
-                            Text(controller.isBuiltInBlackoutEnabled(displayID: display.id) ? "恢复" : "关闭")
-                                .font(.system(size: 9, weight: .semibold, design: .rounded))
-                                .lineLimit(1)
+                            if controller.builtInBlackoutOperationPending {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .frame(width: 22)
+                            } else {
+                                Text(builtInDisplayActionTitle)
+                                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                                    .lineLimit(1)
+                            }
                         }
                         .buttonStyle(.borderless)
-                        .foregroundStyle(controller.isBuiltInBlackoutEnabled(displayID: display.id) ? tint : palette.secondaryText)
+                        .disabled(controller.builtInBlackoutOperationPending)
+                        .foregroundStyle(builtInDisplayActionColor)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1.5)
                         .background {
                             Capsule()
-                                .fill(controller.isBuiltInBlackoutEnabled(displayID: display.id) ? tint.opacity(0.16) : palette.displayBadgeFill)
+                                .fill(builtInDisplayActionFill)
                         }
-                        .help(controller.isBuiltInBlackoutEnabled(displayID: display.id) ? "恢复内建显示器" : "关闭内建显示器")
+                        .help(builtInDisplayActionHelp)
                     }
 
                     Text(display.capabilities?.connection ?? (display.isBuiltIn ? "内置" : "外接"))
@@ -247,6 +254,30 @@ private struct DisplayControlGroup: View {
             get: { controller.value(for: control, displayID: display.id) },
             set: { controller.setValueAsync($0, for: control, displayID: display.id) }
         )
+    }
+
+    private var builtInDisplayActionTitle: String {
+        if controller.builtInBlackoutActionFailed { return "重试" }
+        return controller.isBuiltInBlackoutEnabled(displayID: display.id) ? "恢复" : "关闭"
+    }
+
+    private var builtInDisplayActionColor: Color {
+        if controller.builtInBlackoutActionFailed { return .orange }
+        return controller.isBuiltInBlackoutEnabled(displayID: display.id) ? tint : palette.secondaryText
+    }
+
+    private var builtInDisplayActionFill: Color {
+        if controller.builtInBlackoutActionFailed { return Color.orange.opacity(0.16) }
+        return controller.isBuiltInBlackoutEnabled(displayID: display.id)
+            ? tint.opacity(0.16)
+            : palette.displayBadgeFill
+    }
+
+    private var builtInDisplayActionHelp: String {
+        if controller.builtInBlackoutActionFailed { return "切换失败，点击重试" }
+        return controller.isBuiltInBlackoutEnabled(displayID: display.id)
+            ? "恢复内建显示器"
+            : "关闭内建显示器"
     }
 
 }

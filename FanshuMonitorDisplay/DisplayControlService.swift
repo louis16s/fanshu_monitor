@@ -238,6 +238,7 @@ final class DisplayControlService {
         }
 
         guard builtInBlackout.setEnabled(false, displayID: display.id, mirrorTargetID: nil, previousBrightness: nil) else {
+            AppLogger.ui.error("Failed to restore built-in display ID \(display.id)")
             return false
         }
         let cachedBrightness = defaults.object(forKey: Self.cachedBuiltInBrightnessKey) as? Double
@@ -745,7 +746,7 @@ private final class BuiltInDisplayBlackoutService {
     private typealias ConfigureDisplayEnabledFunction = @convention(c) (
         CGDisplayConfigRef?,
         CGDirectDisplayID,
-        Int32
+        Bool
     ) -> CGError
 
     private let skyLightHandle = dlopen(
@@ -782,7 +783,12 @@ private final class BuiltInDisplayBlackoutService {
                 return true
             }
 
-            if configureDisplay(displayID: displayID, enabled: false) {
+            let disableRequestSucceeded = configureDisplay(displayID: displayID, enabled: false)
+            if BuiltInDisplayTopologyResult.succeeded(
+                requestSucceeded: disableRequestSucceeded,
+                targetBlackoutEnabled: true,
+                displayIsRestored: isDisplayRestored(displayID)
+            ) {
                 states[displayID] = IsolationState(
                     previousBrightness: states[displayID]?.previousBrightness ?? previousBrightness,
                     mode: .disconnected
@@ -801,16 +807,28 @@ private final class BuiltInDisplayBlackoutService {
         }
 
         guard let state = states[displayID] else {
-            return configureDisplay(displayID: displayID, enabled: true)
+            // A restart loses the in-memory isolation mode. Clear either
+            // possible fallback, enable the display, then verify the topology.
+            _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+            let enableSucceeded = configureDisplay(displayID: displayID, enabled: true)
+            return BuiltInDisplayTopologyResult.succeeded(
+                requestSucceeded: enableSucceeded,
+                targetBlackoutEnabled: false,
+                displayIsRestored: isDisplayRestored(displayID)
+            )
         }
-        let restored: Bool
+        let restoreRequestSucceeded: Bool
         switch state.mode {
         case .disconnected:
-            restored = configureDisplay(displayID: displayID, enabled: true)
+            restoreRequestSucceeded = configureDisplay(displayID: displayID, enabled: true)
         case .mirrored:
-            restored = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+            restoreRequestSucceeded = configureMirroring(displayID: displayID, mirrorTargetID: nil)
         }
-        return restored
+        return BuiltInDisplayTopologyResult.succeeded(
+            requestSucceeded: restoreRequestSucceeded,
+            targetBlackoutEnabled: false,
+            displayIsRestored: isDisplayRestored(displayID)
+        )
     }
 
     func restoreBrightness(for displayID: CGDirectDisplayID) -> Float? {
@@ -861,14 +879,20 @@ private final class BuiltInDisplayBlackoutService {
             return false
         }
 
-        let configureResult = configureDisplayEnabled(config, displayID, enabled ? 1 : 0)
+        let configureResult = configureDisplayEnabled(config, displayID, enabled)
         guard configureResult == .success else {
+            AppLogger.ui.error(
+                "Display topology request failed for ID \(displayID), enabled: \(enabled, privacy: .public), error: \(configureResult.rawValue, privacy: .public)"
+            )
             CGCancelDisplayConfiguration(config)
             return false
         }
 
         let completionResult = CGCompleteDisplayConfiguration(config, .forSession)
         if completionResult != .success {
+            AppLogger.ui.error(
+                "Display topology completion failed for ID \(displayID), enabled: \(enabled, privacy: .public), error: \(completionResult.rawValue, privacy: .public)"
+            )
             CGCancelDisplayConfiguration(config)
             return false
         }
@@ -882,6 +906,11 @@ private final class BuiltInDisplayBlackoutService {
             return []
         }
         return Set(ids.prefix(Int(count)))
+    }
+
+    private func isDisplayRestored(_ displayID: CGDirectDisplayID) -> Bool {
+        CGDisplayIsActive(displayID) != 0
+            && CGDisplayMirrorsDisplay(displayID) == kCGNullDirectDisplay
     }
 
     private func configureMirroring(displayID: CGDirectDisplayID, mirrorTargetID: CGDirectDisplayID?) -> Bool {
