@@ -34,13 +34,17 @@ struct AboutSettingsView: View {
                         Button {
                             NSWorkspace.shared.open(websiteURL)
                         } label: {
-                            Label(String(localized: "about.open-website"), systemImage: "safari")
+                            Image(systemName: "arrow.up.right")
                         }
                         .buttonStyle(.glass)
+                        .help(String(localized: "about.open-website"))
+                        .accessibilityLabel(String(localized: "about.open-website"))
                     } else {
                         Link(destination: websiteURL) {
-                            Label(String(localized: "about.open-website"), systemImage: "safari")
+                            Image(systemName: "arrow.up.right")
                         }
+                        .help(String(localized: "about.open-website"))
+                        .accessibilityLabel(String(localized: "about.open-website"))
                     }
                 }
             }

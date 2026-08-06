@@ -25,6 +25,17 @@ struct DisplayControlsSection: View {
             || settings.displayVolumeControlEnabled
             || settings.displayContrastControlEnabled
         let hasContent = hasControls || settings.displayCapabilitiesEnabled
+        let headerBrightnessCandidateID = DisplayHeaderBrightnessPolicy.targetID(
+            displays: controller.displays,
+            blackedOutDisplayIDs: Set(
+                controller.displays
+                    .filter { controller.isBuiltInBlackoutEnabled(displayID: $0.id) }
+                    .map(\.id)
+            )
+        )
+        let headerBrightnessDisplayID = headerBrightnessCandidateID.flatMap { candidateID in
+            visibleDisplays.contains(where: { $0.id == candidateID }) ? candidateID : nil
+        }
 
         VStack(spacing: 0) {
             PanelModuleHeader(
@@ -35,12 +46,27 @@ struct DisplayControlsSection: View {
             ) {
                 PanelModuleIcon(systemName: "display", color: tint)
             } trailing: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(palette.captionText)
-                    .frame(width: 18, height: 18)
-                    .rotationEffect(.degrees(isExpanded ? 0 : -90))
-                    .animation(expansionAnimation, value: isExpanded)
+                HStack(spacing: 7) {
+                    if let displayID = headerBrightnessDisplayID {
+                        ProgressMeter(
+                            value: controller.value(for: .brightness, displayID: displayID),
+                            tint: tint,
+                            theme: MonitorPanelTheme(palette: palette)
+                        )
+                        .frame(width: 56, height: 3)
+                        .accessibilityLabel("亮度")
+                        .accessibilityValue(
+                            "\(Int(controller.value(for: .brightness, displayID: displayID).rounded()))%"
+                        )
+                    }
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(palette.captionText)
+                        .frame(width: 18, height: 18)
+                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                        .animation(expansionAnimation, value: isExpanded)
+                }
             }
             .contentShape(Rectangle())
             .onTapGesture {

@@ -1,10 +1,10 @@
 # 架构审查清单
 
-更新日期：2026-07-31
+更新日期：2026-08-06
 
 ## 审查结论
 
-- 最近一次完整发布审查基于 `0.2.9`，`0.3.0` 的显示器唤醒改造仍需完成多轮真实睡眠/唤醒验证
+- 最近一次完整发布审查基于 `0.3.0`，显示器唤醒仍需持续进行真实睡眠/唤醒硬件验证
 - 单元测试、Release 静态分析、签名校验和本机启动检查通过
 - GitHub Actions 可由 `v*` tag 自动测试、构建、打包并创建 Release
 - 云端产物使用临时签名保证包内完整性，尚未配置 Developer ID 签名与 Apple 公证
@@ -16,7 +16,7 @@
 - 采样层：`SamplingCoordinator` actor 管理 worker 生命周期、取消和结果合并
 - 采样器：`SamplingCoordinator` 按可见模块懒加载独立的 `MonitorModuleSamplerWorker`
 - 功能控制器：显示器、鼠标、锁屏、Codex 和更新检查彼此独立
-- 硬件桥接：DDC、DisplayServices、SMC、IOKit 与 HID 在后台队列执行
+- 硬件桥接：DDC、DisplayServices、SMC、IOKit 与 HID 显式脱离主 actor，并在后台串行队列执行
 - 发布层：tag、Release workflow、SHA-256 清单和 release manifest
 
 ## 性能清单
@@ -27,10 +27,11 @@
 - [x] DPI、DDC 与原生显示器访问不在 SwiftUI 主线程执行
 - [x] 外接显示器只读取已启用的 DDC 控制项
 - [x] 内建亮度同步仅在面板打开、Display 可见且亮度控制开启时运行
-- [x] 内建亮度以 400 毫秒低成本读取同步，不访问 DDC、IOKit 或磁盘
+- [x] 内建亮度以 200 毫秒低成本读取同步，不访问 DDC、IOKit 或磁盘
 - [x] 内建亮度同步停止后不保留计时任务
 - [x] 亮度未变化时不发布 SwiftUI 状态更新
 - [x] 面板关闭时主调度器降至 5 秒检查间隔
+- [x] 软件调光配置和内建屏拓扑状态使用锁保护，避免跨队列竞争
 
 ## 显示器可靠性
 

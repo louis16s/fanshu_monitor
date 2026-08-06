@@ -4,17 +4,28 @@ import Darwin
 import Foundation
 import OSLog
 
-final class DisplayControlService {
+nonisolated final class DisplayControlService: @unchecked Sendable {
     private static let cachedBuiltInDisplayIDKey = "displayControl.cachedBuiltInDisplayID"
     private static let cachedBuiltInBrightnessKey = "displayControl.cachedBuiltInBrightness"
     private let displayServices = DisplayServicesBridge()
     private let ddc = DisplayDDCBridge()
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private let softwareDimming = DisplaySoftwareDimmingService()
     private let builtInBlackout = BuiltInDisplayBlackoutService()
     private let displayClassifier = DisplayClassifier()
-    private lazy var ddcRangeStore = DisplayDDCRangeStore(defaults: defaults)
-    var softwareDimmingEnabled = true
+    private let ddcRangeStore: DisplayDDCRangeStore
+    private let configurationLock = NSLock()
+    private var storedSoftwareDimmingEnabled = true
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        ddcRangeStore = DisplayDDCRangeStore(defaults: defaults)
+    }
+
+    var softwareDimmingEnabled: Bool {
+        get { configurationLock.withLock { storedSoftwareDimmingEnabled } }
+        set { configurationLock.withLock { storedSoftwareDimmingEnabled = newValue } }
+    }
 
     func displays(reading activeControls: Set<DisplayControlKind> = Set(DisplayControlKind.allCases)) -> [ControlledDisplay] {
         var ids = [CGDirectDisplayID](repeating: 0, count: 16)
@@ -478,7 +489,7 @@ final class DisplayControlService {
     }
 }
 
-struct DisplayDDCRangeStore {
+nonisolated struct DisplayDDCRangeStore {
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults) {
@@ -512,7 +523,7 @@ struct DisplayDDCRangeStore {
     }
 }
 
-enum DisplayDimmingCalibration {
+nonisolated enum DisplayDimmingCalibration {
     static let hardwareZeroUserBrightness: Double = 15
     static let maximumOverlayOpacity: Double = 0.70
 
@@ -536,7 +547,7 @@ enum DisplaySoftwareDimmingWindowPolicy {
     static let level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
 }
 
-private final class DisplaySoftwareDimmingService {
+nonisolated private final class DisplaySoftwareDimmingService: @unchecked Sendable {
     private let dimmingThreshold: Double = DisplayDimmingCalibration.hardwareZeroUserBrightness
     private let maximumOverlayOpacity: Double = DisplayDimmingCalibration.maximumOverlayOpacity
     private let lock = NSLock()
@@ -732,7 +743,7 @@ private final class DisplaySoftwareDimmingService {
     }
 }
 
-private final class BuiltInDisplayBlackoutService {
+nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendable {
     private enum IsolationMode {
         case disconnected
         case mirrored
@@ -749,11 +760,25 @@ private final class BuiltInDisplayBlackoutService {
         Bool
     ) -> CGError
 
-    private let skyLightHandle = dlopen(
-        "/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight",
-        RTLD_LAZY | RTLD_LOCAL
-    )
-    private lazy var configureDisplayEnabled: ConfigureDisplayEnabledFunction? = {
+    private let skyLightHandle: UnsafeMutableRawPointer?
+    private let configureDisplayEnabled: ConfigureDisplayEnabledFunction?
+    private let stateLock = NSLock()
+    private var states: [CGDirectDisplayID: IsolationState] = [:]
+
+    init() {
+        let skyLightHandle = dlopen(
+            "/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight",
+            RTLD_LAZY | RTLD_LOCAL
+        )
+        self.skyLightHandle = skyLightHandle
+        configureDisplayEnabled = Self.resolveConfigureDisplayEnabled(
+            skyLightHandle: skyLightHandle
+        )
+    }
+
+    private static func resolveConfigureDisplayEnabled(
+        skyLightHandle: UnsafeMutableRawPointer?
+    ) -> ConfigureDisplayEnabledFunction? {
         guard let skyLightHandle else { return nil }
         for symbolName in ["SLSConfigureDisplayEnabled", "CGSConfigureDisplayEnabled"] {
             if let symbol = dlsym(skyLightHandle, symbolName) {
@@ -763,8 +788,7 @@ private final class BuiltInDisplayBlackoutService {
         }
         AppLogger.ui.error("SkyLight display isolation API is unavailable; using mirror fallback")
         return nil
-    }()
-    private var states: [CGDirectDisplayID: IsolationState] = [:]
+    }
 
     func setEnabled(
         _ enabled: Bool,
@@ -772,6 +796,9 @@ private final class BuiltInDisplayBlackoutService {
         mirrorTargetID: CGDirectDisplayID?,
         previousBrightness: Float?
     ) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+
         if enabled {
             guard let mirrorTargetID else { return false }
             guard CGDisplayIsBuiltin(displayID) != 0 || states[displayID] != nil else {
@@ -832,14 +859,21 @@ private final class BuiltInDisplayBlackoutService {
     }
 
     func restoreBrightness(for displayID: CGDirectDisplayID) -> Float? {
-        states.removeValue(forKey: displayID)?.previousBrightness
+        stateLock.withLock {
+            states.removeValue(forKey: displayID)?.previousBrightness
+        }
     }
 
     func isUsingMirrorFallback(displayID: CGDirectDisplayID) -> Bool {
-        states[displayID]?.mode == .mirrored
+        stateLock.withLock {
+            states[displayID]?.mode == .mirrored
+        }
     }
 
     func sync(keeping displayIDs: Set<CGDirectDisplayID>) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+
         let removedIDs = Set(states.keys).subtracting(displayIDs)
         for displayID in removedIDs {
             guard let state = states[displayID] else { continue }
@@ -854,6 +888,9 @@ private final class BuiltInDisplayBlackoutService {
     }
 
     func clearAll() -> [CGDirectDisplayID: Float] {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+
         let previousStates = states
         states.removeAll()
         for (displayID, state) in previousStates {
@@ -936,7 +973,7 @@ private final class BuiltInDisplayBlackoutService {
     }
 }
 
-private final class DisplayServicesBridge {
+nonisolated private final class DisplayServicesBridge: Sendable {
     func getBrightness(displayID: CGDirectDisplayID) -> Float? {
         var value: Float = -1
         let result = DisplayServicesGetBrightness(displayID, &value)

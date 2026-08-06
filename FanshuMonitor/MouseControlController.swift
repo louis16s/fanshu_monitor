@@ -169,12 +169,14 @@ final class MouseControlController: ObservableObject {
 
     private func syncInputListeners() {
         let mouseControlEnabled = settings?.mouseControlEnabled == true
+        let devicePresent = device != nil
         guard MouseInputListenerPolicy.shouldRunEventTap(
-            mouseControlEnabled: mouseControlEnabled
+            mouseControlEnabled: mouseControlEnabled,
+            devicePresent: devicePresent
         ) else {
             eventTap?.stop()
             hidButtonListener?.stop()
-            buttonStatusText = "未启用"
+            buttonStatusText = mouseControlEnabled ? "等待鼠标连接" : "未启用"
             return
         }
 
@@ -188,7 +190,7 @@ final class MouseControlController: ObservableObject {
         hidButtonListener?.updateAction(action)
         if MouseInputListenerPolicy.shouldRunHIDPPGesture(
             mouseControlEnabled: mouseControlEnabled,
-            devicePresent: device != nil,
+            devicePresent: devicePresent,
             action: action
         ) {
             hidButtonListener?.start()

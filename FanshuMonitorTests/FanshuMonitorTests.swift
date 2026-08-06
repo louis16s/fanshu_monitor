@@ -529,8 +529,18 @@ struct FanshuMonitorTests {
     }
 
     @Test func standardMouseButtonsDoNotDependOnHIDPPDetection() {
-        #expect(MouseInputListenerPolicy.shouldRunEventTap(mouseControlEnabled: true))
-        #expect(!MouseInputListenerPolicy.shouldRunEventTap(mouseControlEnabled: false))
+        #expect(MouseInputListenerPolicy.shouldRunEventTap(
+            mouseControlEnabled: true,
+            devicePresent: true
+        ))
+        #expect(!MouseInputListenerPolicy.shouldRunEventTap(
+            mouseControlEnabled: true,
+            devicePresent: false
+        ))
+        #expect(!MouseInputListenerPolicy.shouldRunEventTap(
+            mouseControlEnabled: false,
+            devicePresent: true
+        ))
         #expect(!MouseInputListenerPolicy.shouldRunHIDPPGesture(
             mouseControlEnabled: true,
             devicePresent: false,

@@ -7,9 +7,12 @@ import OSLog
 #error("Display DDC control is Apple Silicon only. Do not compile this Direct-only module for Intel Mac.")
 #endif
 
-private let displayDDCLog = Logger(subsystem: "com.fanshu.monitor.direct", category: "DisplayDDC")
+nonisolated private let displayDDCLog = Logger(
+    subsystem: "com.fanshu.monitor.direct",
+    category: "DisplayDDC"
+)
 
-final class DisplayDDCBridge {
+nonisolated final class DisplayDDCBridge: @unchecked Sendable {
     private var servicesByDisplayID: [CGDirectDisplayID: DDCService] = [:]
     private var valueRanges: [ControlKey: DDCValueRange] = [:]
     private var controlCodes: [ControlKey: DDCVCPCode] = [:]
@@ -303,7 +306,7 @@ nonisolated struct DDCWriteOutcome {
     }
 }
 
-private enum DDCVCPCode: UInt8 {
+nonisolated private enum DDCVCPCode: UInt8 {
     case luminance = 0x10
     case contrast = 0x12
     case backlightControlLegacy = 0x13
@@ -322,7 +325,7 @@ private enum DDCVCPCode: UInt8 {
     }
 }
 
-private enum DDCTransport {
+nonisolated private enum DDCTransport {
     private static let sevenBitAddress: UInt8 = 0x37
     private static let dataAddress: UInt8 = 0x51
     private static let communicateTimeoutSeconds = 3
@@ -529,7 +532,7 @@ private enum DDCTransport {
     }
 }
 
-private final class Arm64DDCMatcher {
+nonisolated private final class Arm64DDCMatcher {
     private static let maxMatchScore = 20
 
     func matchedServices(for displayIDs: [CGDirectDisplayID]) -> [CGDirectDisplayID: DDCService] {
@@ -796,14 +799,14 @@ private final class Arm64DDCMatcher {
     }
 }
 
-private struct DDCService {
+nonisolated private struct DDCService {
     let displayID: CGDirectDisplayID
     let service: IOAVService
     let serviceLocation: Int
     let matchScore: Int
 }
 
-private struct RegistryService {
+nonisolated private struct RegistryService {
     var edidUUID = ""
     var productName = ""
     var serialNumber: Int64 = 0

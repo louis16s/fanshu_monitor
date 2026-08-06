@@ -70,7 +70,7 @@
         <div class="app-panel" data-live-panel>
           <div class="panel-topbar">
             <span class="live-dot"></span><strong>番薯monitor · v0.3.0</strong>
-            <span class="panel-spacer"></span><span aria-hidden="true">⚙︎</span><span aria-hidden="true">⏻</span><time>9:41</time>
+            <span class="panel-spacer"></span><span class="panel-mouse-status" aria-label="鼠标电量 95%"><i></i><b>95%</b></span><span class="panel-lock-icon" aria-label="锁屏设置"><i></i></span><span aria-hidden="true">⚙︎</span><span aria-hidden="true">⏻</span><time>9:41</time>
           </div>
           <div class="monitor-module cpu-module">
             <div class="module-title"><span class="module-icon">▣</span><strong>CPU: <span data-live-value="cpu">14</span>%</strong><span class="sparkline orange"></span></div>
@@ -85,8 +85,8 @@
             <div class="module-data compact"><span>5H <b>76%</b></span><span>一周 <b>81%</b></span></div>
           </div>
           <div class="monitor-module display-module">
-            <div class="module-title"><span class="module-icon">▰</span><strong>Display: 外接 1</strong><span>⌄</span></div>
-            <div class="display-row"><span>▱</span><b>视网膜显示器</b><em>内置</em><label>亮度 <input type="range" min="0" max="100" value="46" aria-label="内建显示器模拟亮度"><output>46%</output></label></div>
+            <div class="module-title"><span class="module-icon">▰</span><strong>Display: 外接 1</strong><span class="module-title-trailing"><span class="mini-meter violet"><i style="width:20%"></i></span><span>⌄</span></span></div>
+            <div class="display-row display-off"><span>▱</span><b>视网膜显示器</b><em>恢复</em><small>内置 · 已关闭</small></div>
             <div class="display-row active"><span>▭</span><b>PG271Q</b><em>外接</em><label>亮度 <input type="range" min="0" max="100" value="20" aria-label="外接显示器模拟亮度"><output>20%</output></label><small>DDC 0 · 15%</small></div>
           </div>
         </div>
@@ -171,7 +171,7 @@
       <div class="section-heading reveal"><p class="section-label">主要功能</p><h2 id="features-title">一个面板，少一点打扰</h2><p>默认只做必要的事，重数据在功能开启或界面可见时加载</p></div>
       <div class="feature-list">
         <article class="feature-row reveal"><span class="feature-number">01</span><div><h3>系统监控</h3><p>CPU、GPU、内存、电源和温度，连同 App 自身内存占用一起呈现</p></div><span class="feature-accent orange"></span></article>
-        <article class="feature-row reveal"><span class="feature-number">02</span><div><h3>外接显示器</h3><p>按鼠标位置分配 F1/F2，显示 DDC 硬件零点、能力状态与不可控原因</p></div><span class="feature-accent violet"></span></article>
+        <article class="feature-row reveal"><span class="feature-number">02</span><div><h3>外接显示器</h3><p>按鼠标位置分配 F1/F2，单屏时标题栏同步亮度，并显示 DDC 硬件零点与不可控原因</p></div><span class="feature-accent violet"></span></article>
         <article class="feature-row reveal"><span class="feature-number">03</span><div><h3>自动锁屏</h3><p>按日程切换闲置时长，直接进入锁定界面，支持跨天时间段</p></div><span class="feature-accent green"></span></article>
         <article class="feature-row reveal"><span class="feature-number">04</span><div><h3>按需加载</h3><p>网络、SSID、DDC、HID、电池重遥测和 Codex 只在需要时工作</p></div><span class="feature-accent blue"></span></article>
       </div>

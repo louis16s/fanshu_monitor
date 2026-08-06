@@ -86,8 +86,11 @@ nonisolated enum MouseHeaderPresentation {
 }
 
 enum MouseInputListenerPolicy {
-    static func shouldRunEventTap(mouseControlEnabled: Bool) -> Bool {
-        mouseControlEnabled
+    static func shouldRunEventTap(
+        mouseControlEnabled: Bool,
+        devicePresent: Bool
+    ) -> Bool {
+        mouseControlEnabled && devicePresent
     }
 
     static func shouldRunHIDPPGesture(

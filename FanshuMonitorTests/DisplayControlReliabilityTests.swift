@@ -234,6 +234,69 @@ struct DisplayValueChangePolicyTests {
     }
 }
 
+struct DisplayHeaderBrightnessPolicyTests {
+    @Test func showsBrightnessForOneWorkingControllableDisplay() {
+        let display = makeDisplay(id: 1, isBuiltIn: true, supportsBrightness: true)
+
+        #expect(DisplayHeaderBrightnessPolicy.targetID(
+            displays: [display],
+            blackedOutDisplayIDs: []
+        ) == 1)
+    }
+
+    @Test func hidesBrightnessWhenMultipleDisplaysAreWorking() {
+        #expect(DisplayHeaderBrightnessPolicy.targetID(
+            displays: [
+                makeDisplay(id: 1, isBuiltIn: true, supportsBrightness: true),
+                makeDisplay(id: 2, isBuiltIn: false, supportsBrightness: true)
+            ],
+            blackedOutDisplayIDs: []
+        ) == nil)
+    }
+
+    @Test func ignoresAClosedBuiltInDisplayWhenAnExternalDisplayIsWorking() {
+        #expect(DisplayHeaderBrightnessPolicy.targetID(
+            displays: [
+                makeDisplay(id: 1, isBuiltIn: true, supportsBrightness: false),
+                makeDisplay(id: 2, isBuiltIn: false, supportsBrightness: true)
+            ],
+            blackedOutDisplayIDs: [1]
+        ) == 2)
+    }
+
+    @Test func hidesBrightnessWhenTheOnlyWorkingDisplayIsNotControllable() {
+        #expect(DisplayHeaderBrightnessPolicy.targetID(
+            displays: [makeDisplay(id: 2, isBuiltIn: false, supportsBrightness: false)],
+            blackedOutDisplayIDs: []
+        ) == nil)
+    }
+
+    private func makeDisplay(
+        id: CGDirectDisplayID,
+        isBuiltIn: Bool,
+        supportsBrightness: Bool
+    ) -> ControlledDisplay {
+        ControlledDisplay(
+            id: id,
+            storageID: "display-\(id)",
+            name: "Display \(id)",
+            kind: isBuiltIn ? .builtIn : .externalDDC,
+            isBuiltIn: isBuiltIn,
+            usesNativeBrightness: isBuiltIn,
+            supportsBrightness: supportsBrightness,
+            supportsVolume: false,
+            supportsContrast: false,
+            brightness: 50,
+            volume: 0,
+            contrast: 0,
+            brightnessUnavailableReason: supportsBrightness ? nil : "不可用",
+            volumeUnavailableReason: nil,
+            contrastUnavailableReason: nil,
+            capabilities: nil
+        )
+    }
+}
+
 struct DisplayCapabilityFormatterTests {
     @Test func formatsFixedAndVariableRefreshRates() {
         #expect(DisplayCapabilityFormatter.refreshRate(

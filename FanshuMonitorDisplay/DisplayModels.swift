@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-struct ControlledDisplay: Identifiable {
+nonisolated struct ControlledDisplay: Identifiable, Sendable {
     let id: CGDirectDisplayID
     let storageID: String
     let name: String
@@ -185,6 +185,22 @@ nonisolated enum DisplayNativeBrightnessSyncPolicy {
             && moduleVisible
             && brightnessControlEnabled
             && hasNativeBrightnessDisplay
+    }
+}
+
+nonisolated enum DisplayHeaderBrightnessPolicy {
+    static func targetID(
+        displays: [ControlledDisplay],
+        blackedOutDisplayIDs: Set<CGDirectDisplayID>
+    ) -> CGDirectDisplayID? {
+        let activeDisplays = displays.filter { !blackedOutDisplayIDs.contains($0.id) }
+        guard activeDisplays.count == 1,
+              let display = activeDisplays.first,
+              display.supportsBrightness
+        else {
+            return nil
+        }
+        return display.id
     }
 }
 

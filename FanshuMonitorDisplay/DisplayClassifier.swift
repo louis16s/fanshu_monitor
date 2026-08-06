@@ -10,7 +10,7 @@ nonisolated enum DisplayKind: Equatable, Sendable {
     case unsupported
 }
 
-struct DisplayClassifier {
+nonisolated struct DisplayClassifier {
     var probeNativeBrightness: (CGDirectDisplayID) -> Bool
     var isBuiltInDisplay: (CGDirectDisplayID) -> Bool
     var infoProvider: (CGDirectDisplayID) -> [String: Any]
