@@ -1650,18 +1650,34 @@
         }
       }
     },
-    "about.release-version": {
+    "about.website": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "发布版本"
+            "value": "打开软件官网"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Release Version"
+            "value": "Product Website"
+          }
+        }
+      }
+    },
+    "about.open-website": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开官网"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Website"
           }
         }
       }

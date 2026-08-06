@@ -260,9 +260,9 @@ final class DisplayControlController: ObservableObject {
         stopNativeBrightnessSync()
     }
 
-    func restoreBuiltInDisplayForTermination() {
+    func prepareBuiltInDisplayForTermination() {
         wakeMaintenanceGeneration &+= 1
-        isBuiltInBlackoutDesired = false
+        // Restore the physical topology without clearing the user's next-launch preference.
         service.clearBuiltInBlackouts()
         builtInBlackoutDisplayIDs.removeAll()
         builtInBlackoutOperationPending = false

@@ -78,6 +78,13 @@ struct LogitechMouseDevice: Identifiable, Equatable {
     }
 }
 
+nonisolated enum MouseHeaderPresentation {
+    static func batteryText(for device: LogitechMouseDevice?) -> String? {
+        guard let batteryPercent = device?.batteryPercent else { return nil }
+        return "\(min(100, max(0, batteryPercent)))%"
+    }
+}
+
 enum MouseInputListenerPolicy {
     static func shouldRunEventTap(mouseControlEnabled: Bool) -> Bool {
         mouseControlEnabled

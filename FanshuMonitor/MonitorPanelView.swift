@@ -70,6 +70,13 @@ struct MonitorPanelView: View {
 
             Spacer()
 
+            MouseSettingsButton(
+                controller: store.mouseController,
+                color: theme.captionText
+            ) {
+                SettingsWindowPresenter.open(openSettings, tab: .mouse)
+            }
+
             LockScreenSettingsButton(
                 controller: store.lockScreenController,
                 color: theme.captionText
@@ -218,6 +225,41 @@ struct MonitorPanelView: View {
         formatter.dateFormat = "HH:mm"
         return formatter
     }()
+}
+
+private struct MouseSettingsButton: View {
+    @ObservedObject var controller: MouseControlController
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Image(systemName: "computermouse")
+                    .font(.system(size: 10, weight: .semibold))
+
+                if let batteryText {
+                    Text(batteryText)
+                        .panelMonoFont(size: 8, weight: .medium)
+                }
+            }
+            .foregroundStyle(color)
+            .frame(minWidth: 20, minHeight: 20)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(helpText)
+        .accessibilityLabel("鼠标设置")
+        .accessibilityValue(batteryText.map { "电量 \($0)" } ?? "未连接")
+    }
+
+    private var batteryText: String? {
+        MouseHeaderPresentation.batteryText(for: controller.device)
+    }
+
+    private var helpText: String {
+        batteryText.map { "鼠标设置 · 电量 \($0)" } ?? "鼠标设置"
+    }
 }
 
 private struct LockScreenSettingsButton: View {

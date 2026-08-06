@@ -7,6 +7,27 @@ import Foundation
 import Testing
 @testable import FanshuMonitor
 
+struct MouseHeaderPresentationTests {
+    @Test func hidesBatteryWhenNoMouseIsConnected() {
+        #expect(MouseHeaderPresentation.batteryText(for: nil) == nil)
+    }
+
+    @Test func presentsTheCachedBatteryWithoutStartingDeviceWork() {
+        let device = LogitechMouseDevice(
+            productID: 0xB037,
+            productName: "MX Anywhere 3S",
+            transport: "USB",
+            supportsDPI: true,
+            dpiMin: 200,
+            dpiMax: 8000,
+            currentDPI: 1600,
+            batteryPercent: 95
+        )
+
+        #expect(MouseHeaderPresentation.batteryText(for: device) == "95%")
+    }
+}
+
 struct SettingsTests {
     @Test func defaultThemePreference() {
         let settings = MonitorSettings()

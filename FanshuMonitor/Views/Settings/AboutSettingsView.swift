@@ -5,7 +5,7 @@ struct AboutSettingsView: View {
     @ObservedObject var settings: MonitorSettings
     @State private var updateChecker = UpdateChecker()
 
-    private let releasesURL = URL(string: "https://github.com/louis16s/fanshu_monitor/releases")!
+    private let websiteURL = URL(string: "https://louis16s.github.io/fanshu_monitor/")!
 
     private var appVersion: String {
         guard AppVersion.current != "0.0.0" else {
@@ -29,17 +29,17 @@ struct AboutSettingsView: View {
             }
 
             SettingsGroup {
-                SettingsRow(title: String(localized: "about.release-version")) {
+                SettingsRow(title: String(localized: "about.website")) {
                     if #available(macOS 26, *) {
                         Button {
-                            NSWorkspace.shared.open(releasesURL)
+                            NSWorkspace.shared.open(websiteURL)
                         } label: {
-                            Label("Releases", systemImage: "shippingbox")
+                            Label(String(localized: "about.open-website"), systemImage: "safari")
                         }
                         .buttonStyle(.glass)
                     } else {
-                        Link(destination: releasesURL) {
-                            Label("Releases", systemImage: "shippingbox")
+                        Link(destination: websiteURL) {
+                            Label(String(localized: "about.open-website"), systemImage: "safari")
                         }
                     }
                 }

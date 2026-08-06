@@ -175,7 +175,7 @@ final class MonitorStore: ObservableObject {
         NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
             .sink { [weak self] _ in
                 #if DISPLAY_CONTROL
-                self?.displayController.restoreBuiltInDisplayForTermination()
+                self?.displayController.prepareBuiltInDisplayForTermination()
                 #endif
             }
             .store(in: &cancellables)
@@ -202,7 +202,7 @@ final class MonitorStore: ObservableObject {
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         source.setEventHandler { [weak self] in
             #if DISPLAY_CONTROL
-            self?.displayController.restoreBuiltInDisplayForTermination()
+            self?.displayController.prepareBuiltInDisplayForTermination()
             #endif
             exit(EXIT_SUCCESS)
         }
