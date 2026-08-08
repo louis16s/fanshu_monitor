@@ -236,14 +236,23 @@ private struct MouseActionRow: View {
 
     var body: some View {
         SettingsRow(title: slot.title, subtitle: nil) {
-            Picker(slot.title, selection: binding) {
-                ForEach(MouseButtonAction.allCases) { action in
-                    Text(action.title).tag(action)
+            HStack(spacing: 8) {
+                if settings.mouseAction(for: slot) == .customShortcut {
+                    MouseShortcutRecorderButton(
+                        shortcut: shortcutBinding,
+                        slotTitle: slot.title
+                    )
                 }
+
+                Picker(slot.title, selection: binding) {
+                    ForEach(MouseButtonAction.allCases) { action in
+                        Text(action.title).tag(action)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .fixedSize()
         }
     }
 
@@ -251,6 +260,13 @@ private struct MouseActionRow: View {
         Binding(
             get: { settings.mouseAction(for: slot) },
             set: { settings.setMouseAction($0, for: slot) }
+        )
+    }
+
+    private var shortcutBinding: Binding<MouseKeyboardShortcut?> {
+        Binding(
+            get: { settings.mouseMapping(for: slot).shortcut },
+            set: { settings.setMouseCustomShortcut($0, for: slot) }
         )
     }
 }

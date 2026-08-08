@@ -1,6 +1,6 @@
 import Foundation
 
-enum MouseButtonSlot: String, CaseIterable, Identifiable {
+nonisolated enum MouseButtonSlot: String, CaseIterable, Codable, Identifiable, Sendable {
     case middle
     case back
     case forward
@@ -20,7 +20,7 @@ enum MouseButtonSlot: String, CaseIterable, Identifiable {
     static let settingsOrder: [MouseButtonSlot] = [.middle, .gesture, .back, .forward]
 }
 
-enum MouseButtonAction: String, CaseIterable, Identifiable {
+nonisolated enum MouseButtonAction: String, CaseIterable, Identifiable, Sendable {
     case passThrough
     case browserBack
     case browserForward
@@ -34,6 +34,7 @@ enum MouseButtonAction: String, CaseIterable, Identifiable {
     case functionF13
     case functionF14
     case functionF15
+    case customShortcut
 
     var id: String { rawValue }
 
@@ -52,7 +53,41 @@ enum MouseButtonAction: String, CaseIterable, Identifiable {
         case .functionF13: "功能键 F13"
         case .functionF14: "功能键 F14"
         case .functionF15: "功能键 F15"
+        case .customShortcut: "自定义快捷键"
         }
+    }
+}
+
+nonisolated struct MouseShortcutModifiers: OptionSet, Codable, Hashable, Sendable {
+    let rawValue: UInt8
+
+    static let control = Self(rawValue: 1 << 0)
+    static let option = Self(rawValue: 1 << 1)
+    static let shift = Self(rawValue: 1 << 2)
+    static let command = Self(rawValue: 1 << 3)
+}
+
+nonisolated struct MouseKeyboardShortcut: Codable, Equatable, Sendable {
+    let keyCode: UInt16
+    let modifiers: MouseShortcutModifiers
+    let keyLabel: String
+
+    var displayText: String {
+        var text = ""
+        if modifiers.contains(.control) { text += "⌃" }
+        if modifiers.contains(.option) { text += "⌥" }
+        if modifiers.contains(.shift) { text += "⇧" }
+        if modifiers.contains(.command) { text += "⌘" }
+        return text + keyLabel
+    }
+}
+
+nonisolated struct MouseButtonMapping: Equatable, Sendable {
+    let action: MouseButtonAction
+    let shortcut: MouseKeyboardShortcut?
+
+    var isExecutable: Bool {
+        action != .passThrough && (action != .customShortcut || shortcut != nil)
     }
 }
 
@@ -96,8 +131,8 @@ enum MouseInputListenerPolicy {
     static func shouldRunHIDPPGesture(
         mouseControlEnabled: Bool,
         devicePresent: Bool,
-        action: MouseButtonAction
+        mapping: MouseButtonMapping
     ) -> Bool {
-        mouseControlEnabled && devicePresent && action != .passThrough
+        mouseControlEnabled && devicePresent && mapping.isExecutable
     }
 }

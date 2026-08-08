@@ -249,6 +249,7 @@ final class LockScreenPolicyController: ObservableObject {
             at: now,
             powerSource: powerSource
         )
+        let enabledPolicies = settings.lockScreenPolicies.filter(\.isEnabled)
         guard let policy = resolution.selectedPolicy else {
             cancelIdleLockTimer()
             cancelLockAttempt()
@@ -256,20 +257,20 @@ final class LockScreenPolicyController: ObservableObject {
             didRequestLockForCurrentIdlePeriod = false
             let restored = restoreBaseline(using: settings)
             activePolicy = nil
-            if restored, settings.lockScreenPolicies.isEmpty {
+            if restored, enabledPolicies.isEmpty {
                 status = .noRules
             } else if restored, let waitingPolicy = resolution.waitingPolicy {
                 status = powerSource == .unknown
                     ? .waitingForPowerSource
                     : .waitingForPower(waitingPolicy.powerCondition)
-            } else if restored, let next = settings.lockScreenPolicies
+            } else if restored, let next = enabledPolicies
                 .flatMap({ $0.transitionDates(after: now) })
                 .min() {
                 status = .waiting(nextTransition: next)
             } else if restored {
                 status = .waiting(nextTransition: nil)
             }
-            scheduleNextTransition(after: now, policies: settings.lockScreenPolicies)
+            scheduleNextTransition(after: now, policies: enabledPolicies)
             return
         }
 
@@ -294,7 +295,7 @@ final class LockScreenPolicyController: ObservableObject {
             status = .active(timeRange: policy.timeRangeText, idleMinutes: policy.idleMinutes)
         }
         scheduleIdleLock(for: policy)
-        scheduleNextTransition(after: now, policies: settings.lockScreenPolicies)
+        scheduleNextTransition(after: now, policies: enabledPolicies)
     }
 
     private func scheduleNextTransition(after date: Date, policies: [LockScreenPolicy]) {

@@ -97,7 +97,7 @@ nonisolated enum LockScreenPolicyStatus: Equatable, Sendable {
         case .systemSettingsBlocked:
             "请先关闭时间策略再修改系统设置"
         case .noRules:
-            "已开启，还没有时间规则"
+            "已开启，没有启用的时间段"
         case .waiting(let nextTransition):
             if let nextTransition {
                 "下一次执行：\(nextTransition.formatted(date: .omitted, time: .shortened))"
@@ -324,7 +324,7 @@ nonisolated struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         name = Self.normalizedName(try container.decodeIfPresent(String.self, forKey: .name) ?? "")
-        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         dayScope = try container.decode(LockScreenDayScope.self, forKey: .dayScope)
         customWeekdays = Self.validWeekdays(
             try container.decodeIfPresent(Set<Int>.self, forKey: .customWeekdays)

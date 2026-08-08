@@ -107,6 +107,7 @@ final class MonitorSettings: ObservableObject {
     @Published var mouseBackAction: MouseButtonAction = .paste
     @Published var mouseForwardAction: MouseButtonAction = .launchpad
     @Published var mouseGestureAction: MouseButtonAction = .passThrough
+    @Published private(set) var mouseCustomShortcuts: [MouseButtonSlot: MouseKeyboardShortcut] = [:]
     @Published var lockScreenPoliciesEnabled: Bool = false
     @Published private(set) var lockScreenPolicies: [LockScreenPolicy] = []
     @Published private(set) var visibleKinds: Set<MonitorKind> = []
@@ -158,19 +159,19 @@ final class MonitorSettings: ObservableObject {
         mouseBackAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseBackAction) ?? "") ?? .paste
         mouseForwardAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseForwardAction) ?? "") ?? .launchpad
         mouseGestureAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseGestureAction) ?? "") ?? .passThrough
+        if let data = defaults.data(forKey: Keys.mouseCustomShortcuts),
+           let storedShortcuts = try? JSONDecoder().decode([String: MouseKeyboardShortcut].self, from: data) {
+            mouseCustomShortcuts = Dictionary(
+                uniqueKeysWithValues: storedShortcuts.compactMap { rawSlot, shortcut in
+                    MouseButtonSlot(rawValue: rawSlot).map { ($0, shortcut) }
+                }
+            )
+        }
         lockScreenPoliciesEnabled = defaults.object(forKey: Keys.lockScreenPoliciesEnabled) as? Bool ?? false
         if let data = defaults.data(forKey: Keys.lockScreenPolicies),
            let policies = try? JSONDecoder().decode([LockScreenPolicy].self, from: data) {
             lockScreenPolicies = Array(policies.prefix(Self.maximumLockScreenPolicies))
         }
-        if lockScreenPoliciesEnabled {
-            lockScreenPolicies = lockScreenPolicies.map { policy in
-                var policy = policy
-                policy.isEnabled = true
-                return policy
-            }
-        }
-
         if let storedKinds = defaults.array(forKey: Keys.visibleKinds) as? [String] {
             let kinds = storedKinds.compactMap(MonitorKind.init(rawValue:))
             var migratedKinds = Set(kinds)
@@ -289,6 +290,19 @@ final class MonitorSettings: ObservableObject {
         }
     }
 
+    func mouseMapping(for slot: MouseButtonSlot) -> MouseButtonMapping {
+        MouseButtonMapping(
+            action: mouseAction(for: slot),
+            shortcut: mouseCustomShortcuts[slot]
+        )
+    }
+
+    func setMouseCustomShortcut(_ shortcut: MouseKeyboardShortcut?, for slot: MouseButtonSlot) {
+        var updated = mouseCustomShortcuts
+        updated[slot] = shortcut
+        mouseCustomShortcuts = updated
+    }
+
     func addLockScreenPolicy() {
         guard lockScreenPolicies.count < Self.maximumLockScreenPolicies else { return }
         let defaultName = nextLockScreenPolicyName()
@@ -310,13 +324,6 @@ final class MonitorSettings: ObservableObject {
     }
 
     func setLockScreenPoliciesEnabled(_ enabled: Bool) {
-        if enabled {
-            lockScreenPolicies = lockScreenPolicies.map { policy in
-                var policy = policy
-                policy.isEnabled = true
-                return policy
-            }
-        }
         lockScreenPoliciesEnabled = enabled
     }
 
@@ -605,6 +612,16 @@ final class MonitorSettings: ObservableObject {
             }
             .store(in: &cancellables)
 
+        $mouseCustomShortcuts
+            .dropFirst()
+            .sink { [weak self] newValue in
+                let storedShortcuts = Dictionary(
+                    uniqueKeysWithValues: newValue.map { ($0.key.rawValue, $0.value) }
+                )
+                self?.persist(try? JSONEncoder().encode(storedShortcuts), forKey: Keys.mouseCustomShortcuts)
+            }
+            .store(in: &cancellables)
+
         $lockScreenPoliciesEnabled
             .dropFirst()
             .sink { [weak self] newValue in
@@ -695,6 +712,7 @@ final class MonitorSettings: ObservableObject {
         mouseBackAction = .paste
         mouseForwardAction = .launchpad
         mouseGestureAction = .passThrough
+        mouseCustomShortcuts = [:]
         lockScreenPoliciesEnabled = false
         lockScreenPolicies = []
         visibleKinds = Set(MonitorKind.allCases).subtracting([.storage, .network])
@@ -728,6 +746,7 @@ private enum Keys {
     static let mouseBackAction = "settings.mouse.action.back"
     static let mouseForwardAction = "settings.mouse.action.forward"
     static let mouseGestureAction = "settings.mouse.action.gesture"
+    static let mouseCustomShortcuts = "settings.mouse.customShortcuts"
     static let lockScreenPoliciesEnabled = "settings.lockScreen.policiesEnabled"
     static let lockScreenPolicies = "settings.lockScreen.policies"
     static let lockScreenBaseline = "settings.lockScreen.baseline"

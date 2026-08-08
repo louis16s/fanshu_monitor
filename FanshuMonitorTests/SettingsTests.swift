@@ -252,4 +252,27 @@ struct SettingsTests {
         #expect(settings.mouseControlEnabled)
         #expect(settings.mouseAction(for: .middle) == .copy)
     }
+
+    @Test func customMouseShortcutPersistsPerButton() {
+        let suite = "customMouseShortcutPersistsPerButton"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+        let shortcut = MouseKeyboardShortcut(
+            keyCode: 40,
+            modifiers: [.control, .option, .command],
+            keyLabel: "K"
+        )
+
+        settings.setMouseAction(.customShortcut, for: .back)
+        settings.setMouseCustomShortcut(shortcut, for: .back)
+
+        let reloaded = MonitorSettings(defaults: defaults)
+        #expect(reloaded.mouseMapping(for: .back) == MouseButtonMapping(
+            action: .customShortcut,
+            shortcut: shortcut
+        ))
+        #expect(shortcut.displayText == "⌃⌥⌘K")
+        #expect(reloaded.mouseMapping(for: .forward).shortcut == nil)
+    }
 }

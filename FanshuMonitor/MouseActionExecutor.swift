@@ -5,8 +5,8 @@ enum MouseActionExecutor {
     @_silgen_name("CoreDockSendNotification")
     private static func coreDockSendNotification(_ name: CFString, _ unknown: Int32) -> Int32
 
-    static func execute(_ action: MouseButtonAction) {
-        switch action {
+    static func execute(_ mapping: MouseButtonMapping) {
+        switch mapping.action {
         case .passThrough:
             return
         case .browserBack:
@@ -41,7 +41,22 @@ enum MouseActionExecutor {
             key(.f14, modifiers: [])
         case .functionF15:
             key(.f15, modifiers: [])
+        case .customShortcut:
+            guard let shortcut = mapping.shortcut else { return }
+            key(
+                CGKeyCode(shortcut.keyCode),
+                modifiers: eventFlags(for: shortcut.modifiers)
+            )
         }
+    }
+
+    private static func eventFlags(for modifiers: MouseShortcutModifiers) -> CGEventFlags {
+        var flags: CGEventFlags = []
+        if modifiers.contains(.control) { flags.insert(.maskControl) }
+        if modifiers.contains(.option) { flags.insert(.maskAlternate) }
+        if modifiers.contains(.shift) { flags.insert(.maskShift) }
+        if modifiers.contains(.command) { flags.insert(.maskCommand) }
+        return flags
     }
 
     private static func dockNotification(_ name: String) -> Bool {

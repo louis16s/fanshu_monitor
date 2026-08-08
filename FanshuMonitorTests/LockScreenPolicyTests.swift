@@ -980,8 +980,8 @@ struct LockScreenPolicyTests {
         #expect(loaded.lockScreenPolicies.first?.idleMinutes == 10)
     }
 
-    @Test func masterLockScreenSwitchEnablesExistingRules() {
-        let suite = "LockScreenPolicyTests.masterLockScreenSwitchEnablesExistingRules"
+    @Test func masterLockScreenSwitchPreservesMutedRules() {
+        let suite = "LockScreenPolicyTests.masterLockScreenSwitchPreservesMutedRules"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         let settings = MonitorSettings(defaults: defaults)
@@ -993,7 +993,70 @@ struct LockScreenPolicyTests {
         settings.setLockScreenPoliciesEnabled(true)
 
         #expect(settings.lockScreenPoliciesEnabled)
-        #expect(settings.lockScreenPolicies.filter { !$0.isEnabled }.isEmpty)
+        #expect(settings.lockScreenPolicies.allSatisfy { !$0.isEnabled })
+
+        let loaded = MonitorSettings(defaults: defaults)
+        #expect(loaded.lockScreenPoliciesEnabled)
+        #expect(loaded.lockScreenPolicies.allSatisfy { !$0.isEnabled })
+    }
+
+    @Test func mutedRuleDoesNotResolveOrScheduleTransitions() throws {
+        let policy = LockScreenPolicy(
+            isEnabled: false,
+            startMinutes: 0,
+            endMinutes: 24 * 60,
+            idleMinutes: 5
+        )
+        let now = try #require(Calendar.current.date(
+            from: DateComponents(year: 2026, month: 8, day: 9, hour: 12)
+        ))
+
+        let resolution = LockScreenPolicyResolver.resolve(
+            policies: [policy],
+            at: now,
+            powerSource: .connected
+        )
+
+        #expect(resolution.selectedPolicy == nil)
+        #expect(resolution.timeActivePolicies.isEmpty)
+        #expect(policy.transitionDates(after: now).isEmpty)
+    }
+
+    @Test @MainActor func allMutedRulesKeepTheLockEnvironmentInactive() {
+        let suite = "LockScreenPolicyTests.allMutedRulesKeepTheLockEnvironmentInactive"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+        settings.addLockScreenPolicy()
+        settings.updateLockScreenPolicy(id: settings.lockScreenPolicies[0].id) {
+            $0.isEnabled = false
+        }
+        settings.setLockScreenPoliciesEnabled(true)
+        let probe = LockAttemptProbe()
+        let controller = LockScreenPolicyController(
+            idleSecondsProvider: { probe.idleSeconds },
+            requestNativeLock: { false },
+            requestKeyboardLock: { false },
+            screenLockedProvider: { false },
+            powerSourceProvider: { .connected },
+            environment: probe.environment
+        )
+
+        controller.configure(settings: settings)
+
+        #expect(controller.status == .noRules)
+        #expect(!probe.screenSaverDisabled)
+        #expect(probe.assertionAcquisitions == 0)
+    }
+
+    @Test func legacyRuleWithoutEnabledFieldDefaultsToEnabled() throws {
+        let id = UUID()
+        let json = """
+        {"id":"\(id.uuidString)","dayScope":"everyDay","startMinutes":540,"endMinutes":1080,"idleMinutes":10}
+        """
+
+        let policy = try JSONDecoder().decode(LockScreenPolicy.self, from: Data(json.utf8))
+        #expect(policy.isEnabled)
     }
 
     @Test func fieldUpdatesAlwaysMutateTheLatestStoredPolicy() {

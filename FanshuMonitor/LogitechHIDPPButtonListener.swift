@@ -10,15 +10,15 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
     private var workerActive = false
     private var restartRequested = false
     private var workerRunLoop: CFRunLoop?
-    private var gestureAction: MouseButtonAction = .passThrough
+    private var gestureMapping = MouseButtonMapping(action: .passThrough, shortcut: nil)
 
     deinit {
         stop()
     }
 
-    func updateAction(_ action: MouseButtonAction) {
+    func updateMapping(_ mapping: MouseButtonMapping) {
         stateLock.withLock {
-            gestureAction = action
+            gestureMapping = mapping
         }
     }
 
@@ -72,10 +72,10 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
 
             client.startGestureEvents { [weak self] in
                 guard let self else { return }
-                let action = self.currentGestureAction
-                guard action != .passThrough else { return }
+                let mapping = self.currentGestureMapping
+                guard mapping.isExecutable else { return }
                 self.actionQueue.async {
-                    MouseActionExecutor.execute(action)
+                    MouseActionExecutor.execute(mapping)
                 }
             }
 
@@ -115,8 +115,8 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
         }
     }
 
-    private var currentGestureAction: MouseButtonAction {
-        stateLock.withLock { gestureAction }
+    private var currentGestureMapping: MouseButtonMapping {
+        stateLock.withLock { gestureMapping }
     }
 
     private static func enumerateLogitechDevices() -> [IOHIDDevice] {

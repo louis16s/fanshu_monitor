@@ -89,15 +89,16 @@ final class MouseButtonEventTap {
             return Unmanaged.passUnretained(event)
         }
 
-        let action = settings?.mouseAction(for: slot) ?? .passThrough
-        guard action != .passThrough else {
+        let mapping = settings?.mouseMapping(for: slot)
+            ?? MouseButtonMapping(action: .passThrough, shortcut: nil)
+        guard mapping.isExecutable else {
             return Unmanaged.passUnretained(event)
         }
 
         if type == .otherMouseDown {
-            AppLogger.mouse.debug("Mouse button \(slot.rawValue, privacy: .public) mapped to \(action.rawValue, privacy: .public)")
+            AppLogger.mouse.debug("Mouse button \(slot.rawValue, privacy: .public) mapped to \(mapping.action.rawValue, privacy: .public)")
             actionQueue.async {
-                MouseActionExecutor.execute(action)
+                MouseActionExecutor.execute(mapping)
             }
         }
         return nil

@@ -33,11 +33,11 @@ Current version: `0.3.0`
 - Built-in and unsupported displays pass F1/F2 back to macOS
 - Display capability, DDC state, and unsupported reasons are shown per display
 - DDC failures are isolated per display with timeout circuit breaking and backoff
-- Scheduled locking supports custom ranges, next-day times, and independent idle limits
+- Scheduled locking supports custom ranges, next-day times, independent idle limits, and per-rule pause
 - Hidden modules stop sampling, and panel-closed refresh slows down
 - Network, SSID, display discovery, heavy battery telemetry, and HID data load on demand
 - UMA panel shows the app's own memory footprint
-- Mouse settings support MX Anywhere 3S DPI reads, DPI apply, and button mapping
+- Mouse settings support MX Anywhere 3S DPI reads, DPI apply, button mapping, and recorded custom shortcuts
 - Codex shows plan, 5H and weekly quota, separate reset times, and every running conversation with its progress
 - About settings include update checks, project links, and reference project notes
 

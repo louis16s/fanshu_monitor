@@ -394,6 +394,16 @@ private struct LockScreenPolicyEditor: View {
 
                     timeField(text: $endTimeText, field: .end)
 
+                    Toggle(isOn: isEnabledBinding) {
+                        Image(systemName: policy.isEnabled ? "pause.circle" : "play.circle")
+                            .frame(width: 16, height: 16)
+                    }
+                    .toggleStyle(.button)
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .help(policy.isEnabled ? "暂停此时间段" : "启用此时间段")
+                    .accessibilityLabel(policy.isEnabled ? "暂停此时间段" : "启用此时间段")
+
                     Button(role: .destructive) {
                         settings.removeLockScreenPolicy(id: policy.id)
                     } label: {
@@ -464,6 +474,7 @@ private struct LockScreenPolicyEditor: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .opacity(policy.isEnabled ? 1 : 0.56)
         .overlay {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -541,6 +552,13 @@ private struct LockScreenPolicyEditor: View {
         )
     }
 
+    private var isEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { policy.isEnabled },
+            set: { value in update { $0.isEnabled = value } }
+        )
+    }
+
     private var conflictingPolicies: [LockScreenPolicy] {
         LockScreenPolicyResolver.conflictingPolicies(
             for: policy,
@@ -611,6 +629,7 @@ private struct LockScreenPolicyEditor: View {
     }
 
     private var idleStatusText: String {
+        guard policy.isEnabled else { return "已暂停，设置仍会保留" }
         guard let minutes = parsedIdleMinutes else { return "请输入 1 至 1440 分钟，当前内容未保存" }
         guard minutes == policy.idleMinutes else { return "正在自动保存 \(minutes) 分钟" }
         if isActive {
@@ -623,11 +642,13 @@ private struct LockScreenPolicyEditor: View {
     }
 
     private var idleStatusIcon: String {
+        guard policy.isEnabled else { return "pause.circle.fill" }
         guard let minutes = parsedIdleMinutes else { return "exclamationmark.circle.fill" }
         return minutes == policy.idleMinutes ? "checkmark.circle.fill" : "clock"
     }
 
     private var idleStatusColor: Color {
+        guard policy.isEnabled else { return .secondary }
         guard let minutes = parsedIdleMinutes else { return .red }
         return minutes == policy.idleMinutes ? .green : .secondary
     }

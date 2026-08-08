@@ -51,6 +51,14 @@ final class MouseControlController: ObservableObject {
             }
             .store(in: &cancellables)
 
+        settings.$mouseCustomShortcuts
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.syncInputListeners()
+            }
+            .store(in: &cancellables)
+
         syncEnabledState(settings.mouseControlEnabled)
     }
 
@@ -186,12 +194,13 @@ final class MouseControlController: ObservableObject {
             buttonStatusText = "等待辅助功能授权"
         }
 
-        let action = settings?.mouseGestureAction ?? .passThrough
-        hidButtonListener?.updateAction(action)
+        let mapping = settings?.mouseMapping(for: .gesture)
+            ?? MouseButtonMapping(action: .passThrough, shortcut: nil)
+        hidButtonListener?.updateMapping(mapping)
         if MouseInputListenerPolicy.shouldRunHIDPPGesture(
             mouseControlEnabled: mouseControlEnabled,
             devicePresent: devicePresent,
-            action: action
+            mapping: mapping
         ) {
             hidButtonListener?.start()
         } else {

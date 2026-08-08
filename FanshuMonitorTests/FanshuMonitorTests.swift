@@ -544,17 +544,22 @@ struct FanshuMonitorTests {
         #expect(!MouseInputListenerPolicy.shouldRunHIDPPGesture(
             mouseControlEnabled: true,
             devicePresent: false,
-            action: .commandTab
+            mapping: MouseButtonMapping(action: .commandTab, shortcut: nil)
         ))
         #expect(MouseInputListenerPolicy.shouldRunHIDPPGesture(
             mouseControlEnabled: true,
             devicePresent: true,
-            action: .commandTab
+            mapping: MouseButtonMapping(action: .commandTab, shortcut: nil)
         ))
         #expect(!MouseInputListenerPolicy.shouldRunHIDPPGesture(
             mouseControlEnabled: true,
             devicePresent: true,
-            action: .passThrough
+            mapping: MouseButtonMapping(action: .passThrough, shortcut: nil)
+        ))
+        #expect(!MouseInputListenerPolicy.shouldRunHIDPPGesture(
+            mouseControlEnabled: true,
+            devicePresent: true,
+            mapping: MouseButtonMapping(action: .customShortcut, shortcut: nil)
         ))
     }
 
