@@ -42,6 +42,17 @@ struct SettingsTests {
         #expect(Set(MonitorKind.settingsOrder) == Set(MonitorKind.allCases))
     }
 
+    @Test func codexOptionsGroupQuotasBeforeTasksAndExtras() {
+        #expect(MonitorKind.codex.availableMetrics.map(\.id) == [
+            "five-hour",
+            "five-hour-reset",
+            "weekly",
+            "weekly-reset",
+            "active-tasks",
+            "reset-credits",
+        ])
+    }
+
     @Test func lockScreenPolicyOrderPersistsAfterMovingACard() {
         let suite = "lockScreenPolicyOrderPersistsAfterMovingACard"
         let defaults = UserDefaults(suiteName: suite)!

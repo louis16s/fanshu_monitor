@@ -70,19 +70,18 @@ struct MonitorPanelView: View {
 
             Spacer()
 
-            MouseSettingsButton(
-                controller: store.mouseController,
-                color: theme.captionText
-            ) {
-                SettingsWindowPresenter.open(openSettings, tab: .mouse)
+            Button {
+                store.lockScreenController.lockNow()
+            } label: {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
-
-            LockScreenSettingsButton(
-                controller: store.lockScreenController,
-                color: theme.captionText
-            ) {
-                SettingsWindowPresenter.open(openSettings, tab: .lockScreen)
-            }
+            .buttonStyle(.plain)
+            .foregroundStyle(theme.captionText)
+            .help("立即锁屏")
+            .accessibilityLabel("立即锁屏")
 
             Button {
                 SettingsWindowPresenter.open(openSettings)
@@ -225,88 +224,4 @@ struct MonitorPanelView: View {
         formatter.dateFormat = "HH:mm"
         return formatter
     }()
-}
-
-private struct MouseSettingsButton: View {
-    @ObservedObject var controller: MouseControlController
-    let color: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 3) {
-                Image(systemName: "computermouse")
-                    .font(.system(size: 10, weight: .semibold))
-
-                if let batteryText {
-                    Text(batteryText)
-                        .panelMonoFont(size: 8, weight: .medium)
-                }
-            }
-            .foregroundStyle(color)
-            .frame(minWidth: 20, minHeight: 20)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(helpText)
-        .accessibilityLabel("鼠标设置")
-        .accessibilityValue(batteryText.map { "电量 \($0)" } ?? "未连接")
-    }
-
-    private var batteryText: String? {
-        MouseHeaderPresentation.batteryText(for: controller.device)
-    }
-
-    private var helpText: String {
-        batteryText.map { "鼠标设置 · 电量 \($0)" } ?? "鼠标设置"
-    }
-}
-
-private struct LockScreenSettingsButton: View {
-    @ObservedObject var controller: LockScreenPolicyController
-    let color: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: symbolName)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(indicatorColor)
-                .frame(width: 20, height: 20)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(helpText)
-        .accessibilityLabel("锁屏设置")
-        .accessibilityValue(controller.statusText)
-    }
-
-    private var symbolName: String {
-        switch controller.status {
-        case .lockFailed, .environmentFailed:
-            "exclamationmark.triangle.fill"
-        case .locking, .locked:
-            "lock.fill"
-        case .active:
-            "lock.badge.clock"
-        default:
-            "lock"
-        }
-    }
-
-    private var indicatorColor: Color {
-        switch controller.status {
-        case .lockFailed, .environmentFailed:
-            .orange
-        default:
-            color
-        }
-    }
-
-    private var helpText: String {
-        if let policy = controller.activePolicy {
-            return "锁屏设置 · \(policy.timeRangeText) · 闲置 \(policy.idleMinutes) 分钟"
-        }
-        return "锁屏设置"
-    }
 }

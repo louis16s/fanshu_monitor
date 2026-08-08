@@ -188,6 +188,38 @@ final class LockScreenPolicyController: ObservableObject {
         reevaluate()
     }
 
+    func lockNow() {
+        guard !screenLockedProvider() else {
+            markSessionLocked()
+            return
+        }
+
+        cancelLockAttempt()
+        status = .locking
+        lockAttemptTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let result = await LockScreenAttemptRunner.run(
+                timing: self.attemptTiming,
+                requestNativeLock: self.requestNativeLock,
+                requestKeyboardLock: self.requestKeyboardLock,
+                isScreenLocked: self.screenLockedProvider
+            )
+            guard !Task.isCancelled else { return }
+
+            switch result {
+            case .locked:
+                self.markSessionLocked()
+            case .failed:
+                guard self.status == .locking else { return }
+                self.lockAttemptTask = nil
+                self.status = .lockFailed
+                AppLogger.lockScreen.error("Manual lock request was not confirmed")
+            case .cancelled:
+                break
+            }
+        }
+    }
+
     func restoreOriginalSettings() {
         guard let settings else { return }
         cancelIdleLockTimer()

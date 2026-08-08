@@ -353,6 +353,31 @@ struct LockScreenPolicyTests {
         #expect(probe.keyboardRequests == 0)
     }
 
+    @Test @MainActor func manualLockUsesTheConfirmedDirectLockPath() async {
+        let probe = LockAttemptProbe()
+        let controller = LockScreenPolicyController(
+            requestNativeLock: {
+                probe.nativeRequests += 1
+                probe.isLocked = true
+                return true
+            },
+            requestKeyboardLock: {
+                probe.keyboardRequests += 1
+                return true
+            },
+            screenLockedProvider: { probe.isLocked },
+            attemptTiming: testAttemptTiming,
+            environment: probe.environment
+        )
+
+        controller.lockNow()
+        try? await Task.sleep(for: .milliseconds(30))
+
+        #expect(probe.nativeRequests == 1)
+        #expect(probe.keyboardRequests == 0)
+        #expect(controller.status == .locked)
+    }
+
     @Test @MainActor func unconfirmedNativeLockUsesKeyboardFallback() async {
         let probe = LockAttemptProbe()
         let result = await LockScreenAttemptRunner.run(

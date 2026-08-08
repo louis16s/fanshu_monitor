@@ -15,17 +15,14 @@ struct AboutSettingsView: View {
     }
 
     var body: some View {
-        SettingsPage {
+        SettingsPage(
+            scrolls: false,
+            sectionSpacing: 12,
+            topPadding: 18,
+            bottomPadding: 18
+        ) {
             SettingsGroup {
                 aboutHeader
-            }
-
-            SettingsGroup(String(localized: "settings.utilities")) {
-                SettingsRow(title: String(localized: "settings.check-updates"), subtitle: String(localized: "settings.check-updates.subtitle")) {
-                    Toggle("", isOn: $settings.updateChecksEnabled)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                }
             }
 
             SettingsGroup {
@@ -49,6 +46,17 @@ struct AboutSettingsView: View {
                 }
             }
 
+            SettingsGroup(String(localized: "settings.utilities")) {
+                SettingsRow(title: String(localized: "settings.check-updates"), subtitle: String(localized: "settings.check-updates.subtitle")) {
+                    HStack(spacing: 10) {
+                        updateAccessory
+                        Toggle("", isOn: $settings.updateChecksEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                }
+            }
+
             SettingsGroup("兼容性") {
                 SettingsRow(
                     title: "鼠标增强",
@@ -57,16 +65,6 @@ struct AboutSettingsView: View {
                     Image(systemName: "computermouse")
                         .foregroundStyle(.secondary)
                 }
-            }
-
-            SettingsGroup("参考") {
-                ReferenceLinkRow(title: "Mouser", url: URL(string: "https://github.com/TomBadash/Mouser")!)
-                SettingsDivider()
-                ReferenceLinkRow(title: "BetterDisplay", url: URL(string: "https://github.com/waydabber/BetterDisplay")!)
-                SettingsDivider()
-                ReferenceLinkRow(title: "Hagimi Monitor", url: URL(string: "https://github.com/Acerola-1/hagimi-monitor")!)
-                SettingsDivider()
-                ReferenceLinkRow(title: "MonitorControl", url: URL(string: "https://github.com/MonitorControl/MonitorControl")!)
             }
 
             Text("© 2026 番薯Monitor contributors · MIT")
@@ -86,9 +84,7 @@ struct AboutSettingsView: View {
             title: "番薯Monitor",
             subtitle: String(localized: "about.version") + " \(appVersion)",
             footnote: String(localized: "about.footnote")
-        ) {
-            updateAccessory
-        }
+        )
     }
 
     @ViewBuilder
@@ -163,21 +159,6 @@ struct AboutSettingsView: View {
         } else {
             Button(title, action: action)
                 .buttonStyle(.borderedProminent)
-        }
-    }
-}
-
-private struct ReferenceLinkRow: View {
-    let title: String
-    let url: URL
-
-    var body: some View {
-        SettingsRow(title: title) {
-            Link(destination: url) {
-                Image(systemName: "arrow.up.right")
-            }
-            .buttonStyle(.plain)
-            .fixedSize()
         }
     }
 }
