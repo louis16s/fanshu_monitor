@@ -10,6 +10,7 @@ struct LockScreenSettingsView: View {
     @State private var isSyncingSystemSettings = false
     @State private var systemSettingsExpanded = false
     @State private var showsRestoreConfirmation = false
+    @State private var dropTargetPolicyID: LockScreenPolicy.ID?
 
     var body: some View {
         SettingsPage(
@@ -217,7 +218,29 @@ struct LockScreenSettingsView: View {
                         )
                         .overlay {
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(.separator.opacity(0.22), lineWidth: 1)
+                                .stroke(
+                                    dropTargetPolicyID == policy.id
+                                        ? Color.accentColor.opacity(0.9)
+                                        : Color(nsColor: .separatorColor).opacity(0.22),
+                                    lineWidth: dropTargetPolicyID == policy.id ? 2 : 1
+                                )
+                        }
+                        .dropDestination(for: String.self) { identifiers, _ in
+                            guard let identifier = identifiers.first,
+                                  let sourceID = UUID(uuidString: identifier) else {
+                                return false
+                            }
+                            withAnimation(.easeInOut(duration: 0.16)) {
+                                settings.moveLockScreenPolicy(id: sourceID, to: policy.id)
+                            }
+                            dropTargetPolicyID = nil
+                            return true
+                        } isTargeted: { isTargeted in
+                            if isTargeted {
+                                dropTargetPolicyID = policy.id
+                            } else if dropTargetPolicyID == policy.id {
+                                dropTargetPolicyID = nil
+                            }
                         }
                     }
 
@@ -403,6 +426,20 @@ private struct LockScreenPolicyEditor: View {
                     .controlSize(.small)
                     .help(policy.isEnabled ? "暂停此时间段" : "启用此时间段")
                     .accessibilityLabel(policy.isEnabled ? "暂停此时间段" : "启用此时间段")
+
+                    Image(systemName: "line.3.horizontal")
+                        .foregroundStyle(.secondary)
+                        .contentShape(Rectangle())
+                        .padding(4)
+                        .draggable(policy.id.uuidString) {
+                            Label(
+                                policy.name.isEmpty ? fallbackName : policy.name,
+                                systemImage: "line.3.horizontal"
+                            )
+                            .padding(8)
+                        }
+                        .help("拖动卡片调整顺序")
+                        .accessibilityLabel("调整\(policy.name.isEmpty ? fallbackName : policy.name)顺序")
 
                     Button(role: .destructive) {
                         settings.removeLockScreenPolicy(id: policy.id)

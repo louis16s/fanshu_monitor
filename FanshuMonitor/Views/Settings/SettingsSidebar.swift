@@ -29,7 +29,7 @@ struct SettingsSidebar: View {
             }
 
             Section(String(localized: "settings.sidebar.modules")) {
-                ForEach(MonitorKind.allCases) { kind in
+                ForEach(MonitorKind.settingsOrder) { kind in
                     Label {
                         Text(kind == .codex ? "Codex" : kind.title)
                             .foregroundStyle(settings.isVisible(kind) ? .primary : .secondary)

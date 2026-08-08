@@ -29,6 +29,42 @@ struct MouseHeaderPresentationTests {
 }
 
 struct SettingsTests {
+    @Test func monitorModulesUseOneLogicalSettingsOrder() {
+        #expect(MonitorKind.settingsOrder == [
+            .cpu,
+            .gpu,
+            .memory,
+            .battery,
+            .storage,
+            .network,
+            .codex,
+        ])
+        #expect(Set(MonitorKind.settingsOrder) == Set(MonitorKind.allCases))
+    }
+
+    @Test func lockScreenPolicyOrderPersistsAfterMovingACard() {
+        let suite = "lockScreenPolicyOrderPersistsAfterMovingACard"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+
+        settings.addLockScreenPolicy()
+        settings.addLockScreenPolicy()
+        settings.addLockScreenPolicy()
+        let originalIDs = settings.lockScreenPolicies.map(\.id)
+
+        settings.moveLockScreenPolicy(id: originalIDs[0], to: originalIDs[2])
+
+        #expect(settings.lockScreenPolicies.map(\.id) == [
+            originalIDs[1],
+            originalIDs[2],
+            originalIDs[0],
+        ])
+
+        let reloaded = MonitorSettings(defaults: defaults)
+        #expect(reloaded.lockScreenPolicies.map(\.id) == settings.lockScreenPolicies.map(\.id))
+    }
+
     @Test func defaultThemePreference() {
         let settings = MonitorSettings()
         #expect(settings.themePreference == .system)

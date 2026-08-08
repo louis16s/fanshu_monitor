@@ -49,6 +49,16 @@ struct AboutSettingsView: View {
                 }
             }
 
+            SettingsGroup("兼容性") {
+                SettingsRow(
+                    title: "鼠标增强",
+                    subtitle: "目前仅适配 Logitech MX Anywhere 3S"
+                ) {
+                    Image(systemName: "computermouse")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             SettingsGroup("参考") {
                 ReferenceLinkRow(title: "Mouser", url: URL(string: "https://github.com/TomBadash/Mouser")!)
                 SettingsDivider()

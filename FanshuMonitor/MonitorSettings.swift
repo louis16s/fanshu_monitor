@@ -350,6 +350,17 @@ final class MonitorSettings: ObservableObject {
         lockScreenPolicies.removeAll { $0.id == id }
     }
 
+    func moveLockScreenPolicy(id: LockScreenPolicy.ID, to targetID: LockScreenPolicy.ID) {
+        guard id != targetID,
+              let sourceIndex = lockScreenPolicies.firstIndex(where: { $0.id == id }),
+              let targetIndex = lockScreenPolicies.firstIndex(where: { $0.id == targetID }) else {
+            return
+        }
+
+        let policy = lockScreenPolicies.remove(at: sourceIndex)
+        lockScreenPolicies.insert(policy, at: min(targetIndex, lockScreenPolicies.endIndex))
+    }
+
     private func nextLockScreenPolicyName() -> String {
         let existingNames = Set(
             lockScreenPolicies.enumerated().map { index, policy in

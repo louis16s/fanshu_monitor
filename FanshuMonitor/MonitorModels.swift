@@ -63,6 +63,16 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
+    static let settingsOrder: [MonitorKind] = [
+        .cpu,
+        .gpu,
+        .memory,
+        .battery,
+        .storage,
+        .network,
+        .codex,
+    ]
+
     var title: String {
         switch self {
         case .cpu:
