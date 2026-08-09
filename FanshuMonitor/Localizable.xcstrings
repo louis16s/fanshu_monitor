@@ -434,12 +434,28 @@
         }
       }
     },
+    "language.chinese": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中文"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chinese"
+          }
+        }
+      }
+    },
     "language.english": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "英语"
+            "value": "English"
           }
         },
         "en": {
@@ -510,6 +526,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Berry"
+          }
+        }
+      }
+    },
+    "color-scheme.aurora": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "极光"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aurora"
+          }
+        }
+      }
+    },
+    "color-scheme.night-voyage": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "夜航"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Night Voyage"
           }
         }
       }
@@ -1186,6 +1234,36 @@
         }
       }
     },
+    "metric.codex.five-hour-reset": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "5H 刷新" } },
+        "en": { "stringUnit": { "state": "translated", "value": "5H Reset" } }
+      }
+    },
+    "metric.codex.weekly": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "一周" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Weekly" } }
+      }
+    },
+    "metric.codex.weekly-reset": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "周刷新" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Weekly Reset" } }
+      }
+    },
+    "metric.codex.active-tasks": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "活动任务" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Active Tasks" } }
+      }
+    },
+    "metric.codex.reset-credits": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重置卡" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Reset Credits" } }
+      }
+    },
     "settings.appearance": {
       "localizations": {
         "zh-Hans": {
@@ -1266,6 +1344,72 @@
         }
       }
     },
+    "settings.permissions": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "权限" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Permissions" } }
+      }
+    },
+    "settings.accessibility": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "辅助功能" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Accessibility" } }
+      }
+    },
+    "settings.accessibility.subtitle": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用于接管 F1/F2 和鼠标可编程按键" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Used for F1/F2 control and programmable mouse buttons" } }
+      }
+    },
+    "settings.input-monitoring": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "输入监听" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Input Monitoring" } }
+      }
+    },
+    "settings.input-monitoring.subtitle": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用于识别系统亮度键" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Used to recognize system brightness keys" } }
+      }
+    },
+    "settings.authorized": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已授权" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Authorized" } }
+      }
+    },
+    "settings.authorize": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "授权" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Authorize" } }
+      }
+    },
+    "settings.reset-all.title": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重置所有设置" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Reset All Settings" } }
+      }
+    },
+    "settings.reset-all.action": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重置所有设置" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Reset All Settings" } }
+      }
+    },
+    "settings.reset-all.message": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "所有模块、外观、显示器、鼠标和锁屏设置都会恢复默认值" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Modules, appearance, displays, mouse, and lock screen settings will return to defaults" } }
+      }
+    },
+    "settings.cancel": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "取消" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Cancel" } }
+      }
+    },
     "settings.menu-bar": {
       "localizations": {
         "zh-Hans": {
@@ -1342,6 +1486,102 @@
           "stringUnit": {
             "state": "translated",
             "value": "Allow background update checks. Manual checks are always available"
+          }
+        }
+      }
+    },
+    "settings.automatic-update-checks": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动检查更新"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic Update Checks"
+          }
+        }
+      }
+    },
+    "settings.automatic-update-checks.subtitle": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动后每天最多检查一次"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check at launch at most once per day"
+          }
+        }
+      }
+    },
+    "settings.codex-limits": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "额度"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limits"
+          }
+        }
+      }
+    },
+    "settings.codex-activity": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "活动"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activity"
+          }
+        }
+      }
+    },
+    "settings.codex-active-tasks": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "运行中的任务"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running Tasks"
+          }
+        }
+      }
+    },
+    "settings.codex-active-tasks.subtitle": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示 Codex 任务名称和进度"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Codex task names and progress"
           }
         }
       }
@@ -1694,6 +1934,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version "
+          }
+        }
+      }
+    },
+    "about.current-version": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前版本"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current Version"
+          }
+        }
+      }
+    },
+    "about.update-not-checked": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未检查更新"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not checked yet"
+          }
+        }
+      }
+    },
+    "about.mouse-enhancement": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "鼠标增强"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mouse Enhancement"
+          }
+        }
+      }
+    },
+    "about.mouse-compatibility": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前仅适配 Logitech MX Anywhere 3S"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Currently supports Logitech MX Anywhere 3S only"
           }
         }
       }

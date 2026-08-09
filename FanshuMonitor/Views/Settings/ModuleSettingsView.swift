@@ -31,8 +31,8 @@ struct ModuleSettingsView: View {
                 }
             }
 
-            SettingsGroup(String(localized: "settings.metrics")) {
-                ForEach(Array(kind.availableMetrics.enumerated()), id: \.element.id) { index, metric in
+            SettingsGroup(kind == .codex ? String(localized: "settings.codex-limits") : String(localized: "settings.metrics")) {
+                ForEach(Array(displayedMetrics.enumerated()), id: \.element.id) { index, metric in
                     let isSelected = settings.isMetricEnabled(metric.id, for: kind)
                     MetricSelectionRow(
                         title: metric.title,
@@ -44,13 +44,13 @@ struct ModuleSettingsView: View {
                         settings.setMetric(metric.id, enabled: !isSelected, for: kind)
                     }
 
-                    if index < kind.availableMetrics.count - 1 {
+                    if index < displayedMetrics.count - 1 {
                         SettingsDivider()
                     }
                 }
 
                 if let limit = MonitorSettings.enabledMetricLimit(for: kind),
-                   kind.availableMetrics.count > limit {
+                   displayedMetrics.count > limit {
                     SettingsDivider()
 
                     HStack {
@@ -63,7 +63,27 @@ struct ModuleSettingsView: View {
                     .padding(.vertical, 9)
                 }
             }
+
+            if kind == .codex,
+               let activeTasksMetric = kind.availableMetrics.first(where: { $0.id == "active-tasks" }) {
+                SettingsGroup(String(localized: "settings.codex-activity")) {
+                    let isSelected = settings.isMetricEnabled(activeTasksMetric.id, for: kind)
+                    MetricSelectionRow(
+                        title: String(localized: "settings.codex-active-tasks"),
+                        subtitle: String(localized: "settings.codex-active-tasks.subtitle"),
+                        isSelected: isSelected,
+                        isEnabled: true
+                    ) {
+                        settings.setMetric(activeTasksMetric.id, enabled: !isSelected, for: kind)
+                    }
+                }
+            }
         }
+    }
+
+    private var displayedMetrics: [MetricSwitch] {
+        guard kind == .codex else { return kind.availableMetrics }
+        return kind.availableMetrics.filter { $0.id != "active-tasks" }
     }
 
     private func isLocked(_ metric: MetricSwitch) -> Bool {
@@ -80,6 +100,7 @@ struct ModuleSettingsView: View {
 
 private struct MetricSelectionRow: View {
     let title: String
+    var subtitle: String? = nil
     let isSelected: Bool
     let isEnabled: Bool
     var isLocked = false
@@ -94,9 +115,18 @@ private struct MetricSelectionRow: View {
                     .foregroundStyle(isSelected ? Color.accentColor : .secondary)
                     .frame(width: 18, height: 18)
 
-                Text(title)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(isEnabled ? .primary : .secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(isEnabled ? .primary : .secondary)
+
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
 
                 Spacer(minLength: 16)
 

@@ -6,23 +6,37 @@ final class UpdateChecker {
     typealias DataLoader = (URLRequest) async throws -> (Data, URLResponse)
 
     private(set) var state: UpdateCheckState = .idle
+    private(set) var lastError: String?
 
     private let latestReleaseURL: URL
     private let currentVersionProvider: () -> String
     private let dataLoader: DataLoader
+    private let defaults: UserDefaults
+    private let now: () -> Date
+    private var lastStableState: UpdateCheckState?
+
+    private static let automaticCheckInterval: TimeInterval = 24 * 60 * 60
+    private static let lastAutomaticCheckKey = "updates.lastAutomaticCheckAt"
+    private static let releaseETagKey = "updates.releaseETag"
+    private static let releasePayloadKey = "updates.releasePayload"
 
     init(
         latestReleaseURL: URL = URL(string: "https://api.github.com/repos/louis16s/fanshu_monitor/releases/latest")!,
         currentVersionProvider: @escaping () -> String = {
             AppVersion.current
         },
+        defaults: UserDefaults = .standard,
+        now: @escaping () -> Date = Date.init,
         dataLoader: @escaping DataLoader = { request in
             try await URLSession.shared.data(for: request)
         }
     ) {
         self.latestReleaseURL = latestReleaseURL
         self.currentVersionProvider = currentVersionProvider
+        self.defaults = defaults
+        self.now = now
         self.dataLoader = dataLoader
+        restoreCachedReleaseIfAvailable()
     }
 
     var currentVersion: String {
@@ -30,54 +44,119 @@ final class UpdateChecker {
     }
 
     func checkForUpdates() async {
+        await performCheck()
+    }
+
+    func checkAutomaticallyIfNeeded(enabled: Bool) async {
+        guard enabled else { return }
+        let currentDate = now()
+        if let lastCheck = defaults.object(forKey: Self.lastAutomaticCheckKey) as? Date,
+           currentDate.timeIntervalSince(lastCheck) < Self.automaticCheckInterval {
+            return
+        }
+        defaults.set(currentDate, forKey: Self.lastAutomaticCheckKey)
+        await performCheck()
+    }
+
+    private func performCheck() async {
         guard !state.isChecking else { return }
         state = .checking
+        lastError = nil
 
         var request = URLRequest(url: latestReleaseURL)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("FanshuMonitor", forHTTPHeaderField: "User-Agent")
+        if let etag = defaults.string(forKey: Self.releaseETagKey), !etag.isEmpty {
+            request.setValue(etag, forHTTPHeaderField: "If-None-Match")
+        }
         request.timeoutInterval = 15
 
         do {
             let (data, response) = try await dataLoader(request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                state = .failed(failureMessage(for: response, data: data))
+            guard let httpResponse = response as? HTTPURLResponse else {
+                reportFailure(String(localized: "update.temp-unavailable"))
+                return
+            }
+
+            let releaseData: Data
+            if httpResponse.statusCode == 304,
+               let cachedData = defaults.data(forKey: Self.releasePayloadKey) {
+                releaseData = cachedData
+            } else if (200...299).contains(httpResponse.statusCode) {
+                releaseData = data
+                defaults.set(data, forKey: Self.releasePayloadKey)
+                if let etag = httpResponse.value(forHTTPHeaderField: "ETag") {
+                    defaults.set(etag, forKey: Self.releaseETagKey)
+                }
+            } else {
+                reportFailure(failureMessage(for: response, data: data))
                 return
             }
 
             let release: GitHubRelease
             do {
-                release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+                release = try JSONDecoder().decode(GitHubRelease.self, from: releaseData)
             } catch {
-                state = .failed(String(localized: "update.parse-failed"))
+                reportFailure(String(localized: "update.parse-failed"))
                 return
             }
             let latestVersion = VersionParser.normalize(release.tagName)
 
             guard !latestVersion.isEmpty else {
-                state = .failed(String(localized: "update.version-parse-failed"))
+                reportFailure(String(localized: "update.version-parse-failed"))
                 return
             }
 
             if VersionParser.isNewer(latestVersion, than: currentVersion) {
                 let downloadURL = resolveDownloadURL(from: release)
-                state = .updateAvailable(
+                setStableState(.updateAvailable(
                     latestVersion: latestVersion,
                     publishedAt: release.publishedAt,
                     downloadURL: downloadURL,
                     releaseNotes: release.body
-                )
+                ))
             } else {
-                state = .upToDate
+                setStableState(.upToDate)
             }
         } catch {
-            state = .failed(String(localized: "update.network-error"))
+            reportFailure(String(localized: "update.network-error"))
         }
     }
 
     func reset() {
         state = .idle
+        lastError = nil
+    }
+
+    private func setStableState(_ newState: UpdateCheckState) {
+        lastStableState = newState
+        lastError = nil
+        state = newState
+    }
+
+    private func reportFailure(_ message: String) {
+        lastError = message
+        state = lastStableState ?? .failed(message)
+    }
+
+    private func restoreCachedReleaseIfAvailable() {
+        guard let data = defaults.data(forKey: Self.releasePayloadKey),
+              let release = try? JSONDecoder().decode(GitHubRelease.self, from: data) else {
+            return
+        }
+        let latestVersion = VersionParser.normalize(release.tagName)
+        guard !latestVersion.isEmpty else { return }
+
+        if VersionParser.isNewer(latestVersion, than: currentVersion) {
+            setStableState(.updateAvailable(
+                latestVersion: latestVersion,
+                publishedAt: release.publishedAt,
+                downloadURL: resolveDownloadURL(from: release),
+                releaseNotes: release.body
+            ))
+        } else {
+            setStableState(.upToDate)
+        }
     }
 
     static func resolveDownloadURL(from release: GitHubRelease) -> URL {

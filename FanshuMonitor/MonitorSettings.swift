@@ -39,6 +39,8 @@ enum MonitorColorSchemePreference: String, CaseIterable, Identifiable {
     case graphite
     case teal
     case rose
+    case aurora
+    case nightVoyage
 
     var id: String { rawValue }
 
@@ -52,12 +54,34 @@ enum MonitorColorSchemePreference: String, CaseIterable, Identifiable {
             String(localized: "color-scheme.teal")
         case .rose:
             String(localized: "color-scheme.rose")
+        case .aurora:
+            String(localized: "color-scheme.aurora")
+        case .nightVoyage:
+            String(localized: "color-scheme.night-voyage")
+        }
+    }
+
+    var previewColors: [Color] {
+        switch self {
+        case .systemBlue:
+            [Color(hex: 0xD27A4A), Color(hex: 0x5D8CF0), Color(hex: 0x42A39A), Color(hex: 0x8B5CF6)]
+        case .graphite:
+            [Color(hex: 0xC2410C), Color(hex: 0x475569), Color(hex: 0x0D9488), Color(hex: 0xBE185D)]
+        case .teal:
+            [Color(hex: 0xEA580C), Color(hex: 0x0EA5E9), Color(hex: 0x10B981), Color(hex: 0x6366F1)]
+        case .rose:
+            [Color(hex: 0xE11D48), Color(hex: 0x7C3AED), Color(hex: 0x0891B2), Color(hex: 0xF59E0B)]
+        case .aurora:
+            [Color(hex: 0xF97316), Color(hex: 0x06B6D4), Color(hex: 0x22C55E), Color(hex: 0xA855F7)]
+        case .nightVoyage:
+            [Color(hex: 0xF59E0B), Color(hex: 0x3B82F6), Color(hex: 0x14B8A6), Color(hex: 0xEC4899)]
         }
     }
 }
 
 enum AppLanguagePreference: String, CaseIterable, Identifiable {
     case system
+    case simplifiedChinese
     case english
 
     var id: String { rawValue }
@@ -66,6 +90,8 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
         switch self {
         case .system:
             String(localized: "language.system")
+        case .simplifiedChinese:
+            String(localized: "language.chinese")
         case .english:
             String(localized: "language.english")
         }
@@ -75,6 +101,8 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
         switch self {
         case .system:
             nil
+        case .simplifiedChinese:
+            Locale(identifier: "zh-Hans")
         case .english:
             Locale(identifier: "en")
         }

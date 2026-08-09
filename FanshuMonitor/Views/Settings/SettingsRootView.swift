@@ -5,6 +5,7 @@ struct SettingsRootView: View {
     @ObservedObject var settings: MonitorSettings
     @ObservedObject var mouseController: MouseControlController
     @ObservedObject var lockScreenController: LockScreenPolicyController
+    let updateChecker: UpdateChecker
     @State private var selection: SettingsRoute = .general
 
     var body: some View {
@@ -43,7 +44,7 @@ struct SettingsRootView: View {
             DisplayModuleSettingsView(settings: settings)
         #endif
         case .about:
-            AboutSettingsView(settings: settings)
+            AboutSettingsView(settings: settings, updateChecker: updateChecker)
         }
     }
 }

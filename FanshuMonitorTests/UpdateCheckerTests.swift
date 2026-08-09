@@ -119,6 +119,110 @@ struct GitHubReleaseDecodingTests {
 @MainActor
 struct UpdateCheckerTests {
 
+    @Test func automaticChecksAreThrottledForOneDay() async {
+        let suiteName = "FanshuMonitorTests.UpdateChecker.throttle"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        var requestCount = 0
+        let checker = UpdateChecker(
+            currentVersionProvider: { "1.0.0" },
+            defaults: defaults,
+            now: { Date(timeIntervalSince1970: 1_800_000_000) },
+            dataLoader: { request in
+                requestCount += 1
+                let json = """
+                {
+                    "tag_name": "v1.0.0",
+                    "html_url": "https://github.com/louis16s/fanshu_monitor/releases/tag/v1.0.0"
+                }
+                """
+                return (
+                    Data(json.utf8),
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                )
+            }
+        )
+
+        await checker.checkAutomaticallyIfNeeded(enabled: true)
+        await checker.checkAutomaticallyIfNeeded(enabled: true)
+
+        #expect(requestCount == 1)
+        #expect(checker.state == .upToDate)
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    @Test func cachedReleaseIsUsedForNotModifiedResponse() async {
+        let suiteName = "FanshuMonitorTests.UpdateChecker.etag"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        var requestCount = 0
+        let checker = UpdateChecker(
+            currentVersionProvider: { "1.0.0" },
+            defaults: defaults,
+            dataLoader: { request in
+                requestCount += 1
+                if requestCount == 1 {
+                    let json = """
+                    {
+                        "tag_name": "v1.1.0",
+                        "html_url": "https://github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0"
+                    }
+                    """
+                    return (
+                        Data(json.utf8),
+                        HTTPURLResponse(
+                            url: request.url!,
+                            statusCode: 200,
+                            httpVersion: nil,
+                            headerFields: ["ETag": "release-v1"]
+                        )!
+                    )
+                }
+
+                #expect(request.value(forHTTPHeaderField: "If-None-Match") == "release-v1")
+                return (
+                    Data(),
+                    HTTPURLResponse(url: request.url!, statusCode: 304, httpVersion: nil, headerFields: nil)!
+                )
+            }
+        )
+
+        await checker.checkForUpdates()
+        await checker.checkForUpdates()
+
+        #expect(requestCount == 2)
+        guard case .updateAvailable(let latestVersion, _, _, _) = checker.state else {
+            Issue.record("Expected cached update state")
+            return
+        }
+        #expect(latestVersion == "1.1.0")
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    @Test func cachedReleaseRestoresStatusBeforeTheNextAutomaticCheck() {
+        let suiteName = "FanshuMonitorTests.UpdateChecker.restore"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(Data("""
+        {
+            "tag_name": "v1.1.0",
+            "html_url": "https://github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0"
+        }
+        """.utf8), forKey: "updates.releasePayload")
+
+        let checker = UpdateChecker(
+            currentVersionProvider: { "1.0.0" },
+            defaults: defaults
+        )
+
+        guard case .updateAvailable(let latestVersion, _, _, _) = checker.state else {
+            Issue.record("Expected cached update state")
+            return
+        }
+        #expect(latestVersion == "1.1.0")
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
     @Test func checkForUpdatesReportsAvailableRelease() async throws {
         let releaseURL = URL(string: "https://github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0")!
         let assetURL = URL(string: "https://github.com/louis16s/fanshu_monitor/releases/download/v1.1.0/番薯Monitor.dmg")!
@@ -216,7 +320,9 @@ struct UpdateCheckerTests {
     }
 
     @Test func checkForUpdatesMapsRateLimitToFriendlyMessage() async {
+        let defaults = isolatedDefaults("rateLimit")
         let checker = UpdateChecker(
+            defaults: defaults,
             dataLoader: { request in
                 (
                     Data(),
@@ -233,10 +339,13 @@ struct UpdateCheckerTests {
         await checker.checkForUpdates()
 
         #expect(checker.state == .failed(String(localized: "update.rate-limited")))
+        defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.rateLimit")
     }
 
     @Test func checkForUpdatesMapsMissingReleaseToFriendlyMessage() async {
+        let defaults = isolatedDefaults("missingRelease")
         let checker = UpdateChecker(
+            defaults: defaults,
             dataLoader: { request in
                 (
                     Data(),
@@ -253,10 +362,13 @@ struct UpdateCheckerTests {
         await checker.checkForUpdates()
 
         #expect(checker.state == .failed(String(localized: "update.no-release")))
+        defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.missingRelease")
     }
 
     @Test func checkForUpdatesHandlesDecodeFailure() async {
+        let defaults = isolatedDefaults("decodeFailure")
         let checker = UpdateChecker(
+            defaults: defaults,
             dataLoader: { request in
                 (
                     Data("{}".utf8),
@@ -273,6 +385,7 @@ struct UpdateCheckerTests {
         await checker.checkForUpdates()
 
         #expect(checker.state == .failed(String(localized: "update.parse-failed")))
+        defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.decodeFailure")
     }
 
     @Test func resolveDownloadURLFallsBackToReleasePage() throws {
@@ -292,5 +405,12 @@ struct UpdateCheckerTests {
         let release = try JSONDecoder().decode(GitHubRelease.self, from: Data(json.utf8))
 
         #expect(UpdateChecker.resolveDownloadURL(from: release) == releaseURL)
+    }
+
+    private func isolatedDefaults(_ suffix: String) -> UserDefaults {
+        let suiteName = "FanshuMonitorTests.UpdateChecker.\(suffix)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
     }
 }

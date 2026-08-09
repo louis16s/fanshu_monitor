@@ -362,6 +362,13 @@ struct FanshuMonitorTests {
         #expect(settings.colorSchemePreference == .systemBlue)
     }
 
+    @Test func expandedAppearanceOptionsRemainAvailable() {
+        #expect(AppLanguagePreference.allCases == [.system, .simplifiedChinese, .english])
+        #expect(MonitorColorSchemePreference.allCases.contains(.aurora))
+        #expect(MonitorColorSchemePreference.allCases.contains(.nightVoyage))
+        #expect(MonitorColorSchemePreference.allCases.allSatisfy { $0.previewColors.count == 4 })
+    }
+
     @Test func codexUsagePayloadBuildsQuotaModule() throws {
         let json = """
         {

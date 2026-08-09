@@ -3,7 +3,7 @@ import SwiftUI
 
 struct AboutSettingsView: View {
     @ObservedObject var settings: MonitorSettings
-    @State private var updateChecker = UpdateChecker()
+    let updateChecker: UpdateChecker
 
     private let websiteURL = URL(string: "https://louis16s.github.io/fanshu_monitor/")!
 
@@ -35,25 +35,33 @@ struct AboutSettingsView: View {
 
                 AboutSettingRow(
                     symbol: "arrow.triangle.2.circlepath",
-                    title: String(localized: "settings.check-updates")
+                    title: String(localized: "settings.automatic-update-checks"),
+                    subtitle: String(localized: "settings.automatic-update-checks.subtitle")
                 ) {
-                    HStack(spacing: 10) {
-                        updateControl
-                        Toggle("", isOn: $settings.updateChecksEnabled)
-                            .toggleStyle(.switch)
-                            .controlSize(.mini)
-                            .labelsHidden()
-                            .help("自动检查更新")
-                            .accessibilityLabel("自动检查更新")
-                    }
+                    Toggle("", isOn: $settings.updateChecksEnabled)
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .labelsHidden()
+                        .help(String(localized: "settings.automatic-update-checks"))
+                        .accessibilityLabel(String(localized: "settings.automatic-update-checks"))
+                }
+
+                SettingsDivider()
+
+                AboutSettingRow(
+                    symbol: updateStatusSymbol,
+                    title: String(localized: "about.current-version") + " \(appVersion)",
+                    subtitle: updateStatusText
+                ) {
+                    updateControl
                 }
 
                 SettingsDivider()
 
                 AboutSettingRow(
                     symbol: "computermouse",
-                    title: "鼠标增强",
-                    subtitle: "目前仅适配 Logitech MX Anywhere 3S"
+                    title: String(localized: "about.mouse-enhancement"),
+                    subtitle: String(localized: "about.mouse-compatibility")
                 ) {}
             }
 
@@ -62,10 +70,6 @@ struct AboutSettingsView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 2)
-        }
-        .task {
-            guard settings.updateChecksEnabled else { return }
-            await updateChecker.checkForUpdates()
         }
     }
 
@@ -103,64 +107,71 @@ struct AboutSettingsView: View {
     private var updateControl: some View {
         switch updateChecker.state {
         case .idle:
-            updateButton(symbol: "arrow.clockwise", help: String(localized: "about.check-updates")) {
+            updateButton(title: String(localized: "about.check-updates")) {
                 Task { await updateChecker.checkForUpdates() }
             }
-
         case .checking:
             ProgressView()
                 .controlSize(.small)
                 .help(String(localized: "about.checking"))
-
         case .upToDate:
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .help(String(localized: "about.up-to-date"))
-                updateButton(symbol: "arrow.clockwise", help: String(localized: "about.check-again")) {
-                    Task { await updateChecker.checkForUpdates() }
-                }
+            updateButton(title: String(localized: "about.check-again")) {
+                Task { await updateChecker.checkForUpdates() }
             }
-
         case .updateAvailable(let latestVersion, _, let downloadURL, _):
-            Button {
+            Button(String(localized: "about.download-update")) {
                 NSWorkspace.shared.open(downloadURL)
-            } label: {
-                Image(systemName: "arrow.down.circle.fill")
-                    .foregroundStyle(Color.accentColor)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
             .help(String(localized: "about.found") + " \(latestVersion)")
-            .accessibilityLabel(String(localized: "about.download-update"))
-
-        case .failed(let message):
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .help(message)
-                updateButton(symbol: "arrow.clockwise", help: String(localized: "about.retry")) {
-                    Task { await updateChecker.checkForUpdates() }
-                }
+        case .failed:
+            updateButton(title: String(localized: "about.retry")) {
+                Task { await updateChecker.checkForUpdates() }
             }
         }
     }
 
     @ViewBuilder
-    private func updateButton(symbol: String, help: String, action: @escaping () -> Void) -> some View {
+    private func updateButton(title: String, action: @escaping () -> Void) -> some View {
         if #available(macOS 26, *) {
-            Button(action: action) {
-                Image(systemName: symbol)
-            }
-            .buttonStyle(.glass)
-            .controlSize(.small)
-            .help(help)
-        } else {
-            Button(action: action) {
-                Image(systemName: symbol)
-            }
-                .buttonStyle(.borderedProminent)
+            Button(title, action: action)
+                .buttonStyle(.glass)
                 .controlSize(.small)
-                .help(help)
+        } else {
+            Button(title, action: action)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+    }
+
+    private var updateStatusSymbol: String {
+        if updateChecker.lastError != nil { return "exclamationmark.triangle.fill" }
+        switch updateChecker.state {
+        case .idle, .checking:
+            return "arrow.triangle.2.circlepath"
+        case .upToDate:
+            return "checkmark.circle.fill"
+        case .updateAvailable:
+            return "arrow.down.circle.fill"
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var updateStatusText: String {
+        if let lastError = updateChecker.lastError { return lastError }
+        switch updateChecker.state {
+        case .idle:
+            return String(localized: "about.update-not-checked")
+        case .checking:
+            return String(localized: "about.checking")
+        case .upToDate:
+            return String(localized: "about.up-to-date")
+        case .updateAvailable(let latestVersion, _, _, _):
+            return String(localized: "about.found") + " \(latestVersion)"
+        case .failed(let message):
+            return message
         }
     }
 }

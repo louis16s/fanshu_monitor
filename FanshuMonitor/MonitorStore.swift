@@ -24,6 +24,7 @@ final class MonitorStore: ObservableObject {
     #endif
     let mouseController = MouseControlController()
     let lockScreenController = LockScreenPolicyController()
+    let updateChecker = UpdateChecker()
 
     private var allModules: [MonitorModule]
     private let refreshSchedule = MonitorRefreshSchedule()
@@ -56,6 +57,9 @@ final class MonitorStore: ObservableObject {
         modules = initialModules.filter { settings.isVisible($0.kind) }
         guard !AppRuntime.isRunningTests else {
             return
+        }
+        Task { [updateChecker] in
+            await updateChecker.checkAutomaticallyIfNeeded(enabled: settings.updateChecksEnabled)
         }
         let initialSamplingKinds = MonitorSamplingPolicy.activeKinds(
             visibleKinds: settings.visibleKinds,
@@ -117,6 +121,17 @@ final class MonitorStore: ObservableObject {
                 self.refreshSchedule.setInterval(minutes * 60, for: .codex)
                 Task { [samplingCoordinator = self.samplingCoordinator] in
                     await samplingCoordinator.setCodexRefreshInterval(minutes * 60)
+                }
+            }
+            .store(in: &cancellables)
+        settings.$updateChecksEnabled
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] enabled in
+                guard enabled, let self else { return }
+                Task { [updateChecker = self.updateChecker] in
+                    await updateChecker.checkAutomaticallyIfNeeded(enabled: true)
                 }
             }
             .store(in: &cancellables)

@@ -48,7 +48,8 @@ struct GeneralSettingsView: View {
                 SettingsRow(title: String(localized: "settings.color-scheme")) {
                     Picker(String(localized: "settings.color-scheme"), selection: $settings.colorSchemePreference) {
                         ForEach(MonitorColorSchemePreference.allCases) { colorScheme in
-                            Text(colorScheme.title).tag(colorScheme)
+                            ColorSchemeOptionLabel(preference: colorScheme)
+                                .tag(colorScheme)
                         }
                     }
                     .labelsHidden()
@@ -70,9 +71,12 @@ struct GeneralSettingsView: View {
                 }
             }
 
-            SettingsGroup("权限") {
-                SettingsRow(title: "辅助功能", subtitle: "用于接管 F1/F2 和鼠标可编程按键") {
-                    Button(accessibilityTrusted ? "已授权" : "授权") {
+            SettingsGroup(String(localized: "settings.permissions")) {
+                SettingsRow(
+                    title: String(localized: "settings.accessibility"),
+                    subtitle: String(localized: "settings.accessibility.subtitle")
+                ) {
+                    Button(accessibilityTrusted ? String(localized: "settings.authorized") : String(localized: "settings.authorize")) {
                         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
                         _ = AXIsProcessTrustedWithOptions(options)
                         accessibilityTrusted = AXIsProcessTrusted()
@@ -83,8 +87,11 @@ struct GeneralSettingsView: View {
 
                 SettingsDivider()
 
-                SettingsRow(title: "输入监听", subtitle: "用于识别系统亮度键") {
-                    Button(inputMonitoringTrusted ? "已授权" : "授权") {
+                SettingsRow(
+                    title: String(localized: "settings.input-monitoring"),
+                    subtitle: String(localized: "settings.input-monitoring.subtitle")
+                ) {
+                    Button(inputMonitoringTrusted ? String(localized: "settings.authorized") : String(localized: "settings.authorize")) {
                         _ = CGRequestListenEventAccess()
                         inputMonitoringTrusted = CGPreflightListenEventAccess()
                     }
@@ -120,21 +127,39 @@ struct GeneralSettingsView: View {
             settings.refreshLaunchAtLoginStatus()
         }
         .confirmationDialog(
-            "重置所有设置",
+            String(localized: "settings.reset-all.title"),
             isPresented: $showsResetConfirmation,
             titleVisibility: .visible
         ) {
-            Button("重置所有设置", role: .destructive) {
+            Button(String(localized: "settings.reset-all.action"), role: .destructive) {
                 settings.resetAll()
             }
-            Button("取消", role: .cancel) {}
+            Button(String(localized: "settings.cancel"), role: .cancel) {}
         } message: {
-            Text("所有模块、外观、显示器、鼠标和锁屏设置都会恢复默认值")
+            Text(String(localized: "settings.reset-all.message"))
         }
     }
 
     private func refreshPermissionState() {
         accessibilityTrusted = AXIsProcessTrusted()
         inputMonitoringTrusted = CGPreflightListenEventAccess()
+    }
+}
+
+private struct ColorSchemeOptionLabel: View {
+    let preference: MonitorColorSchemePreference
+
+    var body: some View {
+        HStack(spacing: 7) {
+            HStack(spacing: 2) {
+                ForEach(Array(preference.previewColors.enumerated()), id: \.offset) { _, color in
+                    Circle()
+                        .fill(color)
+                        .frame(width: 7, height: 7)
+                }
+            }
+
+            Text(preference.title)
+        }
     }
 }
