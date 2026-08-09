@@ -28,6 +28,8 @@
 ## 主要功能
 
 - 菜单栏面板显示 CPU、GPU、内存、电池、Codex 额度和显示器状态
+- Power 面板可选显示适配器输入、系统使用和电池充入/输出的实时功率分流
+- 支持通过 macOS 快捷指令获取实时功率分流或立即锁屏
 - 根据鼠标所在屏幕控制外接显示器亮度
 - 内建屏亮度每 0.2 秒轻量同步系统实际值
 - 内建屏和不可控外接屏会把 F1/F2 交回 macOS
@@ -94,7 +96,7 @@ Logo 的可编辑源稿位于 [`scripts/logo.html`](scripts/logo.html)，完全�
 
 本项目使用 [MIT License](LICENSE)。
 
-项目中吸收或参考了 MonitorControl、Hagimi Monitor、Mouser 等开源项目的思路和部分实现。第三方许可与来源说明见 [THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md)。
+项目中吸收或参考了 MonitorControl、Hagimi Monitor、Mouser、BatteryHarbor 等开源项目的思路和部分实现。第三方许可与来源说明见 [THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md)。
 
 ## 安全
 

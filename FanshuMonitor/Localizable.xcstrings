@@ -2,6 +2,84 @@
   "version": "1.0",
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "shortcut.power-flow.title": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "获取实时功率分流" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Get Live Power Flow" } }
+      }
+    },
+    "shortcut.power-flow.description": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "返回适配器输入、系统使用和电池流向" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Returns adapter input, system load, and battery flow" } }
+      }
+    },
+    "shortcut.power-flow.short-title": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功率分流" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Power Flow" } }
+      }
+    },
+    "shortcut.power-flow.unavailable": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "暂时无法读取功率分流" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Power flow is temporarily unavailable" } }
+      }
+    },
+    "shortcut.power-flow.result": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "输入 %@，系统 %@，电池 %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Input %@, system %@, battery %@" } }
+      }
+    },
+    "shortcut.lock-screen.title": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "立即锁屏" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Lock Screen Now" } }
+      }
+    },
+    "shortcut.lock-screen.description": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "立即进入 macOS 登录锁定界面" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Immediately opens the macOS login lock screen" } }
+      }
+    },
+    "shortcut.lock-screen.short-title": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "立即锁屏" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Lock Screen" } }
+      }
+    },
+    "shortcut.lock-screen.success": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已锁定屏幕" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Screen locked" } }
+      }
+    },
+    "shortcut.lock-screen.failed": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法锁定屏幕，请检查辅助功能权限" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Unable to lock the screen. Check Accessibility permission" } }
+      }
+    },
+    "metric.battery.adapter-input": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "输入" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Input" } }
+      }
+    },
+    "metric.battery.system-load": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "系统" } },
+        "en": { "stringUnit": { "state": "translated", "value": "System" } }
+      }
+    },
+    "metric.battery.battery-flow": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "电池" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Battery" } }
+      }
+    },
     "severity.calm": {
       "localizations": {
         "zh-Hans": {

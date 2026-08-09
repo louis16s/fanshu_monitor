@@ -127,6 +127,7 @@ private struct MetricDetailGrid: View {
     let metrics: [MonitorMetric]
     let kind: MonitorKind
     let theme: MonitorPanelTheme
+    var showsSeparator = true
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
@@ -135,10 +136,12 @@ private struct MetricDetailGrid: View {
 
     var body: some View {
         VStack(spacing: 7) {
-            Rectangle()
-                .fill(theme.rowSeparator(for: kind))
-                .frame(height: 1)
-                .padding(.leading, 28)
+            if showsSeparator {
+                Rectangle()
+                    .fill(theme.rowSeparator(for: kind))
+                    .frame(height: 1)
+                    .padding(.leading, 28)
+            }
 
             LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
                 ForEach(metrics) { metric in
@@ -284,6 +287,9 @@ private func chineseMetricName(kind: MonitorKind, id: String) -> String? {
     case (.storage, "health"): return String(localized: "metric.storage.health")
     case (.battery, "charging-power"): return "充电功率"
     case (.battery, "adapter"): return "适配器"
+    case (.battery, "adapter-input"): return String(localized: "metric.battery.adapter-input")
+    case (.battery, "system-load"): return String(localized: "metric.battery.system-load")
+    case (.battery, "battery-flow"): return String(localized: "metric.battery.battery-flow")
     case (.gpu, "temperature"): return "温度"
     case (.codex, "five-hour"): return "5H"
     case (.codex, "weekly"): return "一周"
@@ -547,7 +553,19 @@ struct BatteryGlassRow: View {
             }
 
             if canExpand && isExpanded {
-                MetricDetailGrid(metrics: detailMetrics, kind: module.kind, theme: theme)
+                VStack(spacing: 7) {
+                    if !powerFlowMetrics.isEmpty {
+                        BatteryPowerFlowRow(metrics: powerFlowMetrics, theme: theme)
+                    }
+                    if !regularDetailMetrics.isEmpty {
+                        MetricDetailGrid(
+                            metrics: regularDetailMetrics,
+                            kind: module.kind,
+                            theme: theme,
+                            showsSeparator: powerFlowMetrics.isEmpty
+                        )
+                    }
+                }
                     .padding(.horizontal, 10)
                     .padding(.bottom, 9)
                     .transition(.panelDetailDisclosure)
@@ -622,8 +640,8 @@ struct BatteryGlassRow: View {
 
     private var detailMetrics: [MonitorMetric] {
         let names = isConnectedToPower
-            ? ["charging-power", "adapter", "health", "cycle-count", "temperature"]
-            : ["adapter", "health", "cycle-count", "temperature"]
+            ? ["adapter-input", "system-load", "battery-flow", "charging-power", "adapter", "health", "cycle-count", "temperature"]
+            : ["system-load", "battery-flow", "adapter", "health", "cycle-count", "temperature"]
 
         let enabledNames = Set(details.map(\.name))
 
@@ -635,6 +653,17 @@ struct BatteryGlassRow: View {
 
     private var canExpand: Bool {
         !detailMetrics.isEmpty
+    }
+
+    private var powerFlowMetrics: [MonitorMetric] {
+        let names = ["adapter-input", "system-load", "battery-flow"]
+        return names.compactMap { name in
+            detailMetrics.first(where: { $0.name == name })
+        }
+    }
+
+    private var regularDetailMetrics: [MonitorMetric] {
+        detailMetrics.filter { !["adapter-input", "system-load", "battery-flow"].contains($0.name) }
     }
 
     private func value(_ name: String) -> String {
@@ -664,6 +693,55 @@ struct BatteryGlassRow: View {
             return nil
         }
         return number
+    }
+}
+
+private struct BatteryPowerFlowRow: View {
+    let metrics: [MonitorMetric]
+    let theme: MonitorPanelTheme
+
+    var body: some View {
+        VStack(spacing: 7) {
+            Rectangle()
+                .fill(theme.rowSeparator(for: .battery))
+                .frame(height: 1)
+                .padding(.leading, 28)
+
+            HStack(spacing: 8) {
+                ForEach(metrics) { metric in
+                    HStack(spacing: 5) {
+                        Image(systemName: symbol(for: metric.name))
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(theme.moduleTint(for: .battery))
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(localizedMetricName(kind: .battery, id: metric.name))
+                                .panelCaptionFont(size: 9)
+                                .foregroundStyle(theme.captionText)
+                            Text(metric.value)
+                                .panelMonoFont(size: 10, weight: .semibold)
+                                .foregroundStyle(theme.secondaryText)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.78)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        copyToPasteboard(metric.value)
+                    }
+                }
+            }
+            .padding(.leading, 28)
+        }
+    }
+
+    private func symbol(for name: String) -> String {
+        switch name {
+        case "adapter-input": "powerplug"
+        case "system-load": "desktopcomputer"
+        default: "battery.50percent"
+        }
     }
 }
 

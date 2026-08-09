@@ -460,6 +460,35 @@ struct FanshuMonitorTests {
         ) == 7.3)
     }
 
+    @Test func batteryPowerFlowKeepsInputSystemAndSignedBatteryValuesSeparate() {
+        let charging = BatteryPowerTelemetry(
+            adapterInputMilliwatts: 31_880,
+            systemLoadMilliwatts: 5_417,
+            batteryMilliwatts: 26_463
+        )
+        #expect(charging.adapterInputWatts == 31.88)
+        #expect(charging.systemLoadWatts == 5.417)
+        #expect(charging.batteryWatts == 26.463)
+        #expect(charging.resolvedSystemLoadWatts == 5.417)
+        #expect(BatteryPowerTelemetry.batteryFlowText(charging.batteryWatts) == "+26.5 W")
+
+        let discharging = BatteryPowerTelemetry(
+            adapterInputMilliwatts: 0,
+            systemLoadMilliwatts: nil,
+            batteryMilliwatts: -7_300
+        )
+        #expect(discharging.resolvedSystemLoadWatts == 7.3)
+        #expect(BatteryPowerTelemetry.batteryFlowText(discharging.batteryWatts) == "-7.3 W")
+    }
+
+    @Test func batteryPowerFlowMetricsAreOptional() {
+        let metrics = Dictionary(uniqueKeysWithValues: MonitorKind.battery.availableMetrics.map { ($0.id, $0) })
+
+        #expect(metrics["adapter-input"]?.isDefault == false)
+        #expect(metrics["system-load"]?.isDefault == false)
+        #expect(metrics["battery-flow"]?.isDefault == false)
+    }
+
     @Test func batteryPowerKeepsTheLastKnownGoodValueDuringTransientFailures() {
         #expect(BatterySampler.stableSystemPowerWatts(
             fresh: 10.374,

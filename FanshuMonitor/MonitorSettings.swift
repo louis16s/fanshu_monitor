@@ -429,7 +429,17 @@ final class MonitorSettings: ObservableObject {
             case .network:
                 return ["IP 地址": "ipv4", "上传": "upload", "下载": "download", "SSID": "ssid", "IPv4": "ipv4", "IPv6": "ipv6"]
             case .battery:
-                return ["充电功率": "charging-power", "健康度": "health", "循环数": "cycle-count", "温度": "temperature", "适配器": "adapter", "功耗": "power"]
+                return [
+                    "输入": "adapter-input",
+                    "系统": "system-load",
+                    "电池流向": "battery-flow",
+                    "充电功率": "charging-power",
+                    "健康度": "health",
+                    "循环数": "cycle-count",
+                    "温度": "temperature",
+                    "适配器": "adapter",
+                    "功耗": "power"
+                ]
             case .codex:
                 return [
                     "5H": "five-hour",

@@ -28,6 +28,8 @@ Current version: `0.3.0`
 ## Highlights
 
 - Menu bar panel for CPU, GPU, UMA, battery, Codex quota, and display state
+- Optional live power flow for adapter input, system load, and battery charge or discharge
+- macOS Shortcuts actions for reading live power flow and locking the screen immediately
 - External display brightness target follows the pointer
 - Built-in display brightness lightly syncs with the system value every 0.2 seconds
 - Built-in and unsupported displays pass F1/F2 back to macOS
@@ -94,7 +96,7 @@ The editable logo source is [`scripts/logo.html`](../scripts/logo.html), drawn e
 
 This project is licensed under the [MIT License](../LICENSE).
 
-Fanshu Monitor incorporates or was informed by ideas and small portions of implementation from projects including MonitorControl, Hagimi Monitor, and Mouser. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party license and source notes.
+Fanshu Monitor incorporates or was informed by ideas and small portions of implementation from projects including MonitorControl, Hagimi Monitor, Mouser, and BatteryHarbor. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party license and source notes.
 
 ## Security
 

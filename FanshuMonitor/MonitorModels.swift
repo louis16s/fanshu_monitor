@@ -173,6 +173,9 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
             ]
         case .battery:
             return [
+                MetricSwitch(id: "adapter-input", title: String(localized: "metric.battery.adapter-input"), isDefault: false),
+                MetricSwitch(id: "system-load", title: String(localized: "metric.battery.system-load"), isDefault: false),
+                MetricSwitch(id: "battery-flow", title: String(localized: "metric.battery.battery-flow"), isDefault: false),
                 MetricSwitch(id: "charging-power", title: String(localized: "metric.battery.charging-power"), isDefault: true),
                 MetricSwitch(id: "adapter", title: String(localized: "metric.battery.adapter"), isDefault: true),
                 MetricSwitch(id: "health", title: String(localized: "metric.battery.health"), isDefault: true),
@@ -286,6 +289,9 @@ nonisolated struct MonitorModule: Identifiable, Sendable {
                 MonitorMetric(name: "adapter", value: "not-connected"),
                 MonitorMetric(name: "charging-power", value: "--"),
                 MonitorMetric(name: "power", value: "--"),
+                MonitorMetric(name: "adapter-input", value: "--"),
+                MonitorMetric(name: "system-load", value: "--"),
+                MonitorMetric(name: "battery-flow", value: "--"),
                 MonitorMetric(name: "health", value: "--"),
                 MonitorMetric(name: "cycle-count", value: "--"),
                 MonitorMetric(name: "temperature", value: "--")

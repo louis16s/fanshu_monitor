@@ -34,6 +34,13 @@ This file is intended to preserve upstream notices for code that was copied, ada
 - Notice: no standalone LICENSE file was present in the local upstream clone at review time
 - Usage in 番薯Monitor: the menu bar monitoring foundation and some sampling/control ideas were adapted from Hagimi Monitor.
 
+### BatteryHarbor
+
+- Source: https://github.com/MUU3327/BatteryHarbor
+- License: MIT License
+- Notice: Copyright (c) 2026 MUU3327
+- Usage in 番薯Monitor: the read-only adapter input, system load, and signed battery power split was informed by BatteryHarbor.
+
 ## Reference Only
 
 The following projects were reviewed as references only. Their source code is not intentionally copied into this repository.

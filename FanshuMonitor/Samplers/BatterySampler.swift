@@ -41,12 +41,13 @@ nonisolated final class BatterySampler: MonitorSampler {
 
         let shouldCollectTelemetry = context.panelVisible
         let smart = shouldCollectTelemetry ? smartBatteryInfo(at: Date()) : nil
+        let powerFlow = shouldCollectTelemetry ? powerTelemetry() : nil
         let adapterWatts = smart?.adapterWatts ?? (shouldCollectTelemetry ? externalAdapterWatts() : nil)
         let chargingPower = connected
-            ? (isCharging ? smart?.chargingPowerWatts : 0)
+            ? (isCharging ? powerFlow?.chargingWatts ?? smart?.chargingPowerWatts : 0)
             : nil
         let systemPower = stableSystemPowerWatts(
-            fresh: shouldCollectTelemetry ? powerTelemetryWatts() : nil,
+            fresh: powerFlow?.resolvedSystemLoadWatts,
             previous: previous
         )
 
@@ -79,6 +80,24 @@ nonisolated final class BatterySampler: MonitorSampler {
                 MonitorMetric(name: "power", value: telemetryValue(
                     "power",
                     freshValue: wattString(systemPower),
+                    previous: previous,
+                    shouldCollect: shouldCollectTelemetry
+                )),
+                MonitorMetric(name: "adapter-input", value: telemetryValue(
+                    "adapter-input",
+                    freshValue: wattStringAllowZero(powerFlow?.adapterInputWatts),
+                    previous: previous,
+                    shouldCollect: shouldCollectTelemetry
+                )),
+                MonitorMetric(name: "system-load", value: telemetryValue(
+                    "system-load",
+                    freshValue: wattString(systemPower),
+                    previous: previous,
+                    shouldCollect: shouldCollectTelemetry
+                )),
+                MonitorMetric(name: "battery-flow", value: telemetryValue(
+                    "battery-flow",
+                    freshValue: BatteryPowerTelemetry.batteryFlowText(powerFlow?.batteryWatts),
                     previous: previous,
                     shouldCollect: shouldCollectTelemetry
                 )),
@@ -243,7 +262,7 @@ nonisolated final class BatterySampler: MonitorSampler {
         return max(0, current * voltage / 1_000_000)
     }
 
-    private func powerTelemetryWatts() -> Double? {
+    private func powerTelemetry() -> BatteryPowerTelemetry? {
         for _ in 0..<2 {
             if powerTelemetryService == IO_OBJECT_NULL {
                 powerTelemetryService = IOServiceGetMatchingService(
@@ -254,8 +273,8 @@ nonisolated final class BatterySampler: MonitorSampler {
             guard powerTelemetryService != IO_OBJECT_NULL else {
                 return nil
             }
-            if let watts = Self.validSystemPowerWatts(systemPowerWatts(powerTelemetryService)) {
-                return watts
+            if let telemetry = BatteryPowerTelemetryReader.read(service: powerTelemetryService) {
+                return telemetry
             }
             IOObjectRelease(powerTelemetryService)
             powerTelemetryService = IO_OBJECT_NULL
@@ -263,24 +282,12 @@ nonisolated final class BatterySampler: MonitorSampler {
         return nil
     }
 
-    private func systemPowerWatts(_ service: io_service_t) -> Double? {
-        guard let value = IORegistryEntryCreateCFProperty(service, "PowerTelemetryData" as CFString, kCFAllocatorDefault, 0)?
-            .takeRetainedValue() as? [String: Any] else {
-            return nil
-        }
-
-        return Self.systemPowerWatts(
-            systemLoadMilliwatts: doubleValue(value["SystemLoad"]),
-            systemPowerInMilliwatts: doubleValue(value["SystemPowerIn"]),
-            batteryPowerMilliwatts: signedDoubleValue(value["BatteryPower"])
-        )
-    }
-
     static func chargingPowerWatts(batteryPowerMilliwatts: Double?) -> Double? {
-        guard let batteryPowerMilliwatts, batteryPowerMilliwatts > 0 else {
-            return nil
-        }
-        return batteryPowerMilliwatts / 1_000
+        BatteryPowerTelemetry(
+            adapterInputMilliwatts: nil,
+            systemLoadMilliwatts: nil,
+            batteryMilliwatts: batteryPowerMilliwatts
+        ).chargingWatts
     }
 
     static func systemPowerWatts(
@@ -288,19 +295,11 @@ nonisolated final class BatterySampler: MonitorSampler {
         systemPowerInMilliwatts: Double?,
         batteryPowerMilliwatts: Double?
     ) -> Double? {
-        if let systemLoadMilliwatts, systemLoadMilliwatts > 0 {
-            return systemLoadMilliwatts / 1_000
-        }
-
-        if let systemPowerInMilliwatts, systemPowerInMilliwatts > 0 {
-            let systemPower = systemPowerInMilliwatts - (batteryPowerMilliwatts ?? 0)
-            return nonZeroWatts(systemPower / 1_000)
-        }
-
-        if let batteryPowerMilliwatts, batteryPowerMilliwatts < 0 {
-            return abs(batteryPowerMilliwatts) / 1_000
-        }
-        return nil
+        BatteryPowerTelemetry(
+            adapterInputMilliwatts: systemPowerInMilliwatts,
+            systemLoadMilliwatts: systemLoadMilliwatts,
+            batteryMilliwatts: batteryPowerMilliwatts
+        ).resolvedSystemLoadWatts
     }
 
     private func intRegistryValue(_ service: io_service_t, _ key: String) -> Int? {
