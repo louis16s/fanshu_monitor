@@ -209,6 +209,10 @@ struct UpdateCheckerTests {
             "html_url": "https://github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0"
         }
         """.utf8), forKey: "updates.releasePayload")
+        defaults.set(
+            "https://api.github.com/repos/louis16s/fanshu_monitor/releases/latest",
+            forKey: "updates.releaseSource"
+        )
 
         let checker = UpdateChecker(
             currentVersionProvider: { "1.0.0" },
@@ -220,6 +224,33 @@ struct UpdateCheckerTests {
             return
         }
         #expect(latestVersion == "1.1.0")
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    @Test func legacyCacheWithoutMatchingSourceIsDiscarded() {
+        let suiteName = "FanshuMonitorTests.UpdateChecker.legacyCache"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(Data("""
+        {
+            "tag_name": "v1.1.0",
+            "html_url": "https://github.com/example/test/releases/tag/v1.1.0"
+        }
+        """.utf8), forKey: "updates.releasePayload")
+        defaults.set("test-etag", forKey: "updates.releaseETag")
+
+        let checker = UpdateChecker(
+            currentVersionProvider: { "0.3.0" },
+            defaults: defaults
+        )
+
+        #expect(checker.state == .idle)
+        #expect(defaults.data(forKey: "updates.releasePayload") == nil)
+        #expect(defaults.string(forKey: "updates.releaseETag") == nil)
+        #expect(
+            defaults.string(forKey: "updates.releaseSource")
+                == "https://api.github.com/repos/louis16s/fanshu_monitor/releases/latest"
+        )
         defaults.removePersistentDomain(forName: suiteName)
     }
 

@@ -511,7 +511,8 @@ private struct LockScreenPolicyEditor: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .opacity(policy.isEnabled ? 1 : 0.56)
+        .saturation(policy.isEnabled ? 1 : 0)
+        .opacity(policy.isEnabled ? 1 : 0.42)
         .overlay {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)

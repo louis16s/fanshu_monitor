@@ -16,6 +16,7 @@ final class UpdateChecker {
     private var lastStableState: UpdateCheckState?
 
     private static let automaticCheckInterval: TimeInterval = 24 * 60 * 60
+    private static let releaseSourceKey = "updates.releaseSource"
     private static let lastAutomaticCheckKey = "updates.lastAutomaticCheckAt"
     private static let releaseETagKey = "updates.releaseETag"
     private static let releasePayloadKey = "updates.releasePayload"
@@ -36,6 +37,7 @@ final class UpdateChecker {
         self.defaults = defaults
         self.now = now
         self.dataLoader = dataLoader
+        prepareCacheForCurrentSource()
         restoreCachedReleaseIfAvailable()
     }
 
@@ -157,6 +159,16 @@ final class UpdateChecker {
         } else {
             setStableState(.upToDate)
         }
+    }
+
+    private func prepareCacheForCurrentSource() {
+        let source = latestReleaseURL.absoluteString
+        guard defaults.string(forKey: Self.releaseSourceKey) != source else { return }
+
+        defaults.removeObject(forKey: Self.lastAutomaticCheckKey)
+        defaults.removeObject(forKey: Self.releaseETagKey)
+        defaults.removeObject(forKey: Self.releasePayloadKey)
+        defaults.set(source, forKey: Self.releaseSourceKey)
     }
 
     static func resolveDownloadURL(from release: GitHubRelease) -> URL {
