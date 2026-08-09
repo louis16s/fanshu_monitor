@@ -488,6 +488,16 @@ struct FanshuMonitorTests {
         #expect(monotonicCounterDelta(current: 100, previous: 9_000) == 0)
     }
 
+    @Test func networkSamplerPrefersTheSystemPrimaryInterface() {
+        let totals: [String: (input: UInt64, output: UInt64)] = [
+            "en0": (100, 100),
+            "bridge0": (10_000, 10_000)
+        ]
+
+        #expect(selectedNetworkInterface(primary: "en0", totals: totals) == "en0")
+        #expect(selectedNetworkInterface(primary: "utun4", totals: totals) == "bridge0")
+    }
+
     @Test func hiddenPanelOnlyKeepsMenuBarRingDependenciesActive() {
         let visibleKinds: Set<MonitorKind> = [
             .cpu, .gpu, .memory, .storage, .network, .battery, .codex

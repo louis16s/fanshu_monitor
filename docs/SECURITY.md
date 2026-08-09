@@ -10,9 +10,17 @@ Each automated release includes `FanshuMonitor.zip`, `checksums.txt`, and `relea
 shasum -a 256 -c checksums.txt
 ```
 
-## Current Distribution Status
+## Release Trust
 
-The GitHub Actions build publishes a checksum, but Developer ID signing and Apple notarization require release credentials that are not stored in this repository. Until those credentials are configured, an automated GitHub Release archive must not be presented as signed or notarized.
+The release workflow requires Developer ID signing and Apple notarization. It refuses to publish an ad-hoc signed archive when release credentials are unavailable. Configure these encrypted GitHub Actions secrets before pushing a release tag:
+
+- `APPLE_CERTIFICATE_P12`: base64-encoded Developer ID Application certificate and private key
+- `APPLE_CERTIFICATE_PASSWORD`: password protecting the PKCS#12 archive
+- `APPLE_NOTARY_PRIVATE_KEY`: App Store Connect API private key contents
+- `APPLE_NOTARY_KEY_ID`: App Store Connect API key ID
+- `APPLE_NOTARY_ISSUER_ID`: App Store Connect issuer ID
+
+Successful releases are signed with Hardened Runtime, submitted to Apple's notary service, stapled, assessed with Gatekeeper, and published with checksums and a source manifest.
 
 Locally produced development builds can be inspected with:
 

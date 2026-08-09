@@ -9,6 +9,7 @@ private final class LockAttemptProbe {
     var isLocked = false
     var idleSeconds: TimeInterval = 0
     var screenSaverDisabled = false
+    var fallbackIdleSeconds: Int?
     var screenSaverWriteSucceeds = true
     var assertionSucceeds = true
     var assertionAcquisitions = 0
@@ -24,23 +25,27 @@ private final class LockAttemptProbe {
             readSettings: {
                 guard self.screenSaverDisabled else { return self.baseline }
                 return ScreenSaverLockBaseline(
-                    idleTime: 0,
-                    askForPassword: self.baseline.askForPassword,
-                    askForPasswordDelay: self.baseline.askForPasswordDelay
+                    idleTime: self.fallbackIdleSeconds,
+                    askForPassword: true,
+                    askForPasswordDelay: 0
                 )
             },
             applySettings: { _, _, _ in true },
-            disableIdleScreenSaver: {
+            prepareIdleLockFallback: { idleSeconds in
                 guard self.screenSaverWriteSucceeds else { return false }
                 self.screenSaverDisabled = true
+                self.fallbackIdleSeconds = idleSeconds
                 return true
             },
-            isIdleScreenSaverDisabled: { self.screenSaverDisabled },
+            idleLockFallbackMatches: { idleSeconds in
+                self.screenSaverDisabled && self.fallbackIdleSeconds == idleSeconds
+            },
             restoreSettings: { baseline in
                 self.restoreRequests += 1
                 guard self.restoreSucceeds else { return false }
                 self.restoredBaseline = baseline
                 self.screenSaverDisabled = false
+                self.fallbackIdleSeconds = nil
                 return true
             },
             acquireDisplaySleepAssertion: {
@@ -620,6 +625,7 @@ struct LockScreenPolicyTests {
         controller.configure(settings: settings)
         #expect(settings.lockScreenBaseline == probe.baseline)
         #expect(probe.screenSaverDisabled)
+        #expect(probe.fallbackIdleSeconds == 120)
 
         controller.reevaluate()
         #expect(settings.lockScreenBaseline == probe.baseline)

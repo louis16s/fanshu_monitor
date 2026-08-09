@@ -21,7 +21,9 @@ nonisolated final class MemorySampler: MonitorSampler {
             return previous ?? MonitorModule.placeholder(kind: .memory)
         }
 
-        let pageSize = Double(vm_kernel_page_size)
+        var kernelPageSize: vm_size_t = 0
+        let pageSizeResult = host_page_size(mach_host_self(), &kernelPageSize)
+        let pageSize = Double(pageSizeResult == KERN_SUCCESS ? kernelPageSize : 16_384)
         let active = Double(stats.active_count) * pageSize
         let speculative = Double(stats.speculative_count) * pageSize
         let inactive = Double(stats.inactive_count) * pageSize
@@ -30,8 +32,8 @@ nonisolated final class MemorySampler: MonitorSampler {
         let purgeable = Double(stats.purgeable_count) * pageSize
         let external = Double(stats.external_page_count) * pageSize
         let cached = max(0, speculative + purgeable + external)
-        let used = max(0, active + inactive + speculative + wired + compressed - purgeable - external)
         let total = totalMemorySize
+        let used = min(total, max(0, active + inactive + speculative + wired + compressed - purgeable - external))
         let percentage = total > 0 ? (used / total) * 100 : 0
         let pressure = memoryPressure()
         let appMemory = currentResidentMemory()
@@ -54,7 +56,7 @@ nonisolated final class MemorySampler: MonitorSampler {
                 MonitorMetric(name: "compressed", value: memoryBytes(compressed)),
                 MonitorMetric(
                     name: "app-memory",
-                    value: appMemory.map(memoryBytes) ?? previousMetric("app-memory") ?? "0 B"
+                    value: appMemory.map(memoryBytes) ?? previousMetric("app-memory") ?? "--"
                 ),
                 MonitorMetric(name: "cached", value: memoryBytes(cached)),
                 MonitorMetric(name: "total", value: memoryBytes(total))
@@ -99,17 +101,19 @@ nonisolated final class MemorySampler: MonitorSampler {
     }
 
     private func currentResidentMemory() -> Double? {
-        var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size
+        )
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
             }
         }
         guard result == KERN_SUCCESS else {
             return nil
         }
-        return Double(info.resident_size)
+        return Double(info.phys_footprint)
     }
 }
 

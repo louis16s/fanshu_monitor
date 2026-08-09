@@ -152,9 +152,8 @@ final class DisplayControlController: ObservableObject {
             display: display,
             displays: displays,
             service: service
-        ) { [weak self] succeeded in
-            Task { @MainActor in
-                guard let self else { return }
+        ) { [self] succeeded in
+            Task { @MainActor [self] in
                 self.builtInBlackoutOperationPending = false
                 self.builtInBlackoutActionFailed = !succeeded
                 guard succeeded else {
@@ -331,9 +330,8 @@ final class DisplayControlController: ObservableObject {
 
         if isBuiltInBlackoutDesired, !builtInBlackoutOperationPending {
             builtInBlackoutOperationPending = true
-            worker.reapplyBuiltInBlackouts(service: service) { [weak self] appliedDisplayIDs in
-                Task { @MainActor in
-                    guard let self else { return }
+            worker.reapplyBuiltInBlackouts(service: service) { [self] appliedDisplayIDs in
+                Task { @MainActor [self] in
                     self.builtInBlackoutOperationPending = false
                     if !appliedDisplayIDs.isEmpty {
                         self.builtInBlackoutDisplayIDs.formUnion(appliedDisplayIDs)
@@ -568,9 +566,9 @@ final class DisplayControlController: ObservableObject {
             performWrite: { [service, display] value in
                 service.setValue(value, for: key.control, display: display)
             }
-        ) { [weak self] result in
-            Task { @MainActor in
-                self?.handleWriteResult(result, markUnsupportedOnFailure: markUnsupportedOnFailure)
+        ) { [self] result in
+            Task { @MainActor [self] in
+                self.handleWriteResult(result, markUnsupportedOnFailure: markUnsupportedOnFailure)
             }
         }
     }
@@ -694,9 +692,8 @@ final class DisplayControlController: ObservableObject {
                 performRead: { [service] in
                     service.nativeBrightness(displayID: displayID)
                 }
-            ) { [weak self] value in
-                Task { @MainActor in
-                    guard let self else { return }
+            ) { [self] value in
+                Task { @MainActor [self] in
                     guard generation == self.nativeBrightnessSyncGeneration else {
                         return
                     }
@@ -771,10 +768,10 @@ final class DisplayControlController: ObservableObject {
             builtInBlackoutOperationPending = true
             builtInBlackoutDisplayIDs.removeAll()
             isBuiltInBlackoutDesired = false
-            worker.clearBuiltInBlackouts(service: service) { [weak self] in
-                Task { @MainActor in
-                    self?.builtInBlackoutOperationPending = false
-                    self?.scheduleRefresh(delay: 0.2)
+            worker.clearBuiltInBlackouts(service: service) { [self] in
+                Task { @MainActor [self] in
+                    self.builtInBlackoutOperationPending = false
+                    self.scheduleRefresh(delay: 0.2)
                 }
             }
             return
@@ -789,9 +786,8 @@ final class DisplayControlController: ObservableObject {
                         display: display,
                         displays: displays,
                         service: service
-                    ) { [weak self] succeeded in
-                        Task { @MainActor in
-                            guard let self else { return }
+                    ) { [self] succeeded in
+                        Task { @MainActor [self] in
                             self.builtInBlackoutOperationPending = false
                             self.builtInBlackoutActionFailed = !succeeded
                             guard succeeded else {
@@ -819,17 +815,17 @@ final class DisplayControlController: ObservableObject {
     }
 }
 
-nonisolated enum DisplayWriteMode {
+nonisolated enum DisplayWriteMode: Sendable {
     case coalesced
     case ordered
 }
 
 nonisolated final class DisplayControlWorker: @unchecked Sendable {
-    private struct PendingWrite {
+    private struct PendingWrite: Sendable {
         let value: Double
         let sequence: UInt64
-        let performWrite: (Double) -> Bool
-        let completion: (DisplayWriteResult) -> Void
+        let performWrite: @Sendable (Double) -> Bool
+        let completion: @Sendable (DisplayWriteResult) -> Void
     }
 
     private let stateQueue = DispatchQueue(label: "fanshu.display-control.state", qos: .userInitiated)
@@ -862,7 +858,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
     func refresh(
         service: DisplayControlService,
         activeControls: Set<DisplayControlKind>,
-        completion: @escaping ([ControlledDisplay]) -> Void
+        completion: @escaping @Sendable ([ControlledDisplay]) -> Void
     ) {
         refresh(
             activeControls: activeControls,
@@ -875,8 +871,8 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
 
     func refresh(
         activeControls: Set<DisplayControlKind>,
-        performDiscovery: @escaping () -> [ControlledDisplay],
-        completion: @escaping ([ControlledDisplay]) -> Void
+        performDiscovery: @escaping @Sendable () -> [ControlledDisplay],
+        completion: @escaping @Sendable ([ControlledDisplay]) -> Void
     ) {
         stateQueue.async {
             let now = Date()
@@ -904,8 +900,8 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
 
     func readNativeBrightness(
         displayID: CGDirectDisplayID,
-        performRead: @escaping () -> Double?,
-        completion: @escaping (Double?) -> Void
+        performRead: @escaping @Sendable () -> Double?,
+        completion: @escaping @Sendable (Double?) -> Void
     ) {
         stateQueue.async {
             let readQueue = self.writeQueue(for: displayID)
@@ -923,7 +919,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         display: ControlledDisplay,
         displays: [ControlledDisplay],
         service: DisplayControlService,
-        completion: @escaping (Bool) -> Void
+        completion: @escaping @Sendable (Bool) -> Void
     ) {
         topologyQueue.async {
             completion(service.setBuiltInBlackout(enabled, display: display, displays: displays))
@@ -932,7 +928,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
 
     func reapplyBuiltInBlackouts(
         service: DisplayControlService,
-        completion: @escaping (Set<CGDirectDisplayID>) -> Void
+        completion: @escaping @Sendable (Set<CGDirectDisplayID>) -> Void
     ) {
         topologyQueue.async {
             completion(service.reapplyBuiltInBlackoutsToOnlineDisplays())
@@ -941,7 +937,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
 
     func clearBuiltInBlackouts(
         service: DisplayControlService,
-        completion: @escaping () -> Void
+        completion: @escaping @Sendable () -> Void
     ) {
         topologyQueue.async {
             service.clearBuiltInBlackouts()
@@ -961,8 +957,8 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         for key: ControlKey,
         sequence: UInt64,
         mode: DisplayWriteMode,
-        performWrite: @escaping (Double) -> Bool,
-        completion: @escaping (DisplayWriteResult) -> Void
+        performWrite: @escaping @Sendable (Double) -> Bool,
+        completion: @escaping @Sendable (DisplayWriteResult) -> Void
     ) {
         stateQueue.async {
             switch mode {
@@ -1050,7 +1046,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
     }
 }
 
-nonisolated struct DisplayWriteResult {
+nonisolated struct DisplayWriteResult: Sendable {
     let key: ControlKey
     let value: Double
     let sequence: UInt64

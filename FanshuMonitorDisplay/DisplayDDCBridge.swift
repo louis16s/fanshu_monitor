@@ -31,9 +31,11 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
         }
         for displayID in knownDisplayIDs.subtracting(displayIDs) {
             registry.reset(displayID: displayID)
+            DDCTransport.reset(displayID: displayID)
         }
         for displayID in changedDisplayIDs {
             registry.reset(displayID: displayID)
+            DDCTransport.reset(displayID: displayID)
         }
         stateLock.withLock {
             servicesByDisplayID = matchedServices
@@ -325,15 +327,127 @@ nonisolated private enum DDCVCPCode: UInt8 {
     }
 }
 
+nonisolated struct DDCTransportLease: @unchecked Sendable {
+    let queue: DispatchQueue
+    let generation: UInt64
+}
+
+nonisolated final class DDCTransportChannelRegistry: @unchecked Sendable {
+    private struct Channel {
+        var queue: DispatchQueue
+        var generation: UInt64
+        var quarantineUntil: Date?
+        var timeoutCount: Int
+    }
+
+    private let lock = NSLock()
+    private let cooldown: TimeInterval
+    private let maximumRecoveries: Int
+    private let now: @Sendable () -> Date
+    private var channels: [CGDirectDisplayID: Channel] = [:]
+
+    init(
+        cooldown: TimeInterval = 10,
+        maximumRecoveries: Int = 1,
+        now: @escaping @Sendable () -> Date = Date.init
+    ) {
+        self.cooldown = cooldown
+        self.maximumRecoveries = maximumRecoveries
+        self.now = now
+    }
+
+    func lease(for displayID: CGDirectDisplayID) -> DDCTransportLease? {
+        lock.withLock {
+            var channel = channels[displayID] ?? makeChannel(displayID: displayID, generation: 0)
+            if let quarantineUntil = channel.quarantineUntil {
+                guard now() >= quarantineUntil,
+                      channel.timeoutCount <= maximumRecoveries else {
+                    channels[displayID] = channel
+                    return nil
+                }
+                channel = makeChannel(
+                    displayID: displayID,
+                    generation: channel.generation &+ 1,
+                    timeoutCount: channel.timeoutCount
+                )
+            }
+            channels[displayID] = channel
+            return DDCTransportLease(queue: channel.queue, generation: channel.generation)
+        }
+    }
+
+    func recordTimeout(displayID: CGDirectDisplayID, generation: UInt64) {
+        lock.withLock {
+            guard var channel = channels[displayID], channel.generation == generation else { return }
+            channel.timeoutCount += 1
+            channel.quarantineUntil = now().addingTimeInterval(cooldown)
+            channels[displayID] = channel
+        }
+    }
+
+    func reset(displayID: CGDirectDisplayID) {
+        _ = lock.withLock {
+            channels.removeValue(forKey: displayID)
+        }
+    }
+
+    func isQuarantined(displayID: CGDirectDisplayID) -> Bool {
+        lock.withLock { channels[displayID]?.quarantineUntil != nil }
+    }
+
+    private func makeChannel(
+        displayID: CGDirectDisplayID,
+        generation: UInt64,
+        timeoutCount: Int = 0
+    ) -> Channel {
+        Channel(
+            queue: DispatchQueue(
+                label: "fanshu.ddc.io.\(displayID).\(generation)",
+                qos: .userInitiated
+            ),
+            generation: generation,
+            quarantineUntil: nil,
+            timeoutCount: timeoutCount
+        )
+    }
+}
+
+nonisolated private final class DDCCommunicationResult: @unchecked Sendable {
+    struct Value {
+        let success: Bool
+        let send: [UInt8]
+        let reply: [UInt8]
+    }
+
+    private let lock = NSLock()
+    private var value: Value?
+
+    func store(_ value: Value) {
+        lock.withLock { self.value = value }
+    }
+
+    func load() -> Value? {
+        lock.withLock { value }
+    }
+}
+
+nonisolated private final class DDCServiceReference: @unchecked Sendable {
+    let value: IOAVService
+
+    init(_ value: IOAVService) {
+        self.value = value
+    }
+}
+
 nonisolated private enum DDCTransport {
     private static let sevenBitAddress: UInt8 = 0x37
     private static let dataAddress: UInt8 = 0x51
     private static let communicateTimeoutSeconds = 3
-    private static let circuitCooldownSeconds = 10
-    private static let queueLock = NSLock()
-    private nonisolated(unsafe) static var ioQueuesByDisplayID: [CGDirectDisplayID: DispatchQueue] = [:]
-    private static let circuitLock = NSLock()
-    private nonisolated(unsafe) static var circuitOpenUntilByDisplayID: [CGDirectDisplayID: DispatchTime] = [:]
+    private static let channels = DDCTransportChannelRegistry()
+
+    static func reset(displayID: CGDirectDisplayID) {
+        channels.reset(displayID: displayID)
+    }
 
     static func read(
         service: IOAVService,
@@ -385,47 +499,40 @@ nonisolated private enum DDCTransport {
         longerDelay: Bool = false,
         maxRetries: Int = 5
     ) -> Bool {
-        guard !circuitIsOpen(for: displayID) else {
+        guard let lease = channels.lease(for: displayID) else {
             return false
         }
 
-        var sendCopy = send
-        var replyCopy = reply
-        var result = false
+        let initialSend = send
+        let initialReply = reply
+        let result = DDCCommunicationResult()
+        let serviceReference = DDCServiceReference(service)
         let semaphore = DispatchSemaphore(value: 0)
 
-        ioQueue(for: displayID).async {
-            result = communicateUnlocked(
-                service: service,
+        lease.queue.async {
+            var sendCopy = initialSend
+            var replyCopy = initialReply
+            let succeeded = communicateUnlocked(
+                service: serviceReference.value,
                 send: &sendCopy,
                 reply: &replyCopy,
                 longerDelay: longerDelay,
                 maxRetries: maxRetries
             )
+            result.store(.init(success: succeeded, send: sendCopy, reply: replyCopy))
             semaphore.signal()
         }
 
         if semaphore.wait(timeout: .now() + .seconds(communicateTimeoutSeconds)) == .timedOut {
-            tripCircuit(for: displayID)
-            displayDDCLog.error("DDC communicate timed out for display \(displayID, privacy: .public) after \(communicateTimeoutSeconds, privacy: .public)s; circuit opened for \(circuitCooldownSeconds, privacy: .public)s")
+            channels.recordTimeout(displayID: displayID, generation: lease.generation)
+            displayDDCLog.error("DDC communicate timed out for display \(displayID, privacy: .public) after \(communicateTimeoutSeconds, privacy: .public)s; device channel quarantined")
             return false
         }
 
-        resetCircuit(for: displayID)
-        send = sendCopy
-        reply = replyCopy
-        return result
-    }
-
-    private static func ioQueue(for displayID: CGDirectDisplayID) -> DispatchQueue {
-        queueLock.withLock {
-            if let queue = ioQueuesByDisplayID[displayID] {
-                return queue
-            }
-            let queue = DispatchQueue(label: "fanshu.ddc.io.\(displayID)")
-            ioQueuesByDisplayID[displayID] = queue
-            return queue
-        }
+        guard let value = result.load() else { return false }
+        send = value.send
+        reply = value.reply
+        return value.success
     }
 
     private static func communicateUnlocked(
@@ -492,31 +599,6 @@ nonisolated private enum DDCTransport {
         }
 
         return false
-    }
-
-    private static func circuitIsOpen(for displayID: CGDirectDisplayID) -> Bool {
-        circuitLock.lock()
-        defer { circuitLock.unlock() }
-        guard let openUntil = circuitOpenUntilByDisplayID[displayID] else {
-            return false
-        }
-        if DispatchTime.now() >= openUntil {
-            circuitOpenUntilByDisplayID.removeValue(forKey: displayID)
-            return false
-        }
-        return true
-    }
-
-    private static func tripCircuit(for displayID: CGDirectDisplayID) {
-        circuitLock.lock()
-        circuitOpenUntilByDisplayID[displayID] = .now() + .seconds(circuitCooldownSeconds)
-        circuitLock.unlock()
-    }
-
-    private static func resetCircuit(for displayID: CGDirectDisplayID) {
-        circuitLock.lock()
-        circuitOpenUntilByDisplayID.removeValue(forKey: displayID)
-        circuitLock.unlock()
     }
 
     private static func checksum(seed: UInt8, data: [UInt8], start: Int, end: Int) -> UInt8 {

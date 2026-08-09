@@ -45,7 +45,7 @@ nonisolated enum LogitechMouseDeviceMatcher {
     }
 }
 
-final class LogitechMousePresenceMonitor: @unchecked Sendable {
+nonisolated final class LogitechMousePresenceMonitor: @unchecked Sendable {
     typealias PresenceHandler = @Sendable (Bool) -> Void
 
     private let queue = DispatchQueue(label: "com.fanshu.monitor.mouse-presence", qos: .utility)
@@ -141,7 +141,7 @@ final class LogitechMousePresenceMonitor: @unchecked Sendable {
     }
 }
 
-final class LogitechMouseWorker: @unchecked Sendable {
+nonisolated final class LogitechMouseWorker: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.fanshu.monitor.mouse-hidpp", qos: .utility)
     private let service = LogitechHIDPPService()
 

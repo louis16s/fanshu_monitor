@@ -13,6 +13,12 @@ jobs:
   build-and-release:
     name: Build and release
     runs-on: macos-26
+    env:
+      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_NOTARY_PRIVATE_KEY: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
     permissions:
       contents: write
     steps:
@@ -29,6 +35,55 @@ jobs:
           fi
           sw_vers
           xcodebuild -version
+
+      - name: Import Developer ID certificate
+        run: |
+          set -euo pipefail
+          for variable in \
+            APPLE_CERTIFICATE_P12 \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_NOTARY_PRIVATE_KEY \
+            APPLE_NOTARY_KEY_ID \
+            APPLE_NOTARY_ISSUER_ID; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "::error::Missing required release secret: ${variable}"
+              exit 1
+            fi
+          done
+
+          keychain_path="${RUNNER_TEMP}/fanshu-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          certificate_path="${RUNNER_TEMP}/developer-id.p12"
+          notary_key_path="${RUNNER_TEMP}/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
+
+          printf '%s' "${APPLE_CERTIFICATE_P12}" | base64 -D > "${certificate_path}"
+          printf '%s' "${APPLE_NOTARY_PRIVATE_KEY}" > "${notary_key_path}"
+          chmod 600 "${certificate_path}" "${notary_key_path}"
+
+          security create-keychain -p "${keychain_password}" "${keychain_path}"
+          security set-keychain-settings -lut 21600 "${keychain_path}"
+          security unlock-keychain -p "${keychain_password}" "${keychain_path}"
+          security import "${certificate_path}" \
+            -k "${keychain_path}" \
+            -P "${APPLE_CERTIFICATE_PASSWORD}" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "${keychain_password}" \
+            "${keychain_path}"
+          security list-keychains -d user -s "${keychain_path}"
+
+          signing_identity="$(
+            security find-identity -v -p codesigning "${keychain_path}" |
+              sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' |
+              head -n 1
+          )"
+          test -n "${signing_identity}"
+          echo "SIGNING_IDENTITY=${signing_identity}" >> "${GITHUB_ENV}"
+          echo "SIGNING_KEYCHAIN=${keychain_path}" >> "${GITHUB_ENV}"
+          echo "NOTARY_KEY_PATH=${notary_key_path}" >> "${GITHUB_ENV}"
 
       - name: Verify tag matches app version
         env:
@@ -92,22 +147,46 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             archive
 
-      - name: Package zip
+      - name: Sign, notarize, and package
         run: |
           set -euo pipefail
           APP_PATH='build/番薯Monitor.xcarchive/Products/Applications/番薯Monitor.app'
           test -d "$APP_PATH"
 
-          codesign --force --deep --sign - "$APP_PATH"
+          codesign \
+            --force \
+            --options runtime \
+            --timestamp \
+            --keychain "${SIGNING_KEYCHAIN}" \
+            --sign "${SIGNING_IDENTITY}" \
+            "$APP_PATH"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
           mkdir -p build/release
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" 'build/release/notarization-upload.zip'
+          xcrun notarytool submit 'build/release/notarization-upload.zip' \
+            --key "${NOTARY_KEY_PATH}" \
+            --key-id "${APPLE_NOTARY_KEY_ID}" \
+            --issuer "${APPLE_NOTARY_ISSUER_ID}" \
+            --wait
+          xcrun stapler staple "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          spctl --assess --type execute --verbose=4 "$APP_PATH"
+
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" 'build/release/FanshuMonitor.zip'
+          rm 'build/release/notarization-upload.zip'
           (
             cd build/release
             shasum -a 256 'FanshuMonitor.zip' > 'checksums.txt'
           )
           ls -lh build/release
+
+      - name: Remove temporary signing keychain
+        if: always()
+        run: |
+          if [[ -n "${SIGNING_KEYCHAIN:-}" ]]; then
+            security delete-keychain "${SIGNING_KEYCHAIN}" || true
+          fi
 
       - name: Create release manifest
         env:

@@ -6,7 +6,6 @@ final class MouseButtonEventTap {
     private weak var settings: MonitorSettings?
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    private let actionQueue = DispatchQueue(label: "com.fanshu.monitor.mouse-actions", qos: .userInitiated)
 
     init(settings: MonitorSettings) {
         self.settings = settings
@@ -97,7 +96,7 @@ final class MouseButtonEventTap {
 
         if type == .otherMouseDown {
             AppLogger.mouse.debug("Mouse button \(slot.rawValue, privacy: .public) mapped to \(mapping.action.rawValue, privacy: .public)")
-            actionQueue.async {
+            Task { @MainActor in
                 MouseActionExecutor.execute(mapping)
             }
         }

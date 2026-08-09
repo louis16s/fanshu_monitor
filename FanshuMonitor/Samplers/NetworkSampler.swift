@@ -2,13 +2,15 @@ import Darwin
 import CoreWLAN
 import Foundation
 import OSLog
+import SystemConfiguration
 
 nonisolated final class NetworkSampler: MonitorSampler {
     var kind: MonitorKind { .network }
 
-    private var previousNetworkBytes: (input: UInt64, output: UInt64, timestamp: Date)?
+    private var previousNetworkBytes: (input: UInt64, output: UInt64, interface: String, timestamp: Date)?
     private var cachedSSID: (value: String, refreshedAt: Date)?
-    private var cachedAddresses: (ipv4: String, ipv6: String, refreshedAt: Date)?
+    private var cachedAddresses: (interface: String, ipv4: String, ipv6: String, refreshedAt: Date)?
+    private var lastLoggedInterface: String?
     private let ssidRefreshInterval: TimeInterval = 30
     private let addressRefreshInterval: TimeInterval = 30
 
@@ -24,9 +26,9 @@ nonisolated final class NetworkSampler: MonitorSampler {
             ? currentSSID(at: now)
             : previous?.metrics.first { $0.name == "ssid" }?.value ?? "--"
         let previousBytes = previousNetworkBytes
-        previousNetworkBytes = (bytes.input, bytes.output, now)
+        previousNetworkBytes = (bytes.input, bytes.output, bytes.identifier, now)
 
-        guard let previousBytes else {
+        guard let previousBytes, previousBytes.interface == bytes.identifier else {
             return MonitorModule(
                 kind: .network,
                 value: 0,
@@ -99,7 +101,14 @@ nonisolated final class NetworkSampler: MonitorSampler {
 
         guard getifaddrs(&addressList) == 0, let firstAddress = addressList else {
             AppLogger.sampler.error("getifaddrs failed, errno: \(errno)")
-            return NetworkInterfaceSnapshot(input: 0, output: 0, interface: "network", ipv4Addresses: [], ipv6Addresses: [])
+            return NetworkInterfaceSnapshot(
+                input: 0,
+                output: 0,
+                identifier: "network",
+                interface: "network",
+                ipv4Addresses: [],
+                ipv6Addresses: []
+            )
         }
         defer { freeifaddrs(addressList) }
 
@@ -149,21 +158,27 @@ nonisolated final class NetworkSampler: MonitorSampler {
             }
         }
 
-        let active = totalsByInterface.max {
-            ($0.value.input + $0.value.output) < ($1.value.input + $1.value.output)
-        }
-        let total = totalsByInterface.values.reduce((input: UInt64(0), output: UInt64(0))) { partial, next in
-            (partial.input + next.input, partial.output + next.output)
+        let primaryInterface = Self.primaryInterfaceName()
+        let selectedName = selectedNetworkInterface(
+            primary: primaryInterface,
+            totals: totalsByInterface
+        )
+        let selected = selectedName.flatMap { name in
+            totalsByInterface[name].map { (key: name, value: $0) }
         }
 
-        AppLogger.sampler.debug("Network interfaces detected: \(totalsByInterface.keys.joined(separator: ", "), privacy: .public), active: \(active?.key ?? "none", privacy: .public)")
+        if selected?.key != lastLoggedInterface {
+            lastLoggedInterface = selected?.key
+            AppLogger.sampler.debug("Network primary interface changed to \(selected?.key ?? "none", privacy: .public)")
+        }
 
         return NetworkInterfaceSnapshot(
-            input: total.input,
-            output: total.output,
-            interface: networkInterfaceTitle(active?.key),
-            ipv4Addresses: active.flatMap { ipv4ByInterface[$0.key] } ?? [],
-            ipv6Addresses: active.flatMap { ipv6ByInterface[$0.key] } ?? []
+            input: selected?.value.input ?? 0,
+            output: selected?.value.output ?? 0,
+            identifier: selected?.key ?? "network",
+            interface: networkInterfaceTitle(selected?.key),
+            ipv4Addresses: selected.flatMap { ipv4ByInterface[$0.key] } ?? [],
+            ipv6Addresses: selected.flatMap { ipv6ByInterface[$0.key] } ?? []
         )
     }
 
@@ -181,6 +196,9 @@ nonisolated final class NetworkSampler: MonitorSampler {
         if name.hasPrefix("bridge") {
             return "bridge"
         }
+        if name.hasPrefix("utun") {
+            return "VPN"
+        }
         if name.hasPrefix("pdp_ip") {
             return "cellular"
         }
@@ -188,7 +206,19 @@ nonisolated final class NetworkSampler: MonitorSampler {
     }
 
     private func shouldIgnoreInterface(_ name: String) -> Bool {
-        name == "lo0" || name.hasPrefix("utun") || name.hasPrefix("awdl")
+        name == "lo0" || name.hasPrefix("awdl") || name.hasPrefix("llw")
+    }
+
+    private static func primaryInterfaceName() -> String? {
+        for key in ["State:/Network/Global/IPv4", "State:/Network/Global/IPv6"] {
+            guard let value = SCDynamicStoreCopyValue(nil, key as CFString) as? [String: Any],
+                  let name = value["PrimaryInterface"] as? String,
+                  !name.isEmpty else {
+                continue
+            }
+            return name
+        }
+        return nil
     }
 
     private func ipAddress(from socketAddress: UnsafePointer<sockaddr>) -> String? {
@@ -240,6 +270,7 @@ nonisolated final class NetworkSampler: MonitorSampler {
 
     private func addressSummary(for snapshot: NetworkInterfaceSnapshot, at date: Date) -> (ipv4: String, ipv6: String) {
         if let cachedAddresses,
+           cachedAddresses.interface == snapshot.identifier,
            date.timeIntervalSince(cachedAddresses.refreshedAt) < addressRefreshInterval {
             return (cachedAddresses.ipv4, cachedAddresses.ipv6)
         }
@@ -248,7 +279,7 @@ nonisolated final class NetworkSampler: MonitorSampler {
             ipv4: networkAddressSummary(snapshot.ipv4Addresses),
             ipv6: networkAddressSummary(snapshot.ipv6Addresses)
         )
-        cachedAddresses = (value.ipv4, value.ipv6, date)
+        cachedAddresses = (snapshot.identifier, value.ipv4, value.ipv6, date)
         return value
     }
 }
@@ -256,6 +287,7 @@ nonisolated final class NetworkSampler: MonitorSampler {
 nonisolated struct NetworkInterfaceSnapshot {
     let input: UInt64
     let output: UInt64
+    let identifier: String
     let interface: String
     let ipv4Addresses: [String]
     let ipv6Addresses: [String]
@@ -274,4 +306,16 @@ nonisolated func monotonicCounterDelta(current: UInt64, previous: UInt64) -> UIn
         return 0
     }
     return current - previous
+}
+
+nonisolated func selectedNetworkInterface(
+    primary: String?,
+    totals: [String: (input: UInt64, output: UInt64)]
+) -> String? {
+    if let primary, totals[primary] != nil {
+        return primary
+    }
+    return totals.max {
+        ($0.value.input + $0.value.output) < ($1.value.input + $1.value.output)
+    }?.key
 }

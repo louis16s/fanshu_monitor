@@ -77,7 +77,7 @@ struct GeneralSettingsView: View {
                     subtitle: String(localized: "settings.accessibility.subtitle")
                 ) {
                     Button(accessibilityTrusted ? String(localized: "settings.authorized") : String(localized: "settings.authorize")) {
-                        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+                        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
                         _ = AXIsProcessTrustedWithOptions(options)
                         accessibilityTrusted = AXIsProcessTrusted()
                     }

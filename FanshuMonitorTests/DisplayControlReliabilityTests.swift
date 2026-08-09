@@ -77,6 +77,50 @@ struct DDCFaultRegistryTests {
     }
 }
 
+private final class DDCRegistryClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = Date(timeIntervalSince1970: 1_000)
+
+    func now() -> Date { lock.withLock { value } }
+    func advance(by interval: TimeInterval) {
+        lock.withLock { value = value.addingTimeInterval(interval) }
+    }
+}
+
+struct DDCTransportChannelRegistryTests {
+    @Test func timeoutQuarantinesTheCurrentGeneration() {
+        let clock = DDCRegistryClock()
+        let registry = DDCTransportChannelRegistry(cooldown: 10, now: clock.now)
+        let lease = registry.lease(for: 1)
+
+        #expect(lease != nil)
+        registry.recordTimeout(displayID: 1, generation: lease?.generation ?? 0)
+        #expect(registry.isQuarantined(displayID: 1))
+        #expect(registry.lease(for: 1) == nil)
+    }
+
+    @Test func oneRecoveryUsesANewQueueGenerationThenStopsRepeatedLeaks() {
+        let clock = DDCRegistryClock()
+        let registry = DDCTransportChannelRegistry(
+            cooldown: 10,
+            maximumRecoveries: 1,
+            now: clock.now
+        )
+        let first = registry.lease(for: 1)
+        registry.recordTimeout(displayID: 1, generation: first?.generation ?? 0)
+        clock.advance(by: 11)
+
+        let second = registry.lease(for: 1)
+        #expect(second?.generation == 1)
+        registry.recordTimeout(displayID: 1, generation: second?.generation ?? 0)
+        clock.advance(by: 11)
+        #expect(registry.lease(for: 1) == nil)
+
+        registry.reset(displayID: 1)
+        #expect(registry.lease(for: 1)?.generation == 0)
+    }
+}
+
 struct DisplayClassifierTests {
     @Test func builtInDisplayWinsBeforeOtherSignals() {
         let classifier = makeClassifier(

@@ -161,12 +161,18 @@ enum ScreenSaverLockPreferences {
     }
 
     @discardableResult
-    static func disableIdleScreenSaver() -> Bool {
-        set(0, for: "idleTime", host: true) && isIdleScreenSaverDisabled
+    static func prepareDirectLockFallback(idleSeconds: Int) -> Bool {
+        var succeeded = set(max(60, idleSeconds), for: "idleTime", host: true)
+        succeeded = set(true, for: "askForPassword", host: false) && succeeded
+        succeeded = set(0, for: "askForPasswordDelay", host: false) && succeeded
+        return succeeded && directLockFallbackMatches(idleSeconds: idleSeconds)
     }
 
-    static var isIdleScreenSaverDisabled: Bool {
-        integer(for: "idleTime", host: true) == 0
+    static func directLockFallbackMatches(idleSeconds: Int) -> Bool {
+        let current = read()
+        return current.idleTime == max(60, idleSeconds)
+            && current.askForPassword == true
+            && current.askForPasswordDelay == 0
     }
 
     @discardableResult

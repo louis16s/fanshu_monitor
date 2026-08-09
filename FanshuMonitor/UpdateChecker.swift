@@ -46,7 +46,7 @@ final class UpdateChecker {
     }
 
     func checkForUpdates() async {
-        await performCheck()
+        _ = await performCheck()
     }
 
     func checkAutomaticallyIfNeeded(enabled: Bool) async {
@@ -56,12 +56,13 @@ final class UpdateChecker {
            currentDate.timeIntervalSince(lastCheck) < Self.automaticCheckInterval {
             return
         }
-        defaults.set(currentDate, forKey: Self.lastAutomaticCheckKey)
-        await performCheck()
+        if await performCheck() {
+            defaults.set(currentDate, forKey: Self.lastAutomaticCheckKey)
+        }
     }
 
-    private func performCheck() async {
-        guard !state.isChecking else { return }
+    private func performCheck() async -> Bool {
+        guard !state.isChecking else { return false }
         state = .checking
         lastError = nil
 
@@ -77,7 +78,7 @@ final class UpdateChecker {
             let (data, response) = try await dataLoader(request)
             guard let httpResponse = response as? HTTPURLResponse else {
                 reportFailure(String(localized: "update.temp-unavailable"))
-                return
+                return false
             }
 
             let releaseData: Data
@@ -92,7 +93,7 @@ final class UpdateChecker {
                 }
             } else {
                 reportFailure(failureMessage(for: response, data: data))
-                return
+                return false
             }
 
             let release: GitHubRelease
@@ -100,13 +101,13 @@ final class UpdateChecker {
                 release = try JSONDecoder().decode(GitHubRelease.self, from: releaseData)
             } catch {
                 reportFailure(String(localized: "update.parse-failed"))
-                return
+                return false
             }
             let latestVersion = VersionParser.normalize(release.tagName)
 
             guard !latestVersion.isEmpty else {
                 reportFailure(String(localized: "update.version-parse-failed"))
-                return
+                return false
             }
 
             if VersionParser.isNewer(latestVersion, than: currentVersion) {
@@ -120,8 +121,10 @@ final class UpdateChecker {
             } else {
                 setStableState(.upToDate)
             }
+            return true
         } catch {
             reportFailure(String(localized: "update.network-error"))
+            return false
         }
     }
 

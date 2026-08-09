@@ -68,8 +68,8 @@ enum LockScreenAttemptRunner {
 struct LockScreenSystemEnvironment {
     let readSettings: @MainActor () -> ScreenSaverLockBaseline
     let applySettings: @MainActor (Int, Bool, Int) -> Bool
-    let disableIdleScreenSaver: @MainActor () -> Bool
-    let isIdleScreenSaverDisabled: @MainActor () -> Bool
+    let prepareIdleLockFallback: @MainActor (Int) -> Bool
+    let idleLockFallbackMatches: @MainActor (Int) -> Bool
     let restoreSettings: @MainActor (ScreenSaverLockBaseline) -> Bool
     let acquireDisplaySleepAssertion: @MainActor () -> Bool
     let releaseDisplaySleepAssertion: @MainActor () -> Void
@@ -86,8 +86,8 @@ struct LockScreenSystemEnvironment {
                     passwordDelaySeconds: delay
                 )
             },
-            disableIdleScreenSaver: ScreenSaverLockPreferences.disableIdleScreenSaver,
-            isIdleScreenSaverDisabled: { ScreenSaverLockPreferences.isIdleScreenSaverDisabled },
+            prepareIdleLockFallback: ScreenSaverLockPreferences.prepareDirectLockFallback,
+            idleLockFallbackMatches: ScreenSaverLockPreferences.directLockFallbackMatches,
             restoreSettings: ScreenSaverLockPreferences.restore,
             acquireDisplaySleepAssertion: { assertion.acquire() },
             releaseDisplaySleepAssertion: { assertion.release() }
@@ -319,7 +319,7 @@ final class LockScreenPolicyController: ObservableObject {
             lastAppliedConfiguration = configuration
         }
         activePolicy = policy
-        maintainDirectLockEnvironment()
+        maintainDirectLockEnvironment(for: policy)
         baselineIsRestored = false
         if lockAttemptTask == nil,
            !screenLockedProvider(),
@@ -451,19 +451,20 @@ final class LockScreenPolicyController: ObservableObject {
         AppLogger.lockScreen.notice("System session lock confirmed")
     }
 
-    private func maintainDirectLockEnvironment() {
+    private func maintainDirectLockEnvironment(for policy: LockScreenPolicy) {
+        let fallbackIdleSeconds = min(86_400, policy.idleMinutes * 60 + 60)
         let screenSaverReady: Bool
-        if environment.isIdleScreenSaverDisabled() {
+        if environment.idleLockFallbackMatches(fallbackIdleSeconds) {
             screenSaverReady = true
         } else {
-            screenSaverReady = environment.disableIdleScreenSaver()
+            screenSaverReady = environment.prepareIdleLockFallback(fallbackIdleSeconds)
             refreshSystemSettings()
         }
         let assertionReady = environment.acquireDisplaySleepAssertion()
 
         if !screenSaverReady {
-            status = .environmentFailed(reason: "无法关闭系统屏保，将自动重试")
-            AppLogger.lockScreen.error("Unable to disable the idle screen saver")
+            status = .environmentFailed(reason: "无法准备系统锁定保护，将自动重试")
+            AppLogger.lockScreen.error("Unable to prepare the system idle-lock fallback")
         } else if !assertionReady {
             status = .environmentFailed(reason: "无法阻止显示器提前休眠，将自动重试")
             AppLogger.lockScreen.error("Unable to acquire the idle display sleep assertion")
@@ -474,8 +475,8 @@ final class LockScreenPolicyController: ObservableObject {
         guard environmentMaintenanceTimer == nil else { return }
         environmentMaintenanceTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, self.activePolicy != nil else { return }
-                self.maintainDirectLockEnvironment()
+                guard let self, let policy = self.activePolicy else { return }
+                self.maintainDirectLockEnvironment(for: policy)
             }
         }
     }

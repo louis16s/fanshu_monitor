@@ -151,6 +151,39 @@ struct UpdateCheckerTests {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
+    @Test func failedAutomaticCheckCanRetryWithoutWaitingOneDay() async {
+        let suiteName = "FanshuMonitorTests.UpdateChecker.failureRetry"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        var requestCount = 0
+        let checker = UpdateChecker(
+            currentVersionProvider: { "1.0.0" },
+            defaults: defaults,
+            now: { Date(timeIntervalSince1970: 1_800_000_000) },
+            dataLoader: { request in
+                requestCount += 1
+                if requestCount == 1 { throw URLError(.notConnectedToInternet) }
+                let json = """
+                {
+                    "tag_name": "v1.0.0",
+                    "html_url": "https://github.com/louis16s/fanshu_monitor/releases/tag/v1.0.0"
+                }
+                """
+                return (
+                    Data(json.utf8),
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                )
+            }
+        )
+
+        await checker.checkAutomaticallyIfNeeded(enabled: true)
+        await checker.checkAutomaticallyIfNeeded(enabled: true)
+
+        #expect(requestCount == 2)
+        #expect(checker.state == .upToDate)
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
     @Test func cachedReleaseIsUsedForNotModifiedResponse() async {
         let suiteName = "FanshuMonitorTests.UpdateChecker.etag"
         let defaults = UserDefaults(suiteName: suiteName)!

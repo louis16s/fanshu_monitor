@@ -159,7 +159,7 @@ nonisolated enum DisplayControlKind: Hashable, CaseIterable, Sendable {
     }
 }
 
-nonisolated struct ControlKey: Hashable {
+nonisolated struct ControlKey: Hashable, Sendable {
     let displayID: CGDirectDisplayID
     let control: DisplayControlKind
 }

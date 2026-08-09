@@ -81,23 +81,20 @@ struct SettingsWindowTracker: NSViewRepresentable {
     }
 }
 
+@MainActor
 private final class SettingsWindowTrackingView: NSView {
     var onTabChanged: ((SettingsTab) -> Void)?
-    private var observer: NSObjectProtocol?
 
     init(frame frameRect: NSRect, onTabChanged: @escaping (SettingsTab) -> Void) {
         self.onTabChanged = onTabChanged
         super.init(frame: frameRect)
 
-        observer = NotificationCenter.default.addObserver(
-            forName: SettingsWindowPresenter.routeChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] note in
-            guard let tabValue = note.userInfo?[SettingsWindowPresenter.tabUserInfoKey] as? String,
-                  let tab = SettingsTab(rawValue: tabValue) else { return }
-            self?.onTabChanged?(tab)
-        }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(routeDidChange(_:)),
+            name: SettingsWindowPresenter.routeChangeNotification,
+            object: nil
+        )
     }
 
     @available(*, unavailable)
@@ -106,9 +103,13 @@ private final class SettingsWindowTrackingView: NSView {
     }
 
     deinit {
-        if let observer {
-            NotificationCenter.default.removeObserver(observer)
-        }
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func routeDidChange(_ note: Notification) {
+        guard let tabValue = note.userInfo?[SettingsWindowPresenter.tabUserInfoKey] as? String,
+              let tab = SettingsTab(rawValue: tabValue) else { return }
+        onTabChanged?(tab)
     }
 
     override func viewDidMoveToWindow() {

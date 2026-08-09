@@ -2,13 +2,12 @@ import Foundation
 import IOKit.hid
 import OSLog
 
-final class LogitechHIDPPButtonListener: @unchecked Sendable {
+nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.fanshu.monitor.hidpp-buttons", qos: .utility)
-    private let actionQueue = DispatchQueue(label: "com.fanshu.monitor.hidpp-actions", qos: .userInitiated)
     private let stateLock = NSLock()
     private var desiredRunning = false
     private var workerActive = false
-    private var restartRequested = false
+    private var restartAttempt = 0
     private var workerRunLoop: CFRunLoop?
     private var gestureMapping = MouseButtonMapping(action: .passThrough, shortcut: nil)
 
@@ -24,14 +23,8 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
 
     func start() {
         let shouldStartWorker = stateLock.withLock {
-            let wasDesired = desiredRunning
             desiredRunning = true
-            guard !workerActive else {
-                if !wasDesired {
-                    restartRequested = true
-                }
-                return false
-            }
+            guard !workerActive else { return false }
             workerActive = true
             return true
         }
@@ -50,7 +43,7 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
     func stop() {
         let runLoop = stateLock.withLock {
             desiredRunning = false
-            restartRequested = false
+            restartAttempt = 0
             return workerRunLoop
         }
         if let runLoop {
@@ -74,7 +67,7 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
                 guard let self else { return }
                 let mapping = self.currentGestureMapping
                 guard mapping.isExecutable else { return }
-                self.actionQueue.async {
+                Task { @MainActor in
                     MouseActionExecutor.execute(mapping)
                 }
             }
@@ -83,6 +76,7 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
             let runLoop = CFRunLoopGetCurrent()
             stateLock.withLock {
                 workerRunLoop = runLoop
+                restartAttempt = 0
             }
             defer {
                 stateLock.withLock {
@@ -92,7 +86,10 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
                 }
             }
             while shouldContinue {
-                CFRunLoopRun()
+                let result = CFRunLoopRunInMode(.defaultMode, 0.5, true)
+                if result == .finished || result == .stopped {
+                    break
+                }
             }
         }
     }
@@ -102,16 +99,24 @@ final class LogitechHIDPPButtonListener: @unchecked Sendable {
     }
 
     private func workerDidExit() {
-        let shouldRestart = stateLock.withLock {
+        let restartDelay = stateLock.withLock { () -> TimeInterval? in
             workerActive = false
             workerRunLoop = nil
-            guard desiredRunning, restartRequested else { return false }
-            restartRequested = false
+            guard desiredRunning else { return nil }
+            let delay = min(30, pow(2, Double(restartAttempt)))
+            restartAttempt = min(restartAttempt + 1, 5)
             workerActive = true
-            return true
+            return delay
         }
-        if shouldRestart {
-            launchWorker()
+        if let restartDelay {
+            queue.asyncAfter(deadline: .now() + restartDelay) { [weak self] in
+                guard let self else { return }
+                guard self.shouldContinue else {
+                    self.stateLock.withLock { self.workerActive = false }
+                    return
+                }
+                self.launchWorker()
+            }
         }
     }
 
