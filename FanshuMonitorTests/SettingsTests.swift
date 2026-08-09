@@ -206,6 +206,22 @@ struct SettingsTests {
         #expect(!settings.isMetricEnabled("missing", for: .codex))
     }
 
+    @Test func batteryMetricSelectionHasNoCountLimit() {
+        let suite = "batteryMetricSelectionHasNoCountLimit"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+
+        for metric in MonitorKind.battery.availableMetrics {
+            settings.setMetric(metric.id, enabled: true, for: .battery)
+        }
+
+        #expect(MonitorSettings.enabledMetricLimit(for: .battery) == nil)
+        #expect(MonitorKind.battery.availableMetrics.allSatisfy {
+            settings.isMetricEnabled($0.id, for: .battery)
+        })
+    }
+
     @Test func codexActiveTaskMigrationRunsOnlyOnce() {
         let suite = "codexActiveTaskMigrationRunsOnlyOnce"
         let defaults = UserDefaults(suiteName: suite)!

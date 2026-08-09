@@ -145,7 +145,12 @@ final class MonitorSettings: ObservableObject {
     static let maximumLockScreenPolicies = 4
 
     static func enabledMetricLimit(for kind: MonitorKind) -> Int? {
-        kind == .codex ? nil : maximumEnabledMetricsPerKind
+        switch kind {
+        case .battery, .codex:
+            nil
+        default:
+            maximumEnabledMetricsPerKind
+        }
     }
 
     private let defaults: UserDefaults
