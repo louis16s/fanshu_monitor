@@ -489,6 +489,48 @@ struct FanshuMonitorTests {
         #expect(metrics["battery-flow"]?.isDefault == false)
     }
 
+    @Test func batteryPowerFlowPresentationTracksAllocationAndDirection() {
+        let charging = BatteryPowerFlowPresentation(
+            metrics: [
+                MonitorMetric(name: "adapter-input", value: "30.0 W"),
+                MonitorMetric(name: "system-load", value: "10.0 W"),
+                MonitorMetric(name: "battery-flow", value: "+20.0 W")
+            ],
+            isConnectedToPower: true
+        )
+        #expect(charging.systemFraction == 1.0 / 3.0)
+        #expect(charging.batteryFraction == 2.0 / 3.0)
+        #expect(charging.batteryIsSupplying == false)
+        #expect(charging.hasActiveFlow)
+
+        let discharging = BatteryPowerFlowPresentation(
+            metrics: [
+                MonitorMetric(name: "adapter-input", value: "--"),
+                MonitorMetric(name: "system-load", value: "7.3 W"),
+                MonitorMetric(name: "battery-flow", value: "-7.3 W")
+            ],
+            isConnectedToPower: false
+        )
+        #expect(discharging.batteryIsSupplying)
+        #expect(discharging.systemFraction == 1)
+        #expect(discharging.batteryFraction == 1)
+    }
+
+    @Test func batteryPowerFlowPresentationRejectsUnavailableValues() {
+        let presentation = BatteryPowerFlowPresentation(
+            metrics: [
+                MonitorMetric(name: "adapter-input", value: "--"),
+                MonitorMetric(name: "system-load", value: "--"),
+                MonitorMetric(name: "battery-flow", value: "--")
+            ],
+            isConnectedToPower: true
+        )
+        #expect(presentation.adapterInputWatts == nil)
+        #expect(presentation.systemLoadWatts == nil)
+        #expect(presentation.batteryWatts == nil)
+        #expect(presentation.hasActiveFlow == false)
+    }
+
     @Test func batteryPowerKeepsTheLastKnownGoodValueDuringTransientFailures() {
         #expect(BatterySampler.stableSystemPowerWatts(
             fresh: 10.374,

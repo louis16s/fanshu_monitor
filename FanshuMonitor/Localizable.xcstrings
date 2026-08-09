@@ -80,6 +80,36 @@
         "en": { "stringUnit": { "state": "translated", "value": "Battery" } }
       }
     },
+    "power-flow.input": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "输入" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Input" } }
+      }
+    },
+    "power-flow.system": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "系统" } },
+        "en": { "stringUnit": { "state": "translated", "value": "System" } }
+      }
+    },
+    "power-flow.battery": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "电池" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Battery" } }
+      }
+    },
+    "power-flow.charging": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "充电" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Charging" } }
+      }
+    },
+    "power-flow.discharging": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "放电" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Discharging" } }
+      }
+    },
     "severity.calm": {
       "localizations": {
         "zh-Hans": {

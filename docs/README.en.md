@@ -28,7 +28,7 @@ Current version: `0.3.0`
 ## Highlights
 
 - Menu bar panel for CPU, GPU, UMA, battery, Codex quota, and display state
-- Optional live power flow for adapter input, system load, and battery charge or discharge
+- Optional animated power flow whose direction and line weight reflect adapter input, system load, and battery charging or discharge
 - macOS Shortcuts actions for reading live power flow and locking the screen immediately
 - External display brightness target follows the pointer
 - Built-in display brightness lightly syncs with the system value every 0.2 seconds

@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct MetricGlassRow: View {
@@ -168,7 +167,7 @@ private struct MetricDetailGrid: View {
                 .minimumScaleFactor(0.82)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    copyToPasteboard(metric.value)
+                    PanelPasteboard.copy(metric.value)
                 }
         }
     }
@@ -555,7 +554,11 @@ struct BatteryGlassRow: View {
             if canExpand && isExpanded {
                 VStack(spacing: 7) {
                     if !powerFlowMetrics.isEmpty {
-                        BatteryPowerFlowRow(metrics: powerFlowMetrics, theme: theme)
+                        BatteryPowerFlowRow(
+                            metrics: module.metrics,
+                            isConnectedToPower: isConnectedToPower,
+                            theme: theme
+                        )
                     }
                     if !regularDetailMetrics.isEmpty {
                         MetricDetailGrid(
@@ -696,55 +699,6 @@ struct BatteryGlassRow: View {
     }
 }
 
-private struct BatteryPowerFlowRow: View {
-    let metrics: [MonitorMetric]
-    let theme: MonitorPanelTheme
-
-    var body: some View {
-        VStack(spacing: 7) {
-            Rectangle()
-                .fill(theme.rowSeparator(for: .battery))
-                .frame(height: 1)
-                .padding(.leading, 28)
-
-            HStack(spacing: 8) {
-                ForEach(metrics) { metric in
-                    HStack(spacing: 5) {
-                        Image(systemName: symbol(for: metric.name))
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(theme.moduleTint(for: .battery))
-
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(localizedMetricName(kind: .battery, id: metric.name))
-                                .panelCaptionFont(size: 9)
-                                .foregroundStyle(theme.captionText)
-                            Text(metric.value)
-                                .panelMonoFont(size: 10, weight: .semibold)
-                                .foregroundStyle(theme.secondaryText)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.78)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        copyToPasteboard(metric.value)
-                    }
-                }
-            }
-            .padding(.leading, 28)
-        }
-    }
-
-    private func symbol(for name: String) -> String {
-        switch name {
-        case "adapter-input": "powerplug"
-        case "system-load": "desktopcomputer"
-        default: "battery.50percent"
-        }
-    }
-}
-
 private func localizedBatteryState(_ id: String) -> String {
     let key = "battery-state.\(id)"
     let localized = String(localized: String.LocalizationValue(key))
@@ -786,8 +740,4 @@ private struct ExternalVolumePayload: Decodable {
     let free: String
     let total: String
     let percentage: Int
-}
-private func copyToPasteboard(_ string: String) {
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(string, forType: .string)
 }
