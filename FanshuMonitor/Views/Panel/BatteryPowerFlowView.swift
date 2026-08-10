@@ -94,7 +94,7 @@ struct BatteryPowerFlowRow: View {
                     symbol: presentation.isConnectedToPower ? "powerplug.fill" : "battery.75percent",
                     color: presentation.isConnectedToPower ? tint : .orange
                 )
-                .frame(width: 58)
+                .frame(width: 62)
 
                 PowerFlowCanvas(
                     presentation: presentation,
@@ -123,7 +123,7 @@ struct BatteryPowerFlowRow: View {
                         .opacity((presentation.batteryMagnitude ?? 0) > 0.05 ? 1 : 0.48)
                     }
                 }
-                .frame(width: 72)
+                .frame(width: 76)
             }
             .padding(.leading, 28)
             .accessibilityElement(children: .ignore)
@@ -140,11 +140,11 @@ struct BatteryPowerFlowRow: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .panelCaptionFont(size: 8)
+                    .panelCaptionFont(size: 9)
                     .foregroundStyle(theme.captionText)
                     .lineLimit(1)
                 Text(value)
-                    .panelMonoFont(size: 9, weight: .semibold)
+                    .panelMonoFont(size: 10, weight: .semibold)
                     .foregroundStyle(theme.secondaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
@@ -313,7 +313,7 @@ private struct PowerFlowCanvas: View {
             let rawProgress = (phase + offset).truncatingRemainder(dividingBy: 1)
             let progress = reversed ? 1 - rawProgress : rawProgress
             let center = point(progress)
-            let rect = CGRect(x: center.x - 1.7, y: center.y - 1.7, width: 3.4, height: 3.4)
+            let rect = CGRect(x: center.x - 2, y: center.y - 2, width: 4, height: 4)
             context.fill(Path(ellipseIn: rect), with: .color(color().opacity(0.96)))
         }
     }

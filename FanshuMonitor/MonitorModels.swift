@@ -144,8 +144,13 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
                 MetricSwitch(id: "gpu-memory", title: String(localized: "metric.gpu.gpu-memory"), isDefault: true),
                 MetricSwitch(id: "allocated", title: String(localized: "metric.gpu.allocated"), isDefault: true),
                 MetricSwitch(id: "render", title: String(localized: "metric.gpu.render"), isDefault: true),
-                MetricSwitch(id: "temperature", title: String(localized: "metric.gpu.temperature"), isDefault: false),
                 MetricSwitch(id: "tiler", title: String(localized: "metric.gpu.tiler"), isDefault: false),
+                MetricSwitch(
+                    id: "temperature",
+                    title: String(localized: "metric.gpu.temperature"),
+                    subtitle: String(localized: "metric.gpu.temperature.m5-unavailable"),
+                    isDefault: false
+                ),
             ]
         case .memory:
             return [
@@ -173,9 +178,7 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
             ]
         case .battery:
             return [
-                MetricSwitch(id: "adapter-input", title: String(localized: "metric.battery.adapter-input"), isDefault: false),
-                MetricSwitch(id: "system-load", title: String(localized: "metric.battery.system-load"), isDefault: false),
-                MetricSwitch(id: "battery-flow", title: String(localized: "metric.battery.battery-flow"), isDefault: false),
+                MetricSwitch(id: "power-flow", title: String(localized: "metric.battery.power-flow"), isDefault: false),
                 MetricSwitch(id: "charging-power", title: String(localized: "metric.battery.charging-power"), isDefault: true),
                 MetricSwitch(id: "adapter", title: String(localized: "metric.battery.adapter"), isDefault: true),
                 MetricSwitch(id: "health", title: String(localized: "metric.battery.health"), isDefault: true),
@@ -198,7 +201,15 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
 nonisolated struct MetricSwitch: Identifiable, Hashable {
     let id: String
     let title: String
+    let subtitle: String?
     let isDefault: Bool
+
+    init(id: String, title: String, subtitle: String? = nil, isDefault: Bool) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.isDefault = isDefault
+    }
 }
 
 nonisolated struct MonitorMetric: Identifiable, Sendable {
@@ -206,6 +217,21 @@ nonisolated struct MonitorMetric: Identifiable, Sendable {
     let value: String
 
     var id: String { name }
+}
+
+nonisolated extension MonitorKind {
+    static let batteryPowerFlowComponentIDs: Set<String> = [
+        "adapter-input",
+        "system-load",
+        "battery-flow"
+    ]
+
+    func resolvedPanelMetricIDs(from enabledIDs: Set<String>) -> Set<String> {
+        guard self == .battery, enabledIDs.contains("power-flow") else {
+            return enabledIDs
+        }
+        return enabledIDs.union(Self.batteryPowerFlowComponentIDs)
+    }
 }
 
 nonisolated struct MonitorModule: Identifiable, Sendable {

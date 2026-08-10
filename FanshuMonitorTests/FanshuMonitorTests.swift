@@ -484,9 +484,19 @@ struct FanshuMonitorTests {
     @Test func batteryPowerFlowMetricsAreOptional() {
         let metrics = Dictionary(uniqueKeysWithValues: MonitorKind.battery.availableMetrics.map { ($0.id, $0) })
 
-        #expect(metrics["adapter-input"]?.isDefault == false)
-        #expect(metrics["system-load"]?.isDefault == false)
-        #expect(metrics["battery-flow"]?.isDefault == false)
+        #expect(metrics["power-flow"]?.isDefault == false)
+        #expect(metrics["adapter-input"] == nil)
+        #expect(metrics["system-load"] == nil)
+        #expect(metrics["battery-flow"] == nil)
+    }
+
+    @Test func batteryPowerFlowOptionResolvesItsThreePanelMetrics() {
+        let resolved = MonitorKind.battery.resolvedPanelMetricIDs(from: ["power-flow", "health"])
+
+        #expect(resolved.contains("power-flow"))
+        #expect(resolved.contains("health"))
+        #expect(MonitorKind.batteryPowerFlowComponentIDs.isSubset(of: resolved))
+        #expect(MonitorKind.cpu.resolvedPanelMetricIDs(from: ["system"]) == ["system"])
     }
 
     @Test func batteryPowerFlowPresentationTracksAllocationAndDirection() {

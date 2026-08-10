@@ -53,6 +53,12 @@ struct SettingsTests {
         ])
     }
 
+    @Test func gpuTemperatureIsLastAndExplainsM5Availability() {
+        let metrics = MonitorKind.gpu.availableMetrics
+        #expect(metrics.last?.id == "temperature")
+        #expect(metrics.last?.subtitle?.isEmpty == false)
+    }
+
     @Test func lockScreenPolicyOrderPersistsAfterMovingACard() {
         let suite = "lockScreenPolicyOrderPersistsAfterMovingACard"
         let defaults = UserDefaults(suiteName: suite)!
@@ -220,6 +226,24 @@ struct SettingsTests {
         #expect(MonitorKind.battery.availableMetrics.allSatisfy {
             settings.isMetricEnabled($0.id, for: .battery)
         })
+    }
+
+    @Test func legacyBatteryPowerMetricsMigrateToOnePowerFlowOption() {
+        let suite = "legacyBatteryPowerMetricsMigrateToOnePowerFlowOption"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(
+            ["adapter-input", "system-load", "battery-flow", "health"],
+            forKey: "settings.enabledMetrics.battery"
+        )
+
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(settings.isMetricEnabled("power-flow", for: .battery))
+        #expect(settings.isMetricEnabled("health", for: .battery))
+        #expect(!settings.isMetricEnabled("adapter-input", for: .battery))
+        #expect(!settings.isMetricEnabled("system-load", for: .battery))
+        #expect(!settings.isMetricEnabled("battery-flow", for: .battery))
     }
 
     @Test func codexActiveTaskMigrationRunsOnlyOnce() {

@@ -36,6 +36,7 @@ struct ModuleSettingsView: View {
                     let isSelected = settings.isMetricEnabled(metric.id, for: kind)
                     MetricSelectionRow(
                         title: metric.title,
+                        subtitle: metric.subtitle,
                         isSelected: isSelected,
                         isEnabled: isLocked(metric) || settings.canEnableMetric(metric.id, for: kind),
                         isLocked: isLocked(metric)

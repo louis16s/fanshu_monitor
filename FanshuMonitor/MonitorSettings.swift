@@ -435,9 +435,13 @@ final class MonitorSettings: ObservableObject {
                 return ["IP 地址": "ipv4", "上传": "upload", "下载": "download", "SSID": "ssid", "IPv4": "ipv4", "IPv6": "ipv6"]
             case .battery:
                 return [
-                    "输入": "adapter-input",
-                    "系统": "system-load",
-                    "电池流向": "battery-flow",
+                    "输入": "power-flow",
+                    "系统": "power-flow",
+                    "电池流向": "power-flow",
+                    "功率分流指标": "power-flow",
+                    "adapter-input": "power-flow",
+                    "system-load": "power-flow",
+                    "battery-flow": "power-flow",
                     "充电功率": "charging-power",
                     "健康度": "health",
                     "循环数": "cycle-count",
