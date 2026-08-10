@@ -315,7 +315,7 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         }
 
         guard let cachedDisplayID = cachedOrDiscoverableBuiltInDisplayID() else { return nil }
-        if CGDisplayIsOnline(cachedDisplayID) != 1 {
+        if !builtInBlackout.isRestored(displayID: cachedDisplayID) {
             let restored = builtInBlackout.setEnabled(
                 false,
                 displayID: cachedDisplayID,
@@ -327,6 +327,10 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             } else {
                 AppLogger.ui.error("Failed to restore cached built-in display ID \(cachedDisplayID)")
             }
+        }
+
+        guard builtInBlackout.isRestored(displayID: cachedDisplayID) else {
+            return nil
         }
 
         if let restoredBrightnessOverride {
@@ -346,6 +350,15 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             return true
         }
         return displayIDs.contains { CGDisplayIsBuiltin($0) == 0 }
+    }
+
+    func hasOfflineCachedBuiltInDisplay() -> Bool {
+        guard let displayID = cachedBuiltInDisplayID(),
+              CGDisplayIsBuiltin(displayID) != 0
+        else {
+            return false
+        }
+        return CGDisplayIsOnline(displayID) != 1 || CGDisplayIsActive(displayID) == 0
     }
 
     func setBuiltInBrightness(_ brightness: Float, displayID: CGDirectDisplayID) -> Bool {
@@ -874,7 +887,7 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
             // A restart loses the in-memory isolation mode. Clear either
             // possible fallback, enable the display, then verify the topology.
             _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
-            let enableSucceeded = configureDisplay(displayID: displayID, enabled: true)
+            let enableSucceeded = restoreDisconnectedDisplay(displayID: displayID)
             return BuiltInDisplayTopologyResult.succeeded(
                 requestSucceeded: enableSucceeded,
                 targetBlackoutEnabled: false,
@@ -884,7 +897,7 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
         let restoreRequestSucceeded: Bool
         switch state.mode {
         case .disconnected:
-            restoreRequestSucceeded = configureDisplay(displayID: displayID, enabled: true)
+            restoreRequestSucceeded = restoreDisconnectedDisplay(displayID: displayID)
         case .mirrored:
             restoreRequestSucceeded = configureMirroring(displayID: displayID, mirrorTargetID: nil)
         }
@@ -929,13 +942,20 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
         defer { stateLock.unlock() }
 
         let previousStates = states
-        states.removeAll()
         for (displayID, state) in previousStates {
+            let requestSucceeded: Bool
             switch state.mode {
             case .disconnected:
-                _ = configureDisplay(displayID: displayID, enabled: true)
+                requestSucceeded = restoreDisconnectedDisplay(displayID: displayID)
             case .mirrored:
-                _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+                requestSucceeded = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+            }
+            if BuiltInDisplayTopologyResult.succeeded(
+                requestSucceeded: requestSucceeded,
+                targetBlackoutEnabled: false,
+                displayIsRestored: isDisplayRestored(displayID)
+            ) {
+                states.removeValue(forKey: displayID)
             }
         }
 
@@ -946,7 +966,36 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
         }
     }
 
-    private func configureDisplay(displayID: CGDirectDisplayID, enabled: Bool) -> Bool {
+    func isRestored(displayID: CGDirectDisplayID) -> Bool {
+        isDisplayRestored(displayID)
+    }
+
+    private func restoreDisconnectedDisplay(displayID: CGDirectDisplayID) -> Bool {
+        let sessionRequestSucceeded = configureDisplay(
+            displayID: displayID,
+            enabled: true,
+            completionOption: .forSession
+        )
+        if isDisplayRestored(displayID) {
+            return true
+        }
+
+        AppLogger.ui.notice(
+            "Session restore did not activate built-in display ID \(displayID); retrying permanently"
+        )
+        let permanentRequestSucceeded = configureDisplay(
+            displayID: displayID,
+            enabled: true,
+            completionOption: .permanently
+        )
+        return permanentRequestSucceeded || sessionRequestSucceeded
+    }
+
+    private func configureDisplay(
+        displayID: CGDirectDisplayID,
+        enabled: Bool,
+        completionOption: CGConfigureOption = .forSession
+    ) -> Bool {
         guard let configureDisplayEnabled else { return false }
         var config: CGDisplayConfigRef?
         guard CGBeginDisplayConfiguration(&config) == .success, let config else {
@@ -962,7 +1011,7 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
             return false
         }
 
-        let completionResult = CGCompleteDisplayConfiguration(config, .forSession)
+        let completionResult = CGCompleteDisplayConfiguration(config, completionOption)
         if completionResult != .success {
             AppLogger.ui.error(
                 "Display topology completion failed for ID \(displayID), enabled: \(enabled, privacy: .public), error: \(completionResult.rawValue, privacy: .public)"

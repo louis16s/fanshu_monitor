@@ -398,7 +398,7 @@ struct BuiltInDisplayRestorePolicyTests {
 
     @Test func externalDisconnectUsesThirtyFivePercentBrightness() {
         #expect(BuiltInDisplayRestorePolicy.disconnectedExternalBrightness == 35)
-        #expect(!BuiltInDisplayRestorePolicy.topologyRetryDelays.isEmpty)
+        #expect(BuiltInDisplayRestorePolicy.topologyWatchdogInterval >= 0.5)
         #expect(!BuiltInDisplayRestorePolicy.brightnessRetryDelays.isEmpty)
     }
 }
@@ -450,9 +450,24 @@ struct BuiltInDisconnectRecoveryTests {
             )
         }
 
-        #expect(result == .restored(displayID: 42, brightnessApplied: true))
+        #expect(result == .restored(displayID: 42))
         #expect(recorder.snapshot.count == 2)
         #expect(recorder.snapshot.allSatisfy { abs($0.0 - 0.35) < 0.0001 && $0.1 == 42 })
+    }
+
+    @Test func doesNotReportACompleteRecoveryWhenBrightnessNeverApplies() async {
+        let result: BuiltInDisconnectRecoveryResult = await withCheckedContinuation { continuation in
+            DisplayControlWorker().restoreBuiltInAfterExternalDisconnect(
+                brightnessPercent: 35,
+                retryDelays: [0, 0],
+                hasOnlineExternalDisplay: { false },
+                restoreTopology: { _ in 42 },
+                applyBrightness: { _, _ in false },
+                completion: { continuation.resume(returning: $0) }
+            )
+        }
+
+        #expect(result == .brightnessPending(displayID: 42))
     }
 }
 

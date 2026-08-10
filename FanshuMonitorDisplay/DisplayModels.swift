@@ -206,7 +206,7 @@ nonisolated enum DisplayHeaderBrightnessPolicy {
 
 nonisolated enum BuiltInDisplayRestorePolicy {
     static let disconnectedExternalBrightness = 35.0
-    static let topologyRetryDelays: [TimeInterval] = [0.2, 0.7, 1.5]
+    static let topologyWatchdogInterval: TimeInterval = 0.5
     static let brightnessRetryDelays: [TimeInterval] = [0.05, 0.2, 0.5, 1.0, 2.0]
 
     static func shouldRestore(
@@ -221,7 +221,8 @@ nonisolated enum BuiltInDisplayRestorePolicy {
 
 nonisolated enum BuiltInDisconnectRecoveryResult: Sendable, Equatable {
     case externalDisplayPresent
-    case restored(displayID: CGDirectDisplayID, brightnessApplied: Bool)
+    case restored(displayID: CGDirectDisplayID)
+    case brightnessPending(displayID: CGDirectDisplayID)
     case builtInDisplayUnavailable
 }
 

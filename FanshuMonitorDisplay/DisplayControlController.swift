@@ -34,16 +34,19 @@ final class DisplayControlController: ObservableObject {
     private var nativeBrightnessReadsInFlight: Set<CGDirectDisplayID> = []
     private var cachedBuiltInDisplay: ControlledDisplay?
     private var builtInDisconnectRecoveryPending = false
+    private var builtInDisconnectWatchdogTask: Task<Void, Never>?
+    private var builtInDisconnectWatchdogGeneration = 0
     private var isBuiltInBlackoutDesired: Bool {
         get {
             defaults.bool(forKey: Self.builtInBlackoutPreferenceKey)
         }
         set {
             defaults.set(newValue, forKey: Self.builtInBlackoutPreferenceKey)
+            configureBuiltInDisconnectWatchdog()
         }
     }
     var needsBuiltInBlackoutMaintenance: Bool {
-        isBuiltInBlackoutDesired
+        isBuiltInBlackoutDesired || service.hasOfflineCachedBuiltInDisplay()
     }
     weak var settings: MonitorSettings? {
         didSet {
@@ -70,6 +73,7 @@ final class DisplayControlController: ObservableObject {
             CGDisplayRemoveReconfigurationCallback(displayReconfigurationCallback, Unmanaged.passUnretained(self).toOpaque())
         }
         nativeBrightnessSyncTask?.cancel()
+        builtInDisconnectWatchdogTask?.cancel()
         powerEventBridge?.stop()
         Task { @MainActor [service] in
             service.clearBuiltInBlackouts()
@@ -189,7 +193,7 @@ final class DisplayControlController: ObservableObject {
             ) { [weak self] _ in
                 guard let controller = self else { return }
                 Task { @MainActor in
-                    controller.scheduleRefresh()
+                    controller.handleDisplayTopologySignal()
                 }
             }
         }
@@ -233,6 +237,7 @@ final class DisplayControlController: ObservableObject {
         if CGDisplayRegisterReconfigurationCallback(displayReconfigurationCallback, pointer) == .success {
             displayCallbackRegistered = true
         }
+        configureBuiltInDisconnectWatchdog()
         configureNativeBrightnessSync()
     }
 
@@ -257,6 +262,8 @@ final class DisplayControlController: ObservableObject {
         }
         powerEventBridge?.stop()
         powerEventBridge = nil
+        builtInDisconnectWatchdogTask?.cancel()
+        builtInDisconnectWatchdogTask = nil
         stopNativeBrightnessSync()
     }
 
@@ -293,11 +300,14 @@ final class DisplayControlController: ObservableObject {
     ) {
         let isRemoval = flags.contains(.removeFlag) || flags.contains(.disabledFlag)
         scheduleRefresh(delay: isRemoval ? 0.12 : 0.45)
-        guard isBuiltInBlackoutDesired || !builtInBlackoutDisplayIDs.isEmpty else { return }
-        recoverBuiltInDisplayAfterExternalDisconnect(
-            triggerDisplayID: displayID,
-            retryIndex: 0
-        )
+        guard needsBuiltInDisconnectRecovery else { return }
+        recoverBuiltInDisplayAfterExternalDisconnect(triggerDisplayID: displayID)
+    }
+
+    private func handleDisplayTopologySignal() {
+        scheduleRefresh(delay: 0.12)
+        guard needsBuiltInDisconnectRecovery else { return }
+        recoverBuiltInDisplayAfterExternalDisconnect(triggerDisplayID: 0)
     }
 
     func scheduleWakeRefreshes(early: Bool = false) {
@@ -780,10 +790,7 @@ final class DisplayControlController: ObservableObject {
         ) else {
             guard !builtInBlackoutOperationPending else { return }
             AppLogger.ui.notice("No external display remains; restoring the built-in display")
-            recoverBuiltInDisplayAfterExternalDisconnect(
-                triggerDisplayID: 0,
-                retryIndex: 0
-            )
+            recoverBuiltInDisplayAfterExternalDisconnect(triggerDisplayID: 0)
             return
         }
         if isBuiltInBlackoutDesired {
@@ -816,11 +823,8 @@ final class DisplayControlController: ObservableObject {
         }
     }
 
-    private func recoverBuiltInDisplayAfterExternalDisconnect(
-        triggerDisplayID: CGDirectDisplayID,
-        retryIndex: Int
-    ) {
-        guard isBuiltInBlackoutDesired || !builtInBlackoutDisplayIDs.isEmpty else {
+    private func recoverBuiltInDisplayAfterExternalDisconnect(triggerDisplayID: CGDirectDisplayID) {
+        guard needsBuiltInDisconnectRecovery else {
             return
         }
         guard !builtInDisconnectRecoveryPending else { return }
@@ -828,72 +832,94 @@ final class DisplayControlController: ObservableObject {
         builtInDisconnectRecoveryPending = true
         builtInBlackoutOperationPending = true
         wakeMaintenanceGeneration &+= 1
-        AppLogger.ui.notice(
-            "Display removal detected for ID \(triggerDisplayID); checking emergency built-in restore"
-        )
+        if triggerDisplayID != 0 {
+            AppLogger.ui.notice(
+                "Display removal detected for ID \(triggerDisplayID); checking emergency built-in restore"
+            )
+        }
 
         worker.restoreBuiltInAfterExternalDisconnect(
             brightnessPercent: BuiltInDisplayRestorePolicy.disconnectedExternalBrightness,
             service: service
         ) { [self] result in
             Task { @MainActor [self] in
-                builtInDisconnectRecoveryPending = false
-                builtInBlackoutOperationPending = false
+                self.builtInDisconnectRecoveryPending = false
+                self.builtInBlackoutOperationPending = false
 
                 switch result {
                 case .externalDisplayPresent:
-                    AppLogger.ui.debug("Skipped emergency built-in restore because an external display remains")
-                    scheduleBuiltInDisconnectRecoveryRetry(
-                        triggerDisplayID: triggerDisplayID,
-                        retryIndex: retryIndex
-                    )
-                case let .restored(displayID, brightnessApplied):
-                    isBuiltInBlackoutDesired = false
-                    builtInBlackoutDisplayIDs.removeAll()
-                    builtInBlackoutActionFailed = !brightnessApplied
-                    fallbackValues[displayID, default: [:]][.brightness] =
+                    if triggerDisplayID != 0 {
+                        AppLogger.ui.debug("Skipped emergency built-in restore because an external display remains")
+                    }
+                    return
+                case let .restored(displayID):
+                    self.builtInBlackoutActionFailed = false
+                    self.fallbackValues[displayID, default: [:]][.brightness] =
                         BuiltInDisplayRestorePolicy.disconnectedExternalBrightness
-                    if var cachedBuiltInDisplay, cachedBuiltInDisplay.id == displayID {
+                    if var cachedBuiltInDisplay = self.cachedBuiltInDisplay,
+                       cachedBuiltInDisplay.id == displayID {
                         cachedBuiltInDisplay.brightness = BuiltInDisplayRestorePolicy.disconnectedExternalBrightness
                         cachedBuiltInDisplay.supportsBrightness = true
                         cachedBuiltInDisplay.brightnessUnavailableReason = nil
                         self.cachedBuiltInDisplay = cachedBuiltInDisplay
                     }
+                    self.isBuiltInBlackoutDesired = false
+                    self.builtInBlackoutDisplayIDs.removeAll()
                     AppLogger.ui.notice(
-                        "Restored built-in display ID \(displayID) after external disconnect; brightness applied: \(brightnessApplied, privacy: .public)"
+                        "Restored built-in display ID \(displayID) at 35 percent after external disconnect"
+                    )
+                case let .brightnessPending(displayID):
+                    self.builtInBlackoutActionFailed = true
+                    AppLogger.ui.debug(
+                        "Built-in display ID \(displayID) is online but its 35 percent brightness is still pending"
                     )
                 case .builtInDisplayUnavailable:
-                    builtInBlackoutActionFailed = true
-                    AppLogger.ui.error("Emergency built-in restore could not resolve the built-in display ID")
-                    scheduleBuiltInDisconnectRecoveryRetry(
-                        triggerDisplayID: triggerDisplayID,
-                        retryIndex: retryIndex
-                    )
+                    self.builtInBlackoutActionFailed = true
+                    if triggerDisplayID != 0 {
+                        AppLogger.ui.error("Emergency built-in restore could not resolve the built-in display ID")
+                    }
                 }
-                scheduleRefresh(delay: 0.12)
+                self.scheduleRefresh(delay: 0.12)
             }
         }
     }
 
-    private func scheduleBuiltInDisconnectRecoveryRetry(
-        triggerDisplayID: CGDirectDisplayID,
-        retryIndex: Int
-    ) {
-        let delays = BuiltInDisplayRestorePolicy.topologyRetryDelays
-        guard retryIndex < delays.count,
-              isBuiltInBlackoutDesired || !builtInBlackoutDisplayIDs.isEmpty
-        else {
+    private func configureBuiltInDisconnectWatchdog() {
+        guard needsBuiltInDisconnectRecovery else {
+            builtInDisconnectWatchdogGeneration &+= 1
+            builtInDisconnectWatchdogTask?.cancel()
+            builtInDisconnectWatchdogTask = nil
             return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + delays[retryIndex]) { [weak self] in
-            guard let self else { return }
-            Task { @MainActor in
-                self.recoverBuiltInDisplayAfterExternalDisconnect(
-                    triggerDisplayID: triggerDisplayID,
-                    retryIndex: retryIndex + 1
+        guard builtInDisconnectWatchdogTask == nil else { return }
+
+        builtInDisconnectWatchdogGeneration &+= 1
+        let generation = builtInDisconnectWatchdogGeneration
+        builtInDisconnectWatchdogTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self,
+                      self.builtInDisconnectWatchdogGeneration == generation,
+                      self.needsBuiltInDisconnectRecovery
+                else {
+                    break
+                }
+                if !self.builtInDisconnectRecoveryPending {
+                    self.recoverBuiltInDisplayAfterExternalDisconnect(triggerDisplayID: 0)
+                }
+                try? await Task.sleep(
+                    for: .seconds(BuiltInDisplayRestorePolicy.topologyWatchdogInterval)
                 )
             }
+            if self?.builtInDisconnectWatchdogGeneration == generation {
+                self?.builtInDisconnectWatchdogTask = nil
+            }
         }
+    }
+
+    private var needsBuiltInDisconnectRecovery: Bool {
+        isBuiltInBlackoutDesired
+            || !builtInBlackoutDisplayIDs.isEmpty
+            || service.hasOfflineCachedBuiltInDisplay()
     }
 
     private func markControlUnsupported(_ control: DisplayControlKind, displayID: CGDirectDisplayID) {
@@ -1092,12 +1118,12 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         completion: @escaping @Sendable (BuiltInDisconnectRecoveryResult) -> Void
     ) {
         guard retryIndex < retryDelays.count else {
-            completion(.restored(displayID: displayID, brightnessApplied: false))
+            completion(.brightnessPending(displayID: displayID))
             return
         }
         topologyQueue.asyncAfter(deadline: .now() + retryDelays[retryIndex]) {
             if applyBrightness(brightness, displayID) {
-                completion(.restored(displayID: displayID, brightnessApplied: true))
+                completion(.restored(displayID: displayID))
             } else {
                 self.applyRestoredBuiltInBrightness(
                     brightness,
