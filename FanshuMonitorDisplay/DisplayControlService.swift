@@ -305,13 +305,16 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         return appliedDisplayIDs
     }
 
-    func clearBuiltInBlackouts() {
+    @discardableResult
+    func clearBuiltInBlackouts(restoredBrightnessOverride: Float? = nil) -> CGDirectDisplayID? {
         let brightnessByDisplayID = builtInBlackout.clearAll()
-        for (displayID, brightness) in brightnessByDisplayID {
-            _ = displayServices.setBrightness(displayID: displayID, value: brightness)
+        if restoredBrightnessOverride == nil {
+            for (displayID, brightness) in brightnessByDisplayID {
+                _ = displayServices.setBrightness(displayID: displayID, value: brightness)
+            }
         }
 
-        guard let cachedDisplayID = cachedBuiltInDisplayID() else { return }
+        guard let cachedDisplayID = cachedOrDiscoverableBuiltInDisplayID() else { return nil }
         if CGDisplayIsOnline(cachedDisplayID) != 1 {
             let restored = builtInBlackout.setEnabled(
                 false,
@@ -326,12 +329,37 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             }
         }
 
-        if let cachedBrightness = defaults.object(forKey: Self.cachedBuiltInBrightnessKey) as? Double {
+        if let restoredBrightnessOverride {
+            defaults.set(Double(restoredBrightnessOverride), forKey: Self.cachedBuiltInBrightnessKey)
+        } else if let cachedBrightness = defaults.object(forKey: Self.cachedBuiltInBrightnessKey) as? Double {
             _ = displayServices.setBrightness(
                 displayID: cachedDisplayID,
                 value: Float(cachedBrightness)
             )
         }
+        return cachedDisplayID
+    }
+
+    func hasOnlineExternalDisplay() -> Bool {
+        guard let displayIDs = onlineDisplayIDs() else {
+            AppLogger.ui.error("Unable to query online displays during emergency built-in restore")
+            return true
+        }
+        return displayIDs.contains { CGDisplayIsBuiltin($0) == 0 }
+    }
+
+    func setBuiltInBrightness(_ brightness: Float, displayID: CGDirectDisplayID) -> Bool {
+        guard CGDisplayIsOnline(displayID) == 1,
+              CGDisplayIsBuiltin(displayID) != 0
+        else {
+            return false
+        }
+        let clamped = min(1, max(0, brightness))
+        let succeeded = displayServices.setBrightness(displayID: displayID, value: clamped)
+        if succeeded {
+            defaults.set(Double(clamped), forKey: Self.cachedBuiltInBrightnessKey)
+        }
+        return succeeded
     }
 
     func isolatedBuiltInPlaceholder() -> ControlledDisplay? {
@@ -381,6 +409,15 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             return nil
         }
         return CGDirectDisplayID(storedID)
+    }
+
+    private func onlineDisplayIDs() -> Set<CGDirectDisplayID>? {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(UInt32(ids.count), &ids, &count) == .success else {
+            return nil
+        }
+        return Set(ids.prefix(Int(count)))
     }
 
     nonisolated static func firstBuiltInDisplayID(

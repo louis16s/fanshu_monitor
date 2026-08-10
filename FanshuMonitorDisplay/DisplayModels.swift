@@ -122,12 +122,12 @@ nonisolated enum DisplayCapabilityFormatter {
     }
 }
 
-nonisolated(unsafe) let displayReconfigurationCallback: CGDisplayReconfigurationCallBack = { _, flags, userInfo in
+nonisolated(unsafe) let displayReconfigurationCallback: CGDisplayReconfigurationCallBack = { displayID, flags, userInfo in
     guard let userInfo else { return }
     guard !flags.contains(.beginConfigurationFlag) else { return }
     let controller = Unmanaged<DisplayControlController>.fromOpaque(userInfo).takeUnretainedValue()
     Task { @MainActor in
-        controller.scheduleRefresh()
+        controller.handleDisplayReconfiguration(displayID: displayID, flags: flags)
     }
 }
 
@@ -205,6 +205,10 @@ nonisolated enum DisplayHeaderBrightnessPolicy {
 }
 
 nonisolated enum BuiltInDisplayRestorePolicy {
+    static let disconnectedExternalBrightness = 35.0
+    static let topologyRetryDelays: [TimeInterval] = [0.2, 0.7, 1.5]
+    static let brightnessRetryDelays: [TimeInterval] = [0.05, 0.2, 0.5, 1.0, 2.0]
+
     static func shouldRestore(
         externalDisplayCount: Int,
         blackoutDesired: Bool,
@@ -213,6 +217,12 @@ nonisolated enum BuiltInDisplayRestorePolicy {
         externalDisplayCount == 0
             && (blackoutDesired || isolatedDisplayCount > 0)
     }
+}
+
+nonisolated enum BuiltInDisconnectRecoveryResult: Sendable, Equatable {
+    case externalDisplayPresent
+    case restored(displayID: CGDirectDisplayID, brightnessApplied: Bool)
+    case builtInDisplayUnavailable
 }
 
 nonisolated enum BuiltInDisplayTopologyResult {

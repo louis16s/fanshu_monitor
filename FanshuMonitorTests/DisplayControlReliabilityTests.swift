@@ -395,6 +395,65 @@ struct BuiltInDisplayRestorePolicyTests {
             isolatedDisplayCount: 0
         ))
     }
+
+    @Test func externalDisconnectUsesThirtyFivePercentBrightness() {
+        #expect(BuiltInDisplayRestorePolicy.disconnectedExternalBrightness == 35)
+        #expect(!BuiltInDisplayRestorePolicy.topologyRetryDelays.isEmpty)
+        #expect(!BuiltInDisplayRestorePolicy.brightnessRetryDelays.isEmpty)
+    }
+}
+
+private final class BuiltInBrightnessAttemptRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [(Float, CGDirectDisplayID)] = []
+
+    func record(brightness: Float, displayID: CGDirectDisplayID) -> Bool {
+        lock.withLock {
+            values.append((brightness, displayID))
+            return values.count >= 2
+        }
+    }
+
+    var snapshot: [(Float, CGDirectDisplayID)] {
+        lock.withLock { values }
+    }
+}
+
+struct BuiltInDisconnectRecoveryTests {
+    @Test func skipsRestoreWhileAnotherExternalDisplayRemains() async {
+        let result: BuiltInDisconnectRecoveryResult = await withCheckedContinuation { continuation in
+            DisplayControlWorker().restoreBuiltInAfterExternalDisconnect(
+                brightnessPercent: 35,
+                retryDelays: [0],
+                hasOnlineExternalDisplay: { true },
+                restoreTopology: { _ in 42 },
+                applyBrightness: { _, _ in true },
+                completion: { continuation.resume(returning: $0) }
+            )
+        }
+
+        #expect(result == .externalDisplayPresent)
+    }
+
+    @Test func restoresTopologyThenRetriesThirtyFivePercentBrightness() async {
+        let recorder = BuiltInBrightnessAttemptRecorder()
+        let result: BuiltInDisconnectRecoveryResult = await withCheckedContinuation { continuation in
+            DisplayControlWorker().restoreBuiltInAfterExternalDisconnect(
+                brightnessPercent: 35,
+                retryDelays: [0, 0],
+                hasOnlineExternalDisplay: { false },
+                restoreTopology: { brightness in
+                    abs(brightness - 0.35) < 0.0001 ? 42 : nil
+                },
+                applyBrightness: recorder.record,
+                completion: { continuation.resume(returning: $0) }
+            )
+        }
+
+        #expect(result == .restored(displayID: 42, brightnessApplied: true))
+        #expect(recorder.snapshot.count == 2)
+        #expect(recorder.snapshot.allSatisfy { abs($0.0 - 0.35) < 0.0001 && $0.1 == 42 })
+    }
 }
 
 struct BuiltInDisplayTopologyResultTests {
