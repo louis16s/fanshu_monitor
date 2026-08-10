@@ -283,7 +283,6 @@ private struct DisplayControlGroup: View {
     }
 
     private var builtInDisplayActionTitle: String {
-        if controller.builtInBlackoutActionFailed { return "重试" }
         return controller.isBuiltInBlackoutEnabled(displayID: display.id) ? "恢复" : "关闭"
     }
 
@@ -300,7 +299,11 @@ private struct DisplayControlGroup: View {
     }
 
     private var builtInDisplayActionHelp: String {
-        if controller.builtInBlackoutActionFailed { return "切换失败，点击重试" }
+        if controller.builtInBlackoutActionFailed {
+            return controller.isBuiltInBlackoutEnabled(displayID: display.id)
+                ? "上次恢复失败，点击再次恢复内建显示器"
+                : "上次关闭失败，点击再次关闭内建显示器"
+        }
         return controller.isBuiltInBlackoutEnabled(displayID: display.id)
             ? "恢复内建显示器"
             : "关闭内建显示器"

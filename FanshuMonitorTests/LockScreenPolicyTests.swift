@@ -786,7 +786,10 @@ struct LockScreenPolicyTests {
         #expect(settings.lockScreenBaseline != nil)
 
         probe.restoreSucceeds = true
-        try? await Task.sleep(for: .milliseconds(80))
+        let deadline = ContinuousClock.now + .seconds(1)
+        while controller.status != .disabled, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
 
         #expect(controller.status == .disabled)
         #expect(settings.lockScreenBaseline == nil)

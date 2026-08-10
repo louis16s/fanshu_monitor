@@ -872,13 +872,11 @@ final class DisplayControlController: ObservableObject {
                     )
                 case let .brightnessPending(displayID):
                     self.wakeMaintenanceGeneration &+= 1
-                    self.builtInBlackoutActionFailed = true
                     AppLogger.ui.debug(
                         "Built-in display ID \(displayID) is online but its 35 percent brightness is still pending"
                     )
                 case .builtInDisplayUnavailable:
                     self.wakeMaintenanceGeneration &+= 1
-                    self.builtInBlackoutActionFailed = true
                     if triggerDisplayID != 0 {
                         AppLogger.ui.error("Emergency built-in restore could not resolve the built-in display ID")
                     }
