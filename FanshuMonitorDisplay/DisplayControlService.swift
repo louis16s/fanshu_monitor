@@ -344,9 +344,9 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         return cachedDisplayID
     }
 
-    func hasOnlineExternalDisplay() -> Bool {
-        guard let displayIDs = onlineDisplayIDs() else {
-            AppLogger.ui.error("Unable to query online displays during emergency built-in restore")
+    func hasActiveExternalDisplay() -> Bool {
+        guard let displayIDs = activeDisplayIDs() else {
+            AppLogger.ui.error("Unable to query active displays during emergency built-in restore")
             return true
         }
         return displayIDs.contains { CGDisplayIsBuiltin($0) == 0 }
@@ -428,6 +428,15 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         var ids = [CGDirectDisplayID](repeating: 0, count: 16)
         var count: UInt32 = 0
         guard CGGetOnlineDisplayList(UInt32(ids.count), &ids, &count) == .success else {
+            return nil
+        }
+        return Set(ids.prefix(Int(count)))
+    }
+
+    private func activeDisplayIDs() -> Set<CGDirectDisplayID>? {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(UInt32(ids.count), &ids, &count) == .success else {
             return nil
         }
         return Set(ids.prefix(Int(count)))

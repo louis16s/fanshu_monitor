@@ -425,7 +425,7 @@ struct BuiltInDisconnectRecoveryTests {
             DisplayControlWorker().restoreBuiltInAfterExternalDisconnect(
                 brightnessPercent: 35,
                 retryDelays: [0],
-                hasOnlineExternalDisplay: { true },
+                hasActiveExternalDisplay: { true },
                 restoreTopology: { _ in 42 },
                 applyBrightness: { _, _ in true },
                 completion: { continuation.resume(returning: $0) }
@@ -441,7 +441,7 @@ struct BuiltInDisconnectRecoveryTests {
             DisplayControlWorker().restoreBuiltInAfterExternalDisconnect(
                 brightnessPercent: 35,
                 retryDelays: [0, 0],
-                hasOnlineExternalDisplay: { false },
+                hasActiveExternalDisplay: { false },
                 restoreTopology: { brightness in
                     abs(brightness - 0.35) < 0.0001 ? 42 : nil
                 },
@@ -460,7 +460,7 @@ struct BuiltInDisconnectRecoveryTests {
             DisplayControlWorker().restoreBuiltInAfterExternalDisconnect(
                 brightnessPercent: 35,
                 retryDelays: [0, 0],
-                hasOnlineExternalDisplay: { false },
+                hasActiveExternalDisplay: { false },
                 restoreTopology: { _ in 42 },
                 applyBrightness: { _, _ in false },
                 completion: { continuation.resume(returning: $0) }
