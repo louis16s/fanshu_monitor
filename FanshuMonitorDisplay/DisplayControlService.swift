@@ -289,6 +289,10 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         return appliedDisplayIDs
     }
 
+    func hasSettledBuiltInBlackout(displayID: CGDirectDisplayID) -> Bool {
+        builtInBlackout.hasSettledIsolation(displayID: displayID)
+    }
+
     @discardableResult
     func clearBuiltInBlackouts(restoredBrightnessOverride: Float? = nil) -> CGDirectDisplayID? {
         let brightnessByDisplayID = builtInBlackout.clearAll()
@@ -867,6 +871,7 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
     private struct IsolationState {
         var previousBrightness: Float?
         var mode: IsolationMode
+        var isPersistent: Bool
     }
 
     private typealias ConfigureDisplayEnabledFunction = @convention(c) (
@@ -957,11 +962,16 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
                 return true
             }
 
-            _ = configureDisplay(displayID: displayID, enabled: false)
+            _ = configureDisplay(
+                displayID: displayID,
+                enabled: false,
+                completionOption: BuiltInDisplayConfigurationPolicy.isolationOption
+            )
             if waitForTargetState(displayID: displayID, blackoutEnabled: true) {
                 states[displayID] = IsolationState(
                     previousBrightness: states[displayID]?.previousBrightness ?? previousBrightness,
-                    mode: .disconnected
+                    mode: .disconnected,
+                    isPersistent: true
                 )
                 return true
             }
@@ -970,7 +980,8 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
             if didMirror {
                 states[displayID] = IsolationState(
                     previousBrightness: states[displayID]?.previousBrightness ?? previousBrightness,
-                    mode: .mirrored
+                    mode: .mirrored,
+                    isPersistent: false
                 )
             }
             return didMirror
@@ -1001,6 +1012,13 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
     func isUsingMirrorFallback(displayID: CGDirectDisplayID) -> Bool {
         stateLock.withLock {
             states[displayID]?.mode == .mirrored
+        }
+    }
+
+    func hasSettledIsolation(displayID: CGDirectDisplayID) -> Bool {
+        stateLock.withLock {
+            guard let state = states[displayID] else { return false }
+            return state.isPersistent || state.mode == .mirrored
         }
     }
 
@@ -1047,25 +1065,25 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
     }
 
     private func restoreDisconnectedDisplay(displayID: CGDirectDisplayID) -> Bool {
-        if isDisplayRestored(displayID) {
-            return true
-        }
-        let sessionRequestSucceeded = configureDisplay(
+        // Commit the enabled state even when macOS has already lit the panel.
+        // Otherwise a stale permanent isolation can disable it again at the
+        // next login-window transition.
+        let permanentRequestSucceeded = configureDisplay(
             displayID: displayID,
             enabled: true,
-            completionOption: .forSession
+            completionOption: BuiltInDisplayConfigurationPolicy.restorationOption
         )
         if isDisplayRestored(displayID) {
             return true
         }
 
         AppLogger.ui.notice(
-            "Session restore did not activate built-in display ID \(displayID); retrying permanently"
+            "Permanent restore did not activate built-in display ID \(displayID); retrying for this session"
         )
-        let permanentRequestSucceeded = configureDisplay(
+        let sessionRequestSucceeded = configureDisplay(
             displayID: displayID,
             enabled: true,
-            completionOption: .permanently
+            completionOption: BuiltInDisplayConfigurationPolicy.fallbackRestorationOption
         )
         return permanentRequestSucceeded || sessionRequestSucceeded
     }

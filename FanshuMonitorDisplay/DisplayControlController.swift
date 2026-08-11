@@ -890,7 +890,10 @@ final class DisplayControlController: ObservableObject {
         builtInBlackoutSuspendedForMissingExternal = false
         if isBuiltInBlackoutDesired {
             for display in displays where display.isBuiltIn {
-                if !builtInBlackoutDisplayIDs.contains(display.id),
+                let needsIsolationMaintenance = !service.hasSettledBuiltInBlackout(
+                    displayID: display.id
+                )
+                if (!builtInBlackoutDisplayIDs.contains(display.id) || needsIsolationMaintenance),
                    !builtInBlackoutOperationPending {
                     builtInBlackoutOperationPending = true
                     worker.setBuiltInBlackout(

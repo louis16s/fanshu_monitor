@@ -409,6 +409,21 @@ struct BuiltInDisplayRestorePolicyTests {
         )
     }
 
+    @Test func builtInIsolationAndSafetyRestoreSharePermanentScope() {
+        #expect(
+            BuiltInDisplayConfigurationPolicy.isolationOption.rawValue
+                == CGConfigureOption.permanently.rawValue
+        )
+        #expect(
+            BuiltInDisplayConfigurationPolicy.restorationOption.rawValue
+                == CGConfigureOption.permanently.rawValue
+        )
+        #expect(
+            BuiltInDisplayConfigurationPolicy.fallbackRestorationOption.rawValue
+                == CGConfigureOption.forSession.rawValue
+        )
+    }
+
     @Test func preservesTheUserIntentWhileSafetyRestoreIsActive() {
         #expect(BuiltInBlackoutIntentPolicy.shouldSuspendForMissingExternal(
             externalDisplayCount: 0,

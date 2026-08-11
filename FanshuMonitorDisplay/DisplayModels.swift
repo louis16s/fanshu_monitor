@@ -220,6 +220,14 @@ nonisolated enum BuiltInDisplayRestorePolicy {
     }
 }
 
+/// Built-in isolation crosses the login-window boundary, so disabling and
+/// safety restoration must update the same persistent display configuration.
+nonisolated enum BuiltInDisplayConfigurationPolicy {
+    static let isolationOption = CGConfigureOption.permanently
+    static let restorationOption = CGConfigureOption.permanently
+    static let fallbackRestorationOption = CGConfigureOption.forSession
+}
+
 nonisolated enum DisplayDisconnectRecoveryPolicy {
     static func shouldForceRestore(
         isRemoval: Bool,
