@@ -25,9 +25,11 @@ final class DisplayControlController: ObservableObject {
     private var didWakeObserver: NSObjectProtocol?
     private var screensDidWakeObserver: NSObjectProtocol?
     private var powerEventBridge: DisplayPowerEventBridge?
-    private var hardwareDisconnectMonitor: DisplayHardwareDisconnectMonitor?
+    private var hardwareTopologyMonitor: DisplayHardwareTopologyMonitor?
     private var refreshWorkItem: DispatchWorkItem?
     private var wakeMaintenanceGeneration = 0
+    private var externalConnectionMaintenanceGeneration = 0
+    private var externalConnectionWorkItems: [DispatchWorkItem] = []
     private var displayCallbackRegistered = false
     private var isPanelVisible = false
     private var nativeBrightnessSyncTask: Task<Void, Never>?
@@ -79,6 +81,7 @@ final class DisplayControlController: ObservableObject {
         }
         nativeBrightnessSyncTask?.cancel()
         builtInDisconnectWatchdogTask?.cancel()
+        externalConnectionWorkItems.forEach { $0.cancel() }
         powerEventBridge?.stop()
         Task { @MainActor [service] in
             service.clearBuiltInBlackouts()
@@ -254,17 +257,17 @@ final class DisplayControlController: ObservableObject {
             bridge.start()
         }
 
-        if hardwareDisconnectMonitor == nil {
-            let monitor = DisplayHardwareDisconnectMonitor(
-                topologyChanged: { [weak self] in
-                    self?.scheduleRefresh(delay: 0.15)
+        if hardwareTopologyMonitor == nil {
+            let monitor = DisplayHardwareTopologyMonitor(
+                topologyChanged: { [weak self] event in
+                    self?.handleHardwareTopologyEvent(event)
                 },
                 lastExternalServiceRemoved: { [weak self] in
                     self?.handleConfirmedExternalHardwareDisconnect()
                 }
             )
             if monitor.start() {
-                hardwareDisconnectMonitor = monitor
+                hardwareTopologyMonitor = monitor
                 if let externalServiceCount = monitor.externalServiceCount() {
                     AppLogger.ui.notice(
                         "Display hardware monitor started with \(externalServiceCount, privacy: .public) external services"
@@ -312,10 +315,11 @@ final class DisplayControlController: ObservableObject {
         }
         powerEventBridge?.stop()
         powerEventBridge = nil
-        hardwareDisconnectMonitor?.stop()
-        hardwareDisconnectMonitor = nil
+        hardwareTopologyMonitor?.stop()
+        hardwareTopologyMonitor = nil
         builtInDisconnectWatchdogTask?.cancel()
         builtInDisconnectWatchdogTask = nil
+        cancelExternalConnectionMaintenance()
         stopNativeBrightnessSync()
     }
 
@@ -388,6 +392,76 @@ final class DisplayControlController: ObservableObject {
             triggerDisplayID: 0,
             forceRestore: true
         )
+    }
+
+    private func handleHardwareTopologyEvent(_ event: DisplayHardwareTopologyEvent) {
+        switch event {
+        case .externalServiceAdded:
+            scheduleRefresh(delay: DisplayExternalConnectionPolicy.discoveryDelay)
+            scheduleExternalConnectionMaintenance()
+        case .externalServiceRemoved, .displayServiceChanged:
+            scheduleRefresh(delay: 0.15)
+        }
+    }
+
+    private func scheduleExternalConnectionMaintenance() {
+        guard isBuiltInBlackoutDesired else { return }
+        guard externalConnectionWorkItems.isEmpty else { return }
+
+        worker.invalidateDiscoveryCache()
+        builtInBlackoutSuspendedForMissingExternal = false
+        externalConnectionMaintenanceGeneration &+= 1
+        let generation = externalConnectionMaintenanceGeneration
+        let retryDelays = DisplayExternalConnectionPolicy.topologyRetryDelays
+
+        for (index, delay) in retryDelays.enumerated() {
+            let item = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                Task { @MainActor [self] in
+                    guard generation == self.externalConnectionMaintenanceGeneration else { return }
+                    if index == retryDelays.count - 1 {
+                        self.externalConnectionWorkItems.removeAll()
+                    }
+                    self.performExternalConnectionMaintenancePass(generation: generation)
+                }
+            }
+            externalConnectionWorkItems.append(item)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+        }
+    }
+
+    private func performExternalConnectionMaintenancePass(generation: Int) {
+        guard generation == externalConnectionMaintenanceGeneration,
+              isBuiltInBlackoutDesired,
+              !builtInBlackoutOperationPending
+        else {
+            return
+        }
+
+        builtInBlackoutOperationPending = true
+        worker.reapplyBuiltInBlackouts(service: service) { [self] appliedDisplayIDs in
+            Task { @MainActor [self] in
+                builtInBlackoutOperationPending = false
+                guard generation == externalConnectionMaintenanceGeneration,
+                      !appliedDisplayIDs.isEmpty
+                else {
+                    return
+                }
+                builtInBlackoutDisplayIDs.formUnion(appliedDisplayIDs)
+                builtInBlackoutSuspendedForMissingExternal = false
+                cancelExternalConnectionMaintenance()
+                scheduleRefresh(delay: 0.05)
+                AppLogger.ui.notice(
+                    "Restored external-first topology through the hardware fast path"
+                )
+            }
+        }
+    }
+
+    private func cancelExternalConnectionMaintenance() {
+        externalConnectionMaintenanceGeneration &+= 1
+        externalConnectionWorkItems.forEach { $0.cancel() }
+        externalConnectionWorkItems.removeAll()
     }
 
     func scheduleWakeRefreshes(early: Bool = false) {
@@ -1010,7 +1084,7 @@ final class DisplayControlController: ObservableObject {
                 }
                 if !self.builtInDisconnectRecoveryPending, self.requiresPhysicalBuiltInRestore {
                     let hardwareConfirmsNoExternal = DisplayHardwareDisconnectRecoveryPolicy.shouldForceRestore(
-                        externalServiceCount: self.hardwareDisconnectMonitor?.externalServiceCount(),
+                        externalServiceCount: self.hardwareTopologyMonitor?.externalServiceCount(),
                         isolatedDisplayCount: self.builtInBlackoutDisplayIDs.count,
                         builtInDisplayIsOffline: self.service.hasOfflineCachedBuiltInDisplay()
                     )

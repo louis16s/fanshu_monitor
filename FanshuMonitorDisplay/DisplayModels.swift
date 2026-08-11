@@ -259,6 +259,13 @@ nonisolated enum DisplayHardwareDisconnectRecoveryPolicy {
     }
 }
 
+nonisolated enum DisplayExternalConnectionPolicy {
+    /// DCP appears before WindowServer has necessarily published the display.
+    /// Retry the topology-only operation without waiting for DDC discovery.
+    static let topologyRetryDelays: [TimeInterval] = [0, 0.05, 0.15, 0.35, 0.7, 1.2]
+    static let discoveryDelay: TimeInterval = 0.08
+}
+
 nonisolated enum BuiltInBlackoutIntentPolicy {
     static func shouldSuspendForMissingExternal(
         externalDisplayCount: Int,

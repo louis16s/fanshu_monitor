@@ -28,14 +28,14 @@ nonisolated enum DisplayHardwareServiceLocation: Sendable, Equatable {
 /// Converts low-level IOKit events into stable topology notifications. The
 /// controller never needs to reason about registry timing or service location.
 @MainActor
-final class DisplayHardwareDisconnectMonitor {
-    private let topologyChanged: @MainActor @Sendable () -> Void
+final class DisplayHardwareTopologyMonitor {
+    private let topologyChanged: @MainActor @Sendable (DisplayHardwareTopologyEvent) -> Void
     private let lastExternalServiceRemoved: @MainActor @Sendable () -> Void
     private var bridge: DisplayHardwareTopologyBridge?
     private var verificationTask: Task<Void, Never>?
 
     init(
-        topologyChanged: @escaping @MainActor @Sendable () -> Void,
+        topologyChanged: @escaping @MainActor @Sendable (DisplayHardwareTopologyEvent) -> Void,
         lastExternalServiceRemoved: @escaping @MainActor @Sendable () -> Void
     ) {
         self.topologyChanged = topologyChanged
@@ -65,7 +65,7 @@ final class DisplayHardwareDisconnectMonitor {
     }
 
     private func receive(_ event: DisplayHardwareTopologyEvent) {
-        topologyChanged()
+        topologyChanged(event)
         switch event {
         case .externalServiceAdded:
             verificationTask?.cancel()

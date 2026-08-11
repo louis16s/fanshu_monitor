@@ -508,6 +508,14 @@ struct DisplayHardwareTopologyTests {
             builtInDisplayIsOffline: false
         ))
     }
+
+    @Test func externalConnectionFastPathStartsImmediatelyAndStaysBounded() {
+        let delays = DisplayExternalConnectionPolicy.topologyRetryDelays
+        #expect(delays.first == 0)
+        #expect(delays == delays.sorted())
+        #expect((delays.last ?? .infinity) <= 1.2)
+        #expect(DisplayExternalConnectionPolicy.discoveryDelay < 0.15)
+    }
 }
 
 private final class BuiltInBrightnessAttemptRecorder: @unchecked Sendable {
