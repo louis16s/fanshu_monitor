@@ -470,6 +470,7 @@
 				INFOPLIST_KEY_CFBundleShortVersionString = "$(MARKETING_VERSION)";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Fanshu Monitor contributors. MIT License.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "用于读取当前连接的无线网络名称";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -510,6 +511,7 @@
 				INFOPLIST_KEY_CFBundleShortVersionString = "$(MARKETING_VERSION)";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Fanshu Monitor contributors. MIT License.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "用于读取当前连接的无线网络名称";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -550,6 +552,7 @@
 				INFOPLIST_KEY_CFBundleShortVersionString = "$(MARKETING_VERSION)";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Fanshu Monitor contributors. MIT License.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "用于读取当前连接的无线网络名称";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -602,6 +605,7 @@
 				INFOPLIST_KEY_CFBundleShortVersionString = "$(MARKETING_VERSION)";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Fanshu Monitor contributors. MIT License.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "用于读取当前连接的无线网络名称";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

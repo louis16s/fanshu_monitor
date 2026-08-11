@@ -5,9 +5,11 @@ nonisolated final class StorageSampler: MonitorSampler {
     var kind: MonitorKind { .storage }
 
     private static let healthCacheInterval: TimeInterval = 300
+    private static let externalVolumeCacheInterval: TimeInterval = 30
     private let healthReader: @Sendable () -> String?
     private let nowProvider: @Sendable () -> Date
     private var cachedHealth: (value: String, date: Date)?
+    private var cachedExternalVolumes: (value: String?, date: Date)?
 
     init(
         healthReader: @escaping @Sendable () -> String? = DiskHealthReader.read,
@@ -24,9 +26,20 @@ nonisolated final class StorageSampler: MonitorSampler {
                 .volumeTotalCapacityKey,
                 .volumeAvailableCapacityKey
             ])
-            let attributes = try FileManager.default.attributesOfFileSystem(forPath: "/")
-            let total = Double(values.volumeTotalCapacity ?? Int((attributes[.systemSize] as? NSNumber)?.int64Value ?? 0))
-            let free = Double(values.volumeAvailableCapacity ?? Int((attributes[.systemFreeSize] as? NSNumber)?.int64Value ?? 0))
+            let fallbackAttributes: [FileAttributeKey: Any]?
+            if values.volumeTotalCapacity == nil || values.volumeAvailableCapacity == nil {
+                fallbackAttributes = try FileManager.default.attributesOfFileSystem(forPath: "/")
+            } else {
+                fallbackAttributes = nil
+            }
+            let total = Double(
+                values.volumeTotalCapacity
+                    ?? Int((fallbackAttributes?[.systemSize] as? NSNumber)?.int64Value ?? 0)
+            )
+            let free = Double(
+                values.volumeAvailableCapacity
+                    ?? Int((fallbackAttributes?[.systemFreeSize] as? NSNumber)?.int64Value ?? 0)
+            )
             let used = max(0, total - free)
             let percentage = total > 0 ? (used / total) * 100 : 0
 
@@ -38,6 +51,7 @@ nonisolated final class StorageSampler: MonitorSampler {
             if context.includes("health") {
                 let previousHealth = previous?.metrics.first { $0.name == "health" }?.value
                 let health = context.shouldCollectExpensiveMetric("health")
+                    && !context.prioritizesFirstPaint
                     ? diskHealth()
                     : previousHealth ?? cachedHealth?.value ?? "--"
                 metrics.append(MonitorMetric(name: "health", value: health))
@@ -45,7 +59,9 @@ nonisolated final class StorageSampler: MonitorSampler {
 
             return MonitorModule(
                 kind: .storage,
-                context: context.panelVisible ? externalVolumesJSON() : previous?.context,
+                context: context.panelVisible && !context.prioritizesFirstPaint
+                    ? externalVolumesJSON()
+                    : previous?.context,
                 value: percentage,
                 summary: percent(percentage),
                 metrics: metrics,
@@ -71,8 +87,16 @@ nonisolated final class StorageSampler: MonitorSampler {
     }
 
     private func externalVolumesJSON() -> String? {
+        let now = nowProvider()
+        if let cachedExternalVolumes,
+           now.timeIntervalSince(cachedExternalVolumes.date) < Self.externalVolumeCacheInterval {
+            return cachedExternalVolumes.value
+        }
         let volumes = detectExternalVolumes()
-        guard !volumes.isEmpty else { return nil }
+        guard !volumes.isEmpty else {
+            cachedExternalVolumes = (nil, now)
+            return nil
+        }
 
         let payload = volumes.map { vol in
             let pct = vol.total > 0 ? Int((vol.used / vol.total * 100).rounded()) : 0
@@ -85,11 +109,12 @@ nonisolated final class StorageSampler: MonitorSampler {
             )
         }
 
-        guard let data = try? JSONEncoder().encode(payload) else {
+        guard let data = try? JSONEncoder().encode(payload),
+              let value = String(data: data, encoding: .utf8) else {
             return nil
         }
-
-        return String(data: data, encoding: .utf8)
+        cachedExternalVolumes = (value, now)
+        return value
     }
 
     private func detectExternalVolumes() -> [ExternalVolume] {

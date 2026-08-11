@@ -1,3 +1,5 @@
+import AppKit
+import QuartzCore
 import SwiftUI
 
 nonisolated struct BatteryPowerFlowPresentation: Equatable, Sendable {
@@ -62,7 +64,7 @@ nonisolated struct BatteryPowerFlowPresentation: Equatable, Sendable {
 }
 
 nonisolated enum PowerFlowAnimationPolicy {
-    static let frameInterval: TimeInterval = 1.0 / 6.0
+    static let cycleDuration: TimeInterval = 1.15
 
     static func shouldAnimate(
         isActive: Bool,
@@ -184,181 +186,200 @@ struct BatteryPowerFlowRow: View {
     }
 }
 
-private struct PowerFlowCanvas: View {
+private struct PowerFlowCanvas: NSViewRepresentable {
     let presentation: BatteryPowerFlowPresentation
     let tint: Color
     let isActive: Bool
     let reduceMotion: Bool
 
-    private var shouldAnimate: Bool {
-        PowerFlowAnimationPolicy.shouldAnimate(
+    func makeNSView(context: Context) -> PowerFlowLayerView {
+        PowerFlowLayerView()
+    }
+
+    func updateNSView(_ view: PowerFlowLayerView, context: Context) {
+        view.configure(
+            presentation: presentation,
+            tint: NSColor(tint),
+            shouldAnimate: PowerFlowAnimationPolicy.shouldAnimate(
             isActive: isActive,
             reduceMotion: reduceMotion,
             hasActiveFlow: presentation.hasActiveFlow
+            )
         )
     }
+}
 
-    var body: some View {
-        TimelineView(.animation(
-            minimumInterval: PowerFlowAnimationPolicy.frameInterval,
-            paused: !shouldAnimate
-        )) { timeline in
-            Canvas { context, size in
-                let phase = timeline.date.timeIntervalSinceReferenceDate * 0.72
-                if presentation.isConnectedToPower {
-                    drawAdapterFlow(in: &context, size: size, phase: phase)
-                } else {
-                    drawBatteryFlow(in: &context, size: size, phase: phase)
-                }
-            }
+private final class PowerFlowShapeLayer: CAShapeLayer {
+    var animationDirection = 0
+}
+
+private final class PowerFlowLayerView: NSView {
+    private let trunkTrack = CAShapeLayer()
+    private let systemTrack = CAShapeLayer()
+    private let batteryTrack = CAShapeLayer()
+    private let trunkFlow = PowerFlowShapeLayer()
+    private let systemFlow = PowerFlowShapeLayer()
+    private let batteryFlow = PowerFlowShapeLayer()
+
+    private var presentation: BatteryPowerFlowPresentation?
+    private var tint = NSColor.controlAccentColor
+    private var shouldAnimate = false
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.isGeometryFlipped = true
+        [trunkTrack, systemTrack, batteryTrack, trunkFlow, systemFlow, batteryFlow].forEach {
+            $0.fillColor = nil
+            $0.lineCap = .round
+            layer?.addSublayer($0)
         }
-        .allowsHitTesting(false)
-    }
-
-    private func drawAdapterFlow(in context: inout GraphicsContext, size: CGSize, phase: Double) {
-        let start = CGPoint(x: 1, y: size.height / 2)
-        let junction = CGPoint(x: size.width * 0.34, y: size.height / 2)
-        let systemEnd = CGPoint(x: size.width - 2, y: size.height * 0.25)
-        let batteryEnd = CGPoint(x: size.width - 2, y: size.height * 0.75)
-
-        drawLine(
-            in: &context,
-            from: start,
-            to: junction,
-            color: tint,
-            width: 2.6,
-            fraction: 1,
-            phase: phase,
-            reversed: false
-        )
-        drawCurve(
-            in: &context,
-            from: junction,
-            to: systemEnd,
-            color: tint,
-            fraction: presentation.systemFraction,
-            phase: phase,
-            reversed: false
-        )
-        drawCurve(
-            in: &context,
-            from: junction,
-            to: batteryEnd,
-            color: presentation.batteryIsSupplying ? .orange : .green,
-            fraction: presentation.batteryFraction,
-            phase: phase,
-            reversed: presentation.batteryIsSupplying
-        )
-    }
-
-    private func drawBatteryFlow(in context: inout GraphicsContext, size: CGSize, phase: Double) {
-        drawLine(
-            in: &context,
-            from: CGPoint(x: 1, y: size.height / 2),
-            to: CGPoint(x: size.width - 2, y: size.height / 2),
-            color: .orange,
-            width: 2.2 + 2.2 * presentation.systemFraction,
-            fraction: presentation.systemFraction,
-            phase: phase,
-            reversed: false
-        )
-    }
-
-    private func drawCurve(
-        in context: inout GraphicsContext,
-        from start: CGPoint,
-        to end: CGPoint,
-        color: Color,
-        fraction: Double,
-        phase: Double,
-        reversed: Bool
-    ) {
-        let control1 = CGPoint(x: start.x + (end.x - start.x) * 0.44, y: start.y)
-        let control2 = CGPoint(x: start.x + (end.x - start.x) * 0.58, y: end.y)
-        var path = Path()
-        path.move(to: start)
-        path.addCurve(to: end, control1: control1, control2: control2)
-
-        let active = fraction > 0.005
-        context.stroke(
-            path,
-            with: .color(color.opacity(active ? 0.74 : 0.14)),
-            style: StrokeStyle(lineWidth: active ? 1.5 + 3.1 * fraction : 1.1, lineCap: .round)
-        )
-        guard active, !reduceMotion else { return }
-
-        drawParticles(in: &context, phase: phase, reversed: reversed) { progress in
-            cubicPoint(progress, start, control1, control2, end)
-        } color: {
-            color
+        [trunkFlow, systemFlow, batteryFlow].forEach {
+            $0.lineDashPattern = [3, 7]
         }
     }
 
-    private func drawLine(
-        in context: inout GraphicsContext,
-        from start: CGPoint,
-        to end: CGPoint,
-        color: Color,
-        width: Double,
-        fraction: Double,
-        phase: Double,
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        updatePaths()
+    }
+
+    func configure(
+        presentation: BatteryPowerFlowPresentation,
+        tint: NSColor,
+        shouldAnimate: Bool
+    ) {
+        self.presentation = presentation
+        self.tint = tint
+        self.shouldAnimate = shouldAnimate
+        updatePaths()
+    }
+
+    private func updatePaths() {
+        guard let presentation, bounds.width > 4, bounds.height > 4 else { return }
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+
+        let start = CGPoint(x: 1, y: bounds.midY)
+        let end = CGPoint(x: bounds.maxX - 2, y: bounds.midY)
+        if presentation.isConnectedToPower {
+            let junction = CGPoint(x: bounds.width * 0.34, y: bounds.midY)
+            let systemEnd = CGPoint(x: end.x, y: bounds.height * 0.25)
+            let batteryEnd = CGPoint(x: end.x, y: bounds.height * 0.75)
+            let trunkPath = linePath(from: start, to: junction)
+            let systemPath = curvePath(from: junction, to: systemEnd)
+            let batteryPath = curvePath(from: junction, to: batteryEnd)
+            setBranch(
+                track: trunkTrack,
+                flow: trunkFlow,
+                path: trunkPath,
+                color: tint,
+                width: 2.6,
+                active: true,
+                reversed: false
+            )
+            setBranch(
+                track: systemTrack,
+                flow: systemFlow,
+                path: systemPath,
+                color: tint,
+                width: 1.5 + 3.1 * presentation.systemFraction,
+                active: presentation.systemFraction > 0.005,
+                reversed: false
+            )
+            setBranch(
+                track: batteryTrack,
+                flow: batteryFlow,
+                path: batteryPath,
+                color: presentation.batteryIsSupplying ? .systemOrange : .systemGreen,
+                width: 1.5 + 3.1 * presentation.batteryFraction,
+                active: presentation.batteryFraction > 0.005,
+                reversed: presentation.batteryIsSupplying
+            )
+        } else {
+            setBranch(
+                track: trunkTrack,
+                flow: trunkFlow,
+                path: linePath(from: start, to: end),
+                color: .systemOrange,
+                width: 2.2 + 2.2 * presentation.systemFraction,
+                active: presentation.systemFraction > 0.005,
+                reversed: false
+            )
+            hideBranch(track: systemTrack, flow: systemFlow)
+            hideBranch(track: batteryTrack, flow: batteryFlow)
+        }
+        CATransaction.commit()
+    }
+
+    private func setBranch(
+        track: CAShapeLayer,
+        flow: PowerFlowShapeLayer,
+        path: CGPath,
+        color: NSColor,
+        width: CGFloat,
+        active: Bool,
         reversed: Bool
     ) {
-        var path = Path()
+        track.path = path
+        track.strokeColor = color.withAlphaComponent(active ? 0.70 : 0.14).cgColor
+        track.lineWidth = active ? width : 1.1
+        track.isHidden = false
+
+        flow.path = path
+        flow.strokeColor = color.withAlphaComponent(0.96).cgColor
+        flow.lineWidth = max(1.4, width * 0.78)
+        flow.isHidden = !active || !shouldAnimate
+        if flow.isHidden {
+            flow.removeAnimation(forKey: "power-flow")
+            flow.animationDirection = 0
+        } else {
+            animate(flow, reversed: reversed)
+        }
+    }
+
+    private func hideBranch(track: CAShapeLayer, flow: PowerFlowShapeLayer) {
+        track.isHidden = true
+        flow.isHidden = true
+        flow.removeAnimation(forKey: "power-flow")
+        flow.animationDirection = 0
+    }
+
+    private func animate(_ layer: PowerFlowShapeLayer, reversed: Bool) {
+        let direction = reversed ? -1 : 1
+        guard layer.animationDirection != direction || layer.animation(forKey: "power-flow") == nil else {
+            return
+        }
+        layer.animationDirection = direction
+        let animation = CABasicAnimation(keyPath: "lineDashPhase")
+        animation.fromValue = reversed ? -10 : 0
+        animation.toValue = reversed ? 0 : -10
+        animation.duration = PowerFlowAnimationPolicy.cycleDuration
+        animation.repeatCount = .infinity
+        animation.timingFunction = CAMediaTimingFunction(name: .linear)
+        animation.isRemovedOnCompletion = false
+        layer.add(animation, forKey: "power-flow")
+    }
+
+    private func linePath(from start: CGPoint, to end: CGPoint) -> CGPath {
+        let path = CGMutablePath()
         path.move(to: start)
         path.addLine(to: end)
-        let active = fraction > 0.005
-        context.stroke(
-            path,
-            with: .color(color.opacity(active ? 0.74 : 0.14)),
-            style: StrokeStyle(lineWidth: active ? width : 1.1, lineCap: .round)
-        )
-        guard active, !reduceMotion else { return }
-
-        drawParticles(in: &context, phase: phase, reversed: reversed) { progress in
-            CGPoint(
-                x: start.x + (end.x - start.x) * progress,
-                y: start.y + (end.y - start.y) * progress
-            )
-        } color: {
-            color
-        }
+        return path
     }
 
-    private func drawParticles(
-        in context: inout GraphicsContext,
-        phase: Double,
-        reversed: Bool,
-        point: (Double) -> CGPoint,
-        color: () -> Color
-    ) {
-        for offset in [0.0, 0.5] {
-            let rawProgress = (phase + offset).truncatingRemainder(dividingBy: 1)
-            let progress = reversed ? 1 - rawProgress : rawProgress
-            let center = point(progress)
-            let rect = CGRect(x: center.x - 2, y: center.y - 2, width: 4, height: 4)
-            context.fill(Path(ellipseIn: rect), with: .color(color().opacity(0.96)))
-        }
-    }
-
-    private func cubicPoint(
-        _ progress: Double,
-        _ start: CGPoint,
-        _ control1: CGPoint,
-        _ control2: CGPoint,
-        _ end: CGPoint
-    ) -> CGPoint {
-        let t = CGFloat(progress)
-        let inverse = 1 - t
-        return CGPoint(
-            x: inverse * inverse * inverse * start.x
-                + 3 * inverse * inverse * t * control1.x
-                + 3 * inverse * t * t * control2.x
-                + t * t * t * end.x,
-            y: inverse * inverse * inverse * start.y
-                + 3 * inverse * inverse * t * control1.y
-                + 3 * inverse * t * t * control2.y
-                + t * t * t * end.y
-        )
+    private func curvePath(from start: CGPoint, to end: CGPoint) -> CGPath {
+        let control1 = CGPoint(x: start.x + (end.x - start.x) * 0.44, y: start.y)
+        let control2 = CGPoint(x: start.x + (end.x - start.x) * 0.58, y: end.y)
+        let path = CGMutablePath()
+        path.move(to: start)
+        path.addCurve(to: end, control1: control1, control2: control2)
+        return path
     }
 }

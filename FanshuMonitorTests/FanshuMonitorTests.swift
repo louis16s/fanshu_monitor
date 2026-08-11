@@ -225,6 +225,48 @@ struct FanshuMonitorTests {
         #expect(secondVisible.metrics.first { $0.name == "health" }?.value == "normal")
     }
 
+    @Test func storageFirstPaintDoesNotWaitForHealth() {
+        let reads = ThreadSafeCounter()
+        let sampler = StorageSampler(healthReader: {
+            reads.increment()
+            return "normal"
+        })
+        let context = MonitorSamplingContext(
+            enabledMetricIDs: ["health"],
+            panelVisible: true,
+            mode: .firstPaint
+        )
+
+        let module = sampler.sample(previous: nil, context: context)
+
+        #expect(reads.value == 0)
+        #expect(module.summary != "--")
+        #expect(module.metrics.first { $0.name == "health" }?.value == "--")
+    }
+
+    @Test func networkSSIDUsesSelectedInterfaceAndRetriesFailures() {
+        let reads = ThreadSafeCounter()
+        let sampler = NetworkSampler(
+            ssidReader: { _ in
+                reads.increment()
+                return reads.value == 1 ? nil : "Fanshu Wi-Fi"
+            },
+            nowProvider: {
+                Date(timeIntervalSince1970: Double(reads.value * 4))
+            }
+        )
+        let context = MonitorSamplingContext(
+            enabledMetricIDs: ["ssid"],
+            panelVisible: true
+        )
+
+        let first = sampler.sample(previous: nil, context: context)
+        #expect(first.metrics.first { $0.name == "ssid" }?.value == "--")
+        let second = sampler.sample(previous: first, context: context)
+        #expect(second.metrics.first { $0.name == "ssid" }?.value == "Fanshu Wi-Fi")
+        #expect(reads.value == 2)
+    }
+
     @Test func diskHealthParsesSMARTStatus() throws {
         let data = try PropertyListSerialization.data(
             fromPropertyList: ["SMARTStatus": "Verified"],
@@ -381,11 +423,13 @@ struct FanshuMonitorTests {
         #expect(settings.colorSchemePreference == .systemBlue)
     }
 
-    @Test func expandedAppearanceOptionsRemainAvailable() {
+    @Test func appearanceOptionsAreFocusedAndMigrateRemovedThemes() {
         #expect(AppLanguagePreference.allCases == [.system, .simplifiedChinese, .english])
+        #expect(MonitorColorSchemePreference.allCases.count == 4)
         #expect(MonitorColorSchemePreference.allCases.contains(.aurora))
-        #expect(MonitorColorSchemePreference.allCases.contains(.nightVoyage))
         #expect(MonitorColorSchemePreference.allCases.allSatisfy { $0.previewColors.count == 4 })
+        #expect(MonitorColorSchemePreference.migratedValue("teal") == .aurora)
+        #expect(MonitorColorSchemePreference.migratedValue("nightVoyage") == .systemBlue)
     }
 
     @Test func codexUsagePayloadBuildsQuotaModule() throws {

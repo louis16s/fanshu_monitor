@@ -55,8 +55,9 @@ struct SystemCapabilityRegistryTests {
 }
 
 struct PowerFlowAnimationPolicyTests {
-    @Test func usesABoundedLowRefreshRate() {
-        #expect(PowerFlowAnimationPolicy.frameInterval >= 1.0 / 8.0)
+    @Test func usesASubtleCompositorAnimationCycle() {
+        #expect(PowerFlowAnimationPolicy.cycleDuration >= 0.8)
+        #expect(PowerFlowAnimationPolicy.cycleDuration <= 1.5)
     }
 
     @Test func animatesOnlyForVisibleActivePowerFlow() {

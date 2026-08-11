@@ -8,14 +8,25 @@ nonisolated final class NetworkSampler: MonitorSampler {
     var kind: MonitorKind { .network }
 
     private var previousNetworkBytes: (input: UInt64, output: UInt64, interface: String, timestamp: Date)?
-    private var cachedSSID: (value: String, refreshedAt: Date)?
+    private var cachedSSID: (interface: String, value: String, refreshedAt: Date)?
     private var cachedAddresses: (interface: String, ipv4: String, ipv6: String, refreshedAt: Date)?
     private var lastLoggedInterface: String?
     private let ssidRefreshInterval: TimeInterval = 30
+    private let ssidFailureRetryInterval: TimeInterval = 3
     private let addressRefreshInterval: TimeInterval = 30
+    private let ssidReader: @Sendable (String?) -> String?
+    private let nowProvider: @Sendable () -> Date
+
+    init(
+        ssidReader: @escaping @Sendable (String?) -> String? = WiFiSSIDReader.read,
+        nowProvider: @escaping @Sendable () -> Date = { Date() }
+    ) {
+        self.ssidReader = ssidReader
+        self.nowProvider = nowProvider
+    }
 
     func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
-        let now = Date()
+        let now = nowProvider()
         let shouldCollectAddresses = context.panelVisible
             && (context.includes("ipv4") || context.includes("ipv6"))
         let bytes = networkBytes(includeAddresses: shouldCollectAddresses)
@@ -23,7 +34,7 @@ nonisolated final class NetworkSampler: MonitorSampler {
             ? addressSummary(for: bytes, at: now)
             : cachedAddressValues(from: previous)
         let ssid = context.shouldCollectExpensiveMetric("ssid")
-            ? currentSSID(at: now)
+            ? currentSSID(for: bytes.identifier, at: now)
             : previous?.metrics.first { $0.name == "ssid" }?.value ?? "--"
         let previousBytes = previousNetworkBytes
         previousNetworkBytes = (bytes.input, bytes.output, bytes.identifier, now)
@@ -257,14 +268,17 @@ nonisolated final class NetworkSampler: MonitorSampler {
         return address
     }
 
-    private func currentSSID(at date: Date) -> String {
+    private func currentSSID(for interface: String, at date: Date) -> String {
         if let cachedSSID,
-           date.timeIntervalSince(cachedSSID.refreshedAt) < ssidRefreshInterval {
+           cachedSSID.interface == interface,
+           date.timeIntervalSince(cachedSSID.refreshedAt) < (cachedSSID.value == "--"
+               ? ssidFailureRetryInterval
+               : ssidRefreshInterval) {
             return cachedSSID.value
         }
 
-        let value = CWWiFiClient.shared().interface()?.ssid() ?? "--"
-        cachedSSID = (value, date)
+        let value = ssidReader(interface).flatMap { $0.isEmpty ? nil : $0 } ?? "--"
+        cachedSSID = (interface, value, date)
         return value
     }
 
@@ -281,6 +295,30 @@ nonisolated final class NetworkSampler: MonitorSampler {
         )
         cachedAddresses = (snapshot.identifier, value.ipv4, value.ipv6, date)
         return value
+    }
+}
+
+nonisolated enum WiFiSSIDReader {
+    static func read(interfaceName: String?) -> String? {
+        let client = CWWiFiClient.shared()
+        var interfaces: [CWInterface] = []
+        if let interfaceName,
+           interfaceName != "network",
+           let matching = client.interface(withName: interfaceName) {
+            interfaces.append(matching)
+        }
+        if let defaultInterface = client.interface(),
+           !interfaces.contains(where: { $0.interfaceName == defaultInterface.interfaceName }) {
+            interfaces.append(defaultInterface)
+        }
+        for interface in client.interfaces() ?? [] where !interfaces.contains(where: {
+            $0.interfaceName == interface.interfaceName
+        }) {
+            interfaces.append(interface)
+        }
+        return interfaces.lazy.compactMap { interface in
+            interface.ssid()?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.first(where: { !$0.isEmpty })
     }
 }
 

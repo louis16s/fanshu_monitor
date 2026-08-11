@@ -38,14 +38,10 @@ struct MonitorPalette {
             Color(hex: 0x8B5CF6)
         case .graphite:
             Color(hex: 0x64748B)
-        case .teal:
-            Color(hex: 0x14B8A6)
         case .rose:
             Color(hex: 0xD7547F)
         case .aurora:
             Color(hex: 0xA855F7)
-        case .nightVoyage:
-            Color(hex: 0x3B82F6)
         }
     }
 
@@ -55,14 +51,10 @@ struct MonitorPalette {
             systemBlueModuleTint(for: kind)
         case .graphite:
             graphiteModuleTint(for: kind)
-        case .teal:
-            tealModuleTint(for: kind)
         case .rose:
             roseModuleTint(for: kind)
         case .aurora:
             auroraModuleTint(for: kind)
-        case .nightVoyage:
-            nightVoyageModuleTint(for: kind)
         }
     }
 
@@ -81,7 +73,7 @@ struct MonitorPalette {
         switch preference {
         case .systemBlue, .graphite:
             neutralGlassTint
-        case .teal, .rose, .aurora, .nightVoyage:
+        case .rose, .aurora:
             moduleTint(for: kind).opacity(isDark ? 0.16 : 0.08)
         }
     }
@@ -90,7 +82,7 @@ struct MonitorPalette {
         switch preference {
         case .systemBlue, .graphite:
             neutralSeparator
-        case .teal, .rose, .aurora, .nightVoyage:
+        case .rose, .aurora:
             moduleTint(for: kind).opacity(isDark ? 0.28 : 0.18)
         }
     }
@@ -99,7 +91,7 @@ struct MonitorPalette {
         switch preference {
         case .systemBlue, .graphite:
             neutralGlassTint
-        case .teal, .rose, .aurora, .nightVoyage:
+        case .rose, .aurora:
             displayTint.opacity(isDark ? 0.16 : 0.08)
         }
     }
@@ -108,7 +100,7 @@ struct MonitorPalette {
         switch preference {
         case .systemBlue, .graphite:
             neutralSeparator
-        case .teal, .rose, .aurora, .nightVoyage:
+        case .rose, .aurora:
             displayTint.opacity(isDark ? 0.28 : 0.18)
         }
     }
@@ -117,7 +109,7 @@ struct MonitorPalette {
         switch preference {
         case .systemBlue, .graphite:
             Color(hex: 0x7A91B4).opacity(isDark ? 0.16 : 0.10)
-        case .teal, .rose, .aurora, .nightVoyage:
+        case .rose, .aurora:
             displayTint.opacity(isDark ? 0.18 : 0.10)
         }
     }
@@ -126,7 +118,7 @@ struct MonitorPalette {
         switch preference {
         case .systemBlue, .graphite:
             moduleTint(for: kind).opacity(isDark ? 0.18 : 0.10)
-        case .teal, .rose, .aurora, .nightVoyage:
+        case .rose, .aurora:
             moduleTint(for: kind).opacity(isDark ? 0.20 : 0.12)
         }
     }
@@ -177,25 +169,6 @@ struct MonitorPalette {
         }
     }
 
-    private func tealModuleTint(for kind: MonitorKind) -> Color {
-        switch kind {
-        case .cpu:
-            Color(hex: 0xEA580C)
-        case .gpu:
-            Color(hex: 0x0EA5E9)
-        case .memory:
-            Color(hex: 0x10B981)
-        case .storage:
-            Color(hex: 0xD97706)
-        case .network:
-            Color(hex: 0x6366F1)
-        case .battery:
-            Color(hex: 0x65A30D)
-        case .codex:
-            Color(hex: 0xE11D48)
-        }
-    }
-
     private func roseModuleTint(for kind: MonitorKind) -> Color {
         switch kind {
         case .cpu:
@@ -234,24 +207,6 @@ struct MonitorPalette {
         }
     }
 
-    private func nightVoyageModuleTint(for kind: MonitorKind) -> Color {
-        switch kind {
-        case .cpu:
-            Color(hex: 0xF59E0B)
-        case .gpu:
-            Color(hex: 0x3B82F6)
-        case .memory:
-            Color(hex: 0x14B8A6)
-        case .storage:
-            Color(hex: 0xF43F5E)
-        case .network:
-            Color(hex: 0x8B5CF6)
-        case .battery:
-            Color(hex: 0x22C55E)
-        case .codex:
-            Color(hex: 0x06B6D4)
-        }
-    }
 }
 
 extension Color {

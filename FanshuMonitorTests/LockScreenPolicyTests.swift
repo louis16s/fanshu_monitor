@@ -516,7 +516,9 @@ struct LockScreenPolicyTests {
         controller.handleSystemDidWake()
         try? await Task.sleep(for: .milliseconds(10))
         #expect(probe.nativeRequests == 0)
-        try? await Task.sleep(for: .milliseconds(50))
+        // Give the delayed recovery and its async lock confirmation enough
+        // scheduling headroom when the full suite is running concurrently.
+        try? await Task.sleep(for: .milliseconds(150))
 
         #expect(probe.nativeRequests == 1)
         #expect(controller.status == .locked)

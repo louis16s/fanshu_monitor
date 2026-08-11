@@ -396,6 +396,7 @@ private struct LockScreenPolicyEditor: View {
                         focusedField = nil
                     }
                     .help("自定义时间段名称")
+                    .mutedPolicyAppearance(isEnabled: policy.isEnabled)
 
                 Spacer(minLength: 4)
 
@@ -408,14 +409,18 @@ private struct LockScreenPolicyEditor: View {
                     .labelsHidden()
                     .pickerStyle(.menu)
                     .frame(width: 72)
+                    .mutedPolicyAppearance(isEnabled: policy.isEnabled)
 
                     timeField(text: $startTimeText, field: .start)
+                        .mutedPolicyAppearance(isEnabled: policy.isEnabled)
 
                     Text("至")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .mutedPolicyAppearance(isEnabled: policy.isEnabled)
 
                     timeField(text: $endTimeText, field: .end)
+                        .mutedPolicyAppearance(isEnabled: policy.isEnabled)
 
                     Toggle(isOn: isEnabledBinding) {
                         Image(systemName: policy.isEnabled ? "pause.circle" : "play.circle")
@@ -424,6 +429,7 @@ private struct LockScreenPolicyEditor: View {
                     .toggleStyle(.button)
                     .buttonStyle(.borderless)
                     .controlSize(.small)
+                    .foregroundStyle(policy.isEnabled ? Color.secondary : Color.accentColor)
                     .help(policy.isEnabled ? "暂停此时间段" : "启用此时间段")
                     .accessibilityLabel(policy.isEnabled ? "暂停此时间段" : "启用此时间段")
 
@@ -440,6 +446,7 @@ private struct LockScreenPolicyEditor: View {
                         }
                         .help("拖动卡片调整顺序")
                         .accessibilityLabel("调整\(policy.name.isEmpty ? fallbackName : policy.name)顺序")
+                        .mutedPolicyAppearance(isEnabled: policy.isEnabled)
 
                     Button(role: .destructive) {
                         settings.removeLockScreenPolicy(id: policy.id)
@@ -448,6 +455,7 @@ private struct LockScreenPolicyEditor: View {
                     }
                     .buttonStyle(.borderless)
                     .help("删除这条锁屏时间")
+                    .mutedPolicyAppearance(isEnabled: policy.isEnabled)
                 }
             }
             .padding(.horizontal, 14)
@@ -486,11 +494,13 @@ private struct LockScreenPolicyEditor: View {
                     .frame(width: 104)
                 }
             }
+            .mutedPolicyAppearance(isEnabled: policy.isEnabled)
 
             if policy.dayScope == .custom {
                 CustomDaysSettingsRow(selected: policy.customWeekdays) { weekday in
                     update { $0.toggleCustomWeekday(weekday) }
                 }
+                .mutedPolicyAppearance(isEnabled: policy.isEnabled)
             }
 
             if !policy.hasValidTimeRange {
@@ -511,8 +521,6 @@ private struct LockScreenPolicyEditor: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .saturation(policy.isEnabled ? 1 : 0)
-        .opacity(policy.isEnabled ? 1 : 0.42)
         .overlay {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -798,6 +806,13 @@ private struct LockScreenPolicyEditor: View {
         endTimeText = LockScreenPolicy.clockText(policy.endMinutes)
     }
 
+}
+
+private extension View {
+    func mutedPolicyAppearance(isEnabled: Bool) -> some View {
+        saturation(isEnabled ? 1 : 0)
+            .opacity(isEnabled ? 1 : 0.42)
+    }
 }
 
 private struct CustomWeekdayPicker: View {

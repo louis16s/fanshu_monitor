@@ -26,6 +26,7 @@ final class MonitorStore: ObservableObject {
     let mouseController = MouseControlController()
     let lockScreenController = LockScreenPolicyController()
     let updateChecker = UpdateChecker()
+    private let wiFiLocationAuthorizationController = WiFiLocationAuthorizationController()
 
     private var allModules: [MonitorModule]
     private let refreshSchedule = MonitorRefreshSchedule()
@@ -331,6 +332,11 @@ final class MonitorStore: ObservableObject {
         let requestGeneration = samplingGeneration
         let enabledMetrics = enabledSamplingMetrics(for: requestedKinds)
         let panelVisible = isPanelVisible
+        if panelVisible,
+           requestedKinds.contains(.network),
+           enabledMetrics[.network]?.contains("ssid") == true {
+            wiFiLocationAuthorizationController.requestIfNeeded()
+        }
         let coordinator = samplingCoordinator
         let previousModules = allModules
 
@@ -497,11 +503,11 @@ final class MonitorStore: ObservableObject {
             refreshCodexUsage(force: true)
         }
         let immediatelyVisibleKinds = visibleKinds.filter { $0 != .codex }
-        let firstPaintKinds: Set<MonitorKind> = visibleKinds.contains(.battery) ? [.battery] : []
+        let firstPaintKinds = visibleKinds.intersection([.battery, .storage])
         advance(kinds: immediatelyVisibleKinds, firstPaintKinds: firstPaintKinds)
         if !firstPaintKinds.isEmpty {
-            // The first battery pass publishes power flow before slower health
-            // details. Queue one full pass immediately behind it.
+            // Publish inexpensive first-paint values before health, external
+            // volume, and battery telemetry work. Queue one full pass behind it.
             advance(kinds: firstPaintKinds)
         }
         configureCodexTaskProgressMonitoring()
