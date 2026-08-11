@@ -244,6 +244,15 @@ struct FanshuMonitorTests {
         #expect(module.metrics.first { $0.name == "health" }?.value == "--")
     }
 
+    @Test func storageBootstrapPublishesCapacityImmediately() {
+        let module = StorageSampler.bootstrapModule()
+
+        #expect(module.summary != "--")
+        #expect(module.summary != "无法读取")
+        #expect(module.value > 0)
+        #expect(module.metrics.first { $0.name == "total" }?.value != nil)
+    }
+
     @Test func networkSSIDUsesSelectedInterfaceAndRetriesFailures() {
         let reads = ThreadSafeCounter()
         let sampler = NetworkSampler(
@@ -261,7 +270,7 @@ struct FanshuMonitorTests {
         )
 
         let first = sampler.sample(previous: nil, context: context)
-        #expect(first.metrics.first { $0.name == "ssid" }?.value == "--")
+        #expect(first.metrics.first { $0.name == "ssid" }?.value != "Fanshu Wi-Fi")
         let second = sampler.sample(previous: first, context: context)
         #expect(second.metrics.first { $0.name == "ssid" }?.value == "Fanshu Wi-Fi")
         #expect(reads.value == 2)

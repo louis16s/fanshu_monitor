@@ -8,7 +8,7 @@ nonisolated final class NetworkSampler: MonitorSampler {
     var kind: MonitorKind { .network }
 
     private var previousNetworkBytes: (input: UInt64, output: UInt64, interface: String, timestamp: Date)?
-    private var cachedSSID: (interface: String, value: String, refreshedAt: Date)?
+    private var cachedSSID: (interface: String, value: String, isResolved: Bool, refreshedAt: Date)?
     private var cachedAddresses: (interface: String, ipv4: String, ipv6: String, refreshedAt: Date)?
     private var lastLoggedInterface: String?
     private let ssidRefreshInterval: TimeInterval = 30
@@ -271,14 +271,17 @@ nonisolated final class NetworkSampler: MonitorSampler {
     private func currentSSID(for interface: String, at date: Date) -> String {
         if let cachedSSID,
            cachedSSID.interface == interface,
-           date.timeIntervalSince(cachedSSID.refreshedAt) < (cachedSSID.value == "--"
-               ? ssidFailureRetryInterval
-               : ssidRefreshInterval) {
+           date.timeIntervalSince(cachedSSID.refreshedAt) < (cachedSSID.isResolved
+               ? ssidRefreshInterval
+               : ssidFailureRetryInterval) {
             return cachedSSID.value
         }
 
-        let value = ssidReader(interface).flatMap { $0.isEmpty ? nil : $0 } ?? "--"
-        cachedSSID = (interface, value, date)
+        let resolvedValue = ssidReader(interface).flatMap { $0.isEmpty ? nil : $0 }
+        let value = resolvedValue
+            ?? WiFiAuthorizationState.shared.unavailableMetricValue
+            ?? "--"
+        cachedSSID = (interface, value, resolvedValue != nil, date)
         return value
     }
 
@@ -300,6 +303,7 @@ nonisolated final class NetworkSampler: MonitorSampler {
 
 nonisolated enum WiFiSSIDReader {
     static func read(interfaceName: String?) -> String? {
+        guard WiFiAuthorizationState.shared.canReadSSID else { return nil }
         let client = CWWiFiClient.shared()
         var interfaces: [CWInterface] = []
         if let interfaceName,

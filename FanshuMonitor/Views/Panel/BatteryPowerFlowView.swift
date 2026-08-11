@@ -66,6 +66,10 @@ nonisolated struct BatteryPowerFlowPresentation: Equatable, Sendable {
 nonisolated enum PowerFlowAnimationPolicy {
     static let cycleDuration: TimeInterval = 1.15
 
+    static func endpointY(height: Double) -> (system: Double, battery: Double) {
+        (height * 0.75, height * 0.25)
+    }
+
     static func shouldAnimate(
         isActive: Bool,
         reduceMotion: Bool,
@@ -201,25 +205,39 @@ private struct PowerFlowCanvas: NSViewRepresentable {
             presentation: presentation,
             tint: NSColor(tint),
             shouldAnimate: PowerFlowAnimationPolicy.shouldAnimate(
-            isActive: isActive,
-            reduceMotion: reduceMotion,
-            hasActiveFlow: presentation.hasActiveFlow
+                isActive: isActive,
+                reduceMotion: reduceMotion,
+                hasActiveFlow: presentation.hasActiveFlow
             )
         )
     }
 }
 
-private final class PowerFlowShapeLayer: CAShapeLayer {
+private final class PowerFlowParticleLayer: CAReplicatorLayer {
+    let particle = CALayer()
     var animationDirection = 0
+    var animationBounds = CGRect.null
+
+    override init() {
+        super.init()
+        instanceCount = 3
+        instanceDelay = PowerFlowAnimationPolicy.cycleDuration / 3
+        addSublayer(particle)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 }
 
 private final class PowerFlowLayerView: NSView {
     private let trunkTrack = CAShapeLayer()
     private let systemTrack = CAShapeLayer()
     private let batteryTrack = CAShapeLayer()
-    private let trunkFlow = PowerFlowShapeLayer()
-    private let systemFlow = PowerFlowShapeLayer()
-    private let batteryFlow = PowerFlowShapeLayer()
+    private let trunkFlow = PowerFlowParticleLayer()
+    private let systemFlow = PowerFlowParticleLayer()
+    private let batteryFlow = PowerFlowParticleLayer()
 
     private var presentation: BatteryPowerFlowPresentation?
     private var tint = NSColor.controlAccentColor
@@ -228,14 +246,13 @@ private final class PowerFlowLayerView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.isGeometryFlipped = true
-        [trunkTrack, systemTrack, batteryTrack, trunkFlow, systemFlow, batteryFlow].forEach {
+        [trunkTrack, systemTrack, batteryTrack].forEach {
             $0.fillColor = nil
             $0.lineCap = .round
             layer?.addSublayer($0)
         }
         [trunkFlow, systemFlow, batteryFlow].forEach {
-            $0.lineDashPattern = [3, 7]
+            layer?.addSublayer($0)
         }
     }
 
@@ -265,13 +282,17 @@ private final class PowerFlowLayerView: NSView {
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        [trunkFlow, systemFlow, batteryFlow].forEach { $0.frame = bounds }
 
         let start = CGPoint(x: 1, y: bounds.midY)
         let end = CGPoint(x: bounds.maxX - 2, y: bounds.midY)
         if presentation.isConnectedToPower {
             let junction = CGPoint(x: bounds.width * 0.34, y: bounds.midY)
-            let systemEnd = CGPoint(x: end.x, y: bounds.height * 0.25)
-            let batteryEnd = CGPoint(x: end.x, y: bounds.height * 0.75)
+            // Core Animation uses a bottom-left origin while SwiftUI places the
+            // system label above the battery label.
+            let endpointY = PowerFlowAnimationPolicy.endpointY(height: bounds.height)
+            let systemEnd = CGPoint(x: end.x, y: endpointY.system)
+            let batteryEnd = CGPoint(x: end.x, y: endpointY.battery)
             let trunkPath = linePath(from: start, to: junction)
             let systemPath = curvePath(from: junction, to: systemEnd)
             let batteryPath = curvePath(from: junction, to: batteryEnd)
@@ -280,8 +301,8 @@ private final class PowerFlowLayerView: NSView {
                 flow: trunkFlow,
                 path: trunkPath,
                 color: tint,
-                width: 2.6,
-                active: true,
+                width: 2.2,
+                active: (presentation.adapterInputWatts ?? 0) > 0.05,
                 reversed: false
             )
             setBranch(
@@ -289,7 +310,7 @@ private final class PowerFlowLayerView: NSView {
                 flow: systemFlow,
                 path: systemPath,
                 color: tint,
-                width: 1.5 + 3.1 * presentation.systemFraction,
+                width: 1.2 + 2.0 * presentation.systemFraction,
                 active: presentation.systemFraction > 0.005,
                 reversed: false
             )
@@ -298,7 +319,7 @@ private final class PowerFlowLayerView: NSView {
                 flow: batteryFlow,
                 path: batteryPath,
                 color: presentation.batteryIsSupplying ? .systemOrange : .systemGreen,
-                width: 1.5 + 3.1 * presentation.batteryFraction,
+                width: 1.2 + 2.0 * presentation.batteryFraction,
                 active: presentation.batteryFraction > 0.005,
                 reversed: presentation.batteryIsSupplying
             )
@@ -308,7 +329,7 @@ private final class PowerFlowLayerView: NSView {
                 flow: trunkFlow,
                 path: linePath(from: start, to: end),
                 color: .systemOrange,
-                width: 2.2 + 2.2 * presentation.systemFraction,
+                width: 1.4 + 1.8 * presentation.systemFraction,
                 active: presentation.systemFraction > 0.005,
                 reversed: false
             )
@@ -320,7 +341,7 @@ private final class PowerFlowLayerView: NSView {
 
     private func setBranch(
         track: CAShapeLayer,
-        flow: PowerFlowShapeLayer,
+        flow: PowerFlowParticleLayer,
         path: CGPath,
         color: NSColor,
         width: CGFloat,
@@ -328,43 +349,52 @@ private final class PowerFlowLayerView: NSView {
         reversed: Bool
     ) {
         track.path = path
-        track.strokeColor = color.withAlphaComponent(active ? 0.70 : 0.14).cgColor
+        track.strokeColor = color.withAlphaComponent(active ? 0.58 : 0.12).cgColor
         track.lineWidth = active ? width : 1.1
         track.isHidden = false
 
-        flow.path = path
-        flow.strokeColor = color.withAlphaComponent(0.96).cgColor
-        flow.lineWidth = max(1.4, width * 0.78)
         flow.isHidden = !active || !shouldAnimate
+        let particleSize = min(4.0, max(2.8, width + 0.8))
+        flow.particle.bounds = CGRect(x: 0, y: 0, width: particleSize, height: particleSize)
+        flow.particle.cornerRadius = particleSize / 2
+        flow.particle.backgroundColor = color.withAlphaComponent(0.96).cgColor
+        flow.particle.shadowColor = color.cgColor
+        flow.particle.shadowOpacity = 0.42
+        flow.particle.shadowRadius = 2
+        flow.particle.shadowOffset = .zero
         if flow.isHidden {
-            flow.removeAnimation(forKey: "power-flow")
+            flow.particle.removeAnimation(forKey: "power-flow")
             flow.animationDirection = 0
         } else {
-            animate(flow, reversed: reversed)
+            animate(flow, path: reversed ? reversedPath(path) : path, reversed: reversed)
         }
     }
 
-    private func hideBranch(track: CAShapeLayer, flow: PowerFlowShapeLayer) {
+    private func hideBranch(track: CAShapeLayer, flow: PowerFlowParticleLayer) {
         track.isHidden = true
         flow.isHidden = true
-        flow.removeAnimation(forKey: "power-flow")
+        flow.particle.removeAnimation(forKey: "power-flow")
         flow.animationDirection = 0
     }
 
-    private func animate(_ layer: PowerFlowShapeLayer, reversed: Bool) {
+    private func animate(_ layer: PowerFlowParticleLayer, path: CGPath, reversed: Bool) {
         let direction = reversed ? -1 : 1
-        guard layer.animationDirection != direction || layer.animation(forKey: "power-flow") == nil else {
+        let pathBounds = path.boundingBoxOfPath
+        guard layer.animationDirection != direction
+                || layer.animationBounds != pathBounds
+                || layer.particle.animation(forKey: "power-flow") == nil else {
             return
         }
         layer.animationDirection = direction
-        let animation = CABasicAnimation(keyPath: "lineDashPhase")
-        animation.fromValue = reversed ? -10 : 0
-        animation.toValue = reversed ? 0 : -10
+        layer.animationBounds = pathBounds
+        let animation = CAKeyframeAnimation(keyPath: "position")
+        animation.path = path
+        animation.calculationMode = .paced
         animation.duration = PowerFlowAnimationPolicy.cycleDuration
         animation.repeatCount = .infinity
         animation.timingFunction = CAMediaTimingFunction(name: .linear)
         animation.isRemovedOnCompletion = false
-        layer.add(animation, forKey: "power-flow")
+        layer.particle.add(animation, forKey: "power-flow")
     }
 
     private func linePath(from start: CGPoint, to end: CGPoint) -> CGPath {
@@ -381,5 +411,44 @@ private final class PowerFlowLayerView: NSView {
         path.move(to: start)
         path.addCurve(to: end, control1: control1, control2: control2)
         return path
+    }
+
+    private func reversedPath(_ path: CGPath) -> CGPath {
+        var elements: [(CGPathElementType, [CGPoint])] = []
+        path.applyWithBlock { pointer in
+            let element = pointer.pointee
+            let count = switch element.type {
+            case .moveToPoint, .addLineToPoint: 1
+            case .addQuadCurveToPoint: 2
+            case .addCurveToPoint: 3
+            case .closeSubpath: 0
+            @unknown default: 0
+            }
+            elements.append((element.type, Array(UnsafeBufferPointer(start: element.points, count: count))))
+        }
+        guard let start = elements.last?.1.last else { return path }
+        let reversed = CGMutablePath()
+        reversed.move(to: start)
+        for element in elements.reversed() {
+            switch element.0 {
+            case .moveToPoint:
+                continue
+            case .addLineToPoint:
+                if let end = elements.first?.1.first {
+                    reversed.addLine(to: end)
+                }
+            case .addCurveToPoint:
+                guard element.1.count == 3,
+                      let end = elements.first?.1.first else { continue }
+                reversed.addCurve(
+                    to: end,
+                    control1: element.1[1],
+                    control2: element.1[0]
+                )
+            default:
+                continue
+            }
+        }
+        return reversed
     }
 }

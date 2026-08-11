@@ -32,6 +32,18 @@
         "en": { "stringUnit": { "state": "translated", "value": "Wi-Fi Network" } }
       }
     },
+    "network.ssid.waiting-for-permission": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "等待定位授权" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Awaiting Location Access" } }
+      }
+    },
+    "network.ssid.location-required": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "需要定位权限" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Location Access Required" } }
+      }
+    },
     "metric.network.ipv4": {
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "IPv4 地址" } },

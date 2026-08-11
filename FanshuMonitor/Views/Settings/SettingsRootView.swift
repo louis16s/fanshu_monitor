@@ -6,6 +6,7 @@ struct SettingsRootView: View {
     @ObservedObject var mouseController: MouseControlController
     @ObservedObject var lockScreenController: LockScreenPolicyController
     let updateChecker: UpdateChecker
+    let requestWiFiAuthorization: () -> Void
     @State private var selection: SettingsRoute = .general
 
     var body: some View {
@@ -26,6 +27,7 @@ struct SettingsRootView: View {
         .frame(width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height)
         .fixedSize()
         .background(SettingsWindowTracker(selection: $selection))
+        .onAppear(perform: requestWiFiAuthorization)
     }
 
     @ViewBuilder

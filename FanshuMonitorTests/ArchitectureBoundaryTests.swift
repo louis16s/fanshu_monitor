@@ -60,6 +60,11 @@ struct PowerFlowAnimationPolicyTests {
         #expect(PowerFlowAnimationPolicy.cycleDuration <= 1.5)
     }
 
+    @Test func routesSystemFlowToTheUpperCoreAnimationBranch() {
+        let endpoints = PowerFlowAnimationPolicy.endpointY(height: 54)
+        #expect(endpoints.system > endpoints.battery)
+    }
+
     @Test func animatesOnlyForVisibleActivePowerFlow() {
         #expect(PowerFlowAnimationPolicy.shouldAnimate(
             isActive: true,

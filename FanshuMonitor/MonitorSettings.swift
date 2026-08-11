@@ -733,6 +733,10 @@ final class MonitorSettings: ObservableObject {
         defaults.set(value, forKey: key)
     }
 
+    func synchronizeBeforeTermination() {
+        defaults.synchronize()
+    }
+
     private func persistLaunchAtLogin(_ newValue: Bool) {
         guard !isUpdatingLaunchAtLogin else { return }
         updateLaunchAtLogin(newValue)

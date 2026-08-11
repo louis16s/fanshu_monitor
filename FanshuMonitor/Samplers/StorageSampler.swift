@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import OSLog
 
@@ -19,58 +20,64 @@ nonisolated final class StorageSampler: MonitorSampler {
         self.nowProvider = nowProvider
     }
 
+    /// `statfs` is a sub-millisecond local syscall. Prewarming only the root
+    /// capacity prevents the storage card from flashing a placeholder while
+    /// the panel's asynchronous samplers are being scheduled.
+    static func bootstrapModule() -> MonitorModule {
+        StorageSampler().sample(
+            previous: nil,
+            context: MonitorSamplingContext(
+                enabledMetricIDs: Set(
+                    MonitorKind.storage.availableMetrics
+                        .filter(\.isDefault)
+                        .map(\.id)
+                ),
+                panelVisible: false,
+                mode: .firstPaint
+            )
+        )
+    }
+
     func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
-        do {
-            let rootURL = URL(fileURLWithPath: "/")
-            let values = try rootURL.resourceValues(forKeys: [
-                .volumeTotalCapacityKey,
-                .volumeAvailableCapacityKey
-            ])
-            let fallbackAttributes: [FileAttributeKey: Any]?
-            if values.volumeTotalCapacity == nil || values.volumeAvailableCapacity == nil {
-                fallbackAttributes = try FileManager.default.attributesOfFileSystem(forPath: "/")
-            } else {
-                fallbackAttributes = nil
-            }
-            let total = Double(
-                values.volumeTotalCapacity
-                    ?? Int((fallbackAttributes?[.systemSize] as? NSNumber)?.int64Value ?? 0)
-            )
-            let free = Double(
-                values.volumeAvailableCapacity
-                    ?? Int((fallbackAttributes?[.systemFreeSize] as? NSNumber)?.int64Value ?? 0)
-            )
-            let used = max(0, total - free)
-            let percentage = total > 0 ? (used / total) * 100 : 0
-
-            var metrics = [
-                MonitorMetric(name: "used", value: bytes(used)),
-                MonitorMetric(name: "free", value: bytes(free)),
-                MonitorMetric(name: "total", value: bytes(total))
-            ]
-            if context.includes("health") {
-                let previousHealth = previous?.metrics.first { $0.name == "health" }?.value
-                let health = context.shouldCollectExpensiveMetric("health")
-                    && !context.prioritizesFirstPaint
-                    ? diskHealth()
-                    : previousHealth ?? cachedHealth?.value ?? "--"
-                metrics.append(MonitorMetric(name: "health", value: health))
-            }
-
-            return MonitorModule(
-                kind: .storage,
-                context: context.panelVisible && !context.prioritizesFirstPaint
-                    ? externalVolumesJSON()
-                    : previous?.context,
-                value: percentage,
-                summary: percent(percentage),
-                metrics: metrics,
-                samples: seedSamples(percentage)
-            )
-        } catch {
-            AppLogger.sampler.error("StorageSampler failed to read storage info: \(error.localizedDescription, privacy: .public)")
-            return placeholderModule(.storage, summary: "无法读取")
+        var fileSystem = statfs()
+        guard statfs("/", &fileSystem) == 0 else {
+            AppLogger.sampler.error("StorageSampler statfs failed, errno: \(errno)")
+            return previous ?? placeholderModule(.storage, summary: "无法读取")
         }
+
+        let blockSize = Double(fileSystem.f_bsize)
+        let total = Double(fileSystem.f_blocks) * blockSize
+        let free = Double(fileSystem.f_bavail) * blockSize
+        guard total > 0, total.isFinite, free.isFinite else {
+            return previous ?? placeholderModule(.storage, summary: "无法读取")
+        }
+        let used = max(0, total - free)
+        let percentage = total > 0 ? (used / total) * 100 : 0
+
+        var metrics = [
+            MonitorMetric(name: "used", value: bytes(used)),
+            MonitorMetric(name: "free", value: bytes(free)),
+            MonitorMetric(name: "total", value: bytes(total))
+        ]
+        if context.includes("health") {
+            let previousHealth = previous?.metrics.first { $0.name == "health" }?.value
+            let health = context.shouldCollectExpensiveMetric("health")
+                && !context.prioritizesFirstPaint
+                ? diskHealth()
+                : previousHealth ?? cachedHealth?.value ?? "--"
+            metrics.append(MonitorMetric(name: "health", value: health))
+        }
+
+        return MonitorModule(
+            kind: .storage,
+            context: context.panelVisible && !context.prioritizesFirstPaint
+                ? externalVolumesJSON()
+                : previous?.context,
+            value: percentage,
+            summary: percent(percentage),
+            metrics: metrics,
+            samples: seedSamples(percentage)
+        )
     }
 
     private func diskHealth() -> String {

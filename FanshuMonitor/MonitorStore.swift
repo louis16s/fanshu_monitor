@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CoreLocation
 import Darwin
 import Foundation
 import OSLog
@@ -50,6 +51,9 @@ final class MonitorStore: ObservableObject {
             if kind == .codex, let cachedModule = CodexQuotaCache.loadModule() {
                 return cachedModule
             }
+            if kind == .storage, settings.isVisible(.storage) {
+                return StorageSampler.bootstrapModule()
+            }
             return MonitorModule.placeholder(kind: kind)
         }
         self.settings = settings
@@ -82,6 +86,10 @@ final class MonitorStore: ObservableObject {
         #endif
         mouseController.configure(settings: settings)
         lockScreenController.configure(settings: settings)
+        wiFiLocationAuthorizationController.authorizationDidChange = { [weak self] status in
+            guard status == .authorizedAlways else { return }
+            self?.advance(kinds: [MonitorKind.network])
+        }
         configureTerminationSignalHandler()
         #if DISPLAY_CONTROL
         Publishers.MergeMany(
@@ -166,6 +174,7 @@ final class MonitorStore: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] visibleKinds in
                 guard let self else { return }
+                self.requestWiFiAuthorizationIfNeeded()
                 let activeKinds = self.activeSamplingKinds
                 self.cancelSamplingTask()
                 self.syncSamplerResidency()
@@ -176,6 +185,19 @@ final class MonitorStore: ObservableObject {
                 self.refreshMenuBarLoad()
             }
             .store(in: &cancellables)
+        settings.$enabledMetrics
+            .map { metrics in
+                (metrics[.network] ?? Set(
+                    MonitorKind.network.availableMetrics.filter(\.isDefault).map(\.id)
+                )).contains("ssid")
+            }
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.requestWiFiAuthorizationIfNeeded()
+            }
+            .store(in: &cancellables)
         configureSamplingTimer()
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
@@ -184,6 +206,7 @@ final class MonitorStore: ObservableObject {
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
             .sink { [weak self] _ in
+                self?.settings.synchronizeBeforeTermination()
                 #if DISPLAY_CONTROL
                 self?.displayController.prepareBuiltInDisplayForTermination()
                 #endif
@@ -211,6 +234,7 @@ final class MonitorStore: ObservableObject {
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         source.setEventHandler { [weak self] in
+            self?.settings.synchronizeBeforeTermination()
             #if DISPLAY_CONTROL
             self?.displayController.prepareBuiltInDisplayForTermination()
             #endif
@@ -412,6 +436,16 @@ final class MonitorStore: ObservableObject {
         mouseController.refreshButtonTapIfPossible()
     }
 
+    private func requestWiFiAuthorizationIfNeeded(activateApp: Bool = false) {
+        guard settings.isVisible(.network),
+              settings.isMetricEnabled("ssid", for: .network) else { return }
+        wiFiLocationAuthorizationController.requestIfNeeded(activateApp: activateApp)
+    }
+
+    func requestWiFiAuthorizationFromForeground() {
+        requestWiFiAuthorizationIfNeeded(activateApp: true)
+    }
+
     #if DISPLAY_CONTROL
     private func configureDisplayControlServices() {
         displayController.settings = settings
@@ -491,6 +525,7 @@ final class MonitorStore: ObservableObject {
     func panelDidAppear() {
         guard !isPanelVisible else { return }
         isPanelVisible = true
+        requestWiFiAuthorizationIfNeeded(activateApp: true)
         cancelSamplingTask()
         #if DISPLAY_CONTROL
         displayController.setPanelVisible(true)
