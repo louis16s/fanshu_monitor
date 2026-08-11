@@ -6,12 +6,12 @@ nonisolated enum MonitorSamplingMode: Sendable, Equatable {
 }
 
 nonisolated struct MonitorSamplingContext: Sendable, Equatable {
-    let enabledMetricIDs: Set<String>
+    let enabledMetricIDs: Set<MetricID>
     let panelVisible: Bool
     let mode: MonitorSamplingMode
 
     init(
-        enabledMetricIDs: Set<String>,
+        enabledMetricIDs: Set<MetricID>,
         panelVisible: Bool,
         mode: MonitorSamplingMode = .routine
     ) {
@@ -20,11 +20,11 @@ nonisolated struct MonitorSamplingContext: Sendable, Equatable {
         self.mode = mode
     }
 
-    func includes(_ metricID: String) -> Bool {
+    func includes(_ metricID: MetricID) -> Bool {
         enabledMetricIDs.contains(metricID)
     }
 
-    func shouldCollectExpensiveMetric(_ metricID: String) -> Bool {
+    func shouldCollectExpensiveMetric(_ metricID: MetricID) -> Bool {
         panelVisible && includes(metricID)
     }
 

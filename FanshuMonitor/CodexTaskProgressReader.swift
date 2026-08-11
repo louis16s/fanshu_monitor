@@ -14,7 +14,7 @@ nonisolated struct CodexTaskProgress: Equatable, Identifiable, Sendable {
     }
 
     var countText: String {
-        guard totalSteps > 0 else { return "执行中" }
+        guard totalSteps > 0 else { return String(localized: "codex.task.running") }
         return "\(completedSteps)/\(totalSteps)"
     }
 }

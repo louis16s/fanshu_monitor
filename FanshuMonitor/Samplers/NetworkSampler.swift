@@ -71,7 +71,7 @@ nonisolated final class NetworkSampler: MonitorSampler {
         upload: String,
         download: String
     ) -> [MonitorMetric] {
-        let values = [
+        let values: [MetricID: String] = [
             "ssid": ssid,
             "ipv4": addresses.ipv4,
             "ipv6": addresses.ipv6,

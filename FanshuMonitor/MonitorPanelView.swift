@@ -185,7 +185,9 @@ struct MonitorPanelView: View {
                 theme: theme,
                 detail: module.summary,
                 details: enabledMetrics(for: module),
-                showsCodexTasks: settings.isMetricEnabled("active-tasks", for: .codex),
+                codexTasks: settings.isMetricEnabled(.activeTasks, for: .codex)
+                    ? store.codexTasks
+                    : [],
                 isExpanded: expandedKinds.contains(module.kind)
             ) {
                 toggleExpansion(for: module.kind)
@@ -199,7 +201,7 @@ struct MonitorPanelView: View {
         return module.metrics.filter { resolvedIds.contains($0.name) }
     }
 
-    private func defaultMetricIds(for kind: MonitorKind) -> Set<String> {
+    private func defaultMetricIds(for kind: MonitorKind) -> Set<MetricID> {
         Set(kind.availableMetrics.filter { $0.isDefault }.map { $0.id })
     }
 

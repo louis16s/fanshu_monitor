@@ -37,7 +37,7 @@ nonisolated final class MemorySampler: MonitorSampler {
         let percentage = total > 0 ? (used / total) * 100 : 0
         let pressure = memoryPressure()
         let appMemory = currentResidentMemory()
-        let previousMetric: (String) -> String? = { name in
+        let previousMetric: (MetricID) -> String? = { name in
             previous?.metrics.first { $0.name == name }?.value
         }
 

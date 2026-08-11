@@ -903,6 +903,14 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
         configureDisplayEnabled = Self.resolveConfigureDisplayEnabled(
             handles: frameworkHandles
         )
+        if configureDisplayEnabled == nil {
+            SystemCapabilityRegistry.shared.reportUnavailable(
+                .displayIsolation,
+                reason: "display isolation symbol unavailable"
+            )
+        } else {
+            SystemCapabilityRegistry.shared.reportAvailable(.displayIsolation)
+        }
         getDisplayList = Self.resolveSymbol(
             handles: frameworkHandles,
             names: ["CGSGetDisplayList", "SLSGetDisplayList"],

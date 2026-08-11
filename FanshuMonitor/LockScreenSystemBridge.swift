@@ -60,16 +60,25 @@ enum DirectScreenLocker {
 
     static func requestNativeLock() -> Bool {
         guard let handle = dlopen(loginFrameworkPath, RTLD_NOW | RTLD_LOCAL) else {
+            SystemCapabilityRegistry.shared.reportUnavailable(
+                .nativeScreenLock,
+                reason: "login framework unavailable"
+            )
             AppLogger.lockScreen.error("Unable to load the system login framework")
             return false
         }
         defer { dlclose(handle) }
 
         guard let symbol = dlsym(handle, nativeLockSymbol) else {
+            SystemCapabilityRegistry.shared.reportUnavailable(
+                .nativeScreenLock,
+                reason: "native lock symbol unavailable"
+            )
             AppLogger.lockScreen.error("System lock function is unavailable")
             return false
         }
 
+        SystemCapabilityRegistry.shared.reportAvailable(.nativeScreenLock)
         let lockFunction = unsafeBitCast(symbol, to: NativeLockFunction.self)
         lockFunction()
         AppLogger.lockScreen.notice("Requested direct lock through the system login service")

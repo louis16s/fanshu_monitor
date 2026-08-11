@@ -139,7 +139,7 @@ final class MonitorSettings: ObservableObject {
     @Published var lockScreenPoliciesEnabled: Bool = false
     @Published private(set) var lockScreenPolicies: [LockScreenPolicy] = []
     @Published private(set) var visibleKinds: Set<MonitorKind> = []
-    @Published private(set) var enabledMetrics: [MonitorKind: Set<String>] = [:]
+    @Published private(set) var enabledMetrics: [MonitorKind: Set<MetricID>] = [:]
 
     static let maximumEnabledMetricsPerKind = 4
     static let maximumLockScreenPolicies = 4
@@ -193,7 +193,7 @@ final class MonitorSettings: ObservableObject {
         mouseForwardAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseForwardAction) ?? "") ?? .launchpad
         mouseGestureAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseGestureAction) ?? "") ?? .passThrough
         if let data = defaults.data(forKey: Keys.mouseCustomShortcuts),
-           let storedShortcuts = Self.decode(
+           let storedShortcuts = PreferencesCodec.decode(
                [String: MouseKeyboardShortcut].self,
                from: data,
                key: Keys.mouseCustomShortcuts
@@ -206,7 +206,7 @@ final class MonitorSettings: ObservableObject {
         }
         lockScreenPoliciesEnabled = defaults.object(forKey: Keys.lockScreenPoliciesEnabled) as? Bool ?? false
         if let data = defaults.data(forKey: Keys.lockScreenPolicies),
-           let policies = Self.decode(
+           let policies = PreferencesCodec.decode(
                [LockScreenPolicy].self,
                from: data,
                key: Keys.lockScreenPolicies
@@ -226,7 +226,7 @@ final class MonitorSettings: ObservableObject {
             defaults.set(true, forKey: Keys.codexVisibilityMigrated)
         }
 
-        var loadedMetrics: [MonitorKind: Set<String>] = [:]
+        var loadedMetrics: [MonitorKind: Set<MetricID>] = [:]
         for kind in MonitorKind.allCases {
             let key = Keys.enabledMetricsPrefix + kind.rawValue
             if let stored = defaults.array(forKey: key) as? [String] {
@@ -235,7 +235,7 @@ final class MonitorSettings: ObservableObject {
             }
         }
         if !defaults.bool(forKey: Keys.codexActiveTasksMetricMigrated) {
-            loadedMetrics[.codex, default: defaultMetricIds(for: .codex)].insert("active-tasks")
+            loadedMetrics[.codex, default: defaultMetricIds(for: .codex)].insert(.activeTasks)
             defaults.set(true, forKey: Keys.codexActiveTasksMetricMigrated)
         }
         if !defaults.bool(forKey: Keys.storageDiskHealthMetricMigrated) {
@@ -273,21 +273,21 @@ final class MonitorSettings: ObservableObject {
         isUpdatingLaunchAtLogin = false
     }
 
-    func isMetricEnabled(_ id: String, for kind: MonitorKind) -> Bool {
+    func isMetricEnabled(_ id: MetricID, for kind: MonitorKind) -> Bool {
         if let stored = enabledMetrics[kind] {
             return stored.contains(id)
         }
         return kind.availableMetrics.first(where: { $0.id == id })?.isDefault ?? false
     }
 
-    func canEnableMetric(_ id: String, for kind: MonitorKind) -> Bool {
+    func canEnableMetric(_ id: MetricID, for kind: MonitorKind) -> Bool {
         guard kind.availableMetrics.contains(where: { $0.id == id }) else { return false }
         let current = enabledMetrics[kind] ?? defaultMetricIds(for: kind)
         guard let limit = Self.enabledMetricLimit(for: kind) else { return true }
         return current.contains(id) || current.count < limit
     }
 
-    func setMetric(_ id: String, enabled: Bool, for kind: MonitorKind) {
+    func setMetric(_ id: MetricID, enabled: Bool, for kind: MonitorKind) {
         guard kind.availableMetrics.contains(where: { $0.id == id }) else { return }
         var current = enabledMetrics[kind] ?? defaultMetricIds(for: kind)
         if enabled {
@@ -417,7 +417,7 @@ final class MonitorSettings: ObservableObject {
     var lockScreenBaseline: ScreenSaverLockBaseline? {
         get {
             guard let data = defaults.data(forKey: Keys.lockScreenBaseline) else { return nil }
-            return Self.decode(
+            return PreferencesCodec.decode(
                 ScreenSaverLockBaseline.self,
                 from: data,
                 key: Keys.lockScreenBaseline
@@ -428,13 +428,13 @@ final class MonitorSettings: ObservableObject {
                 defaults.removeObject(forKey: Keys.lockScreenBaseline)
                 return
             }
-            if let data = Self.encode(newValue, key: Keys.lockScreenBaseline) {
+            if let data = PreferencesCodec.encode(newValue, key: Keys.lockScreenBaseline) {
                 defaults.set(data, forKey: Keys.lockScreenBaseline)
             }
         }
     }
 
-    private func migrateMetrics(_ ids: [String], for kind: MonitorKind) -> [String] {
+    private func migrateMetrics(_ ids: [String], for kind: MonitorKind) -> [MetricID] {
         let mapping: [String: String] = {
             switch kind {
             case .cpu:
@@ -481,12 +481,12 @@ final class MonitorSettings: ObservableObject {
             }
         }()
 
-        var result = Set<String>()
+        var result = Set<MetricID>()
         for id in ids {
             if let mapped = mapping[id] {
-                result.insert(mapped)
+                result.insert(MetricID(rawValue: mapped))
             } else {
-                result.insert(id)
+                result.insert(MetricID(rawValue: id))
             }
         }
 
@@ -504,7 +504,7 @@ final class MonitorSettings: ObservableObject {
         return Array(filtered.prefix(limit))
     }
 
-    private func defaultMetricIds(for kind: MonitorKind) -> Set<String> {
+    private func defaultMetricIds(for kind: MonitorKind) -> Set<MetricID> {
         Set(kind.availableMetrics.filter { $0.isDefault }.map { $0.id })
     }
 
@@ -690,7 +690,7 @@ final class MonitorSettings: ObservableObject {
                 let storedShortcuts = Dictionary(
                     uniqueKeysWithValues: newValue.map { ($0.key.rawValue, $0.value) }
                 )
-                guard let data = Self.encode(storedShortcuts, key: Keys.mouseCustomShortcuts) else { return }
+                guard let data = PreferencesCodec.encode(storedShortcuts, key: Keys.mouseCustomShortcuts) else { return }
                 self?.persist(data, forKey: Keys.mouseCustomShortcuts)
             }
             .store(in: &cancellables)
@@ -705,7 +705,7 @@ final class MonitorSettings: ObservableObject {
         $lockScreenPolicies
             .dropFirst()
             .sink { [weak self] newValue in
-                guard let data = Self.encode(newValue, key: Keys.lockScreenPolicies) else { return }
+                guard let data = PreferencesCodec.encode(newValue, key: Keys.lockScreenPolicies) else { return }
                 self?.persist(data, forKey: Keys.lockScreenPolicies)
             }
             .store(in: &cancellables)
@@ -724,7 +724,7 @@ final class MonitorSettings: ObservableObject {
                 guard let self else { return }
                 for (kind, ids) in newValue {
                     let key = Keys.enabledMetricsPrefix + kind.rawValue
-                    self.persist(Array(ids), forKey: key)
+                    self.persist(ids.map(\.rawValue).sorted(), forKey: key)
                 }
             }
             .store(in: &cancellables)
@@ -732,32 +732,6 @@ final class MonitorSettings: ObservableObject {
 
     private func persist<T>(_ value: T, forKey key: String) {
         defaults.set(value, forKey: key)
-    }
-
-    private static func decode<Value: Decodable>(
-        _ type: Value.Type,
-        from data: Data,
-        key: String
-    ) -> Value? {
-        do {
-            return try JSONDecoder().decode(type, from: data)
-        } catch {
-            AppLogger.settings.error(
-                "Unable to decode preference \(key, privacy: .public): \(error.localizedDescription, privacy: .public)"
-            )
-            return nil
-        }
-    }
-
-    private static func encode<Value: Encodable>(_ value: Value, key: String) -> Data? {
-        do {
-            return try JSONEncoder().encode(value)
-        } catch {
-            AppLogger.settings.error(
-                "Unable to encode preference \(key, privacy: .public): \(error.localizedDescription, privacy: .public)"
-            )
-            return nil
-        }
     }
 
     private func persistLaunchAtLogin(_ newValue: Bool) {

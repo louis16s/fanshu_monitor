@@ -11,6 +11,7 @@ final class MonitorStore: ObservableObject {
     @Published var selectedKind: MonitorKind = .cpu
     @Published private(set) var menuBarFrame = 0
     @Published private(set) var displayedComputeLoad = 0.0
+    @Published private(set) var codexTasks: [CodexTaskProgress] = []
     @Published private(set) var menuBarIconImage = MenuBarComputeRingIcon.image(
         load: 0,
         frame: 0,
@@ -135,7 +136,7 @@ final class MonitorStore: ObservableObject {
                         .filter(\.isDefault)
                         .map(\.id)
                 )
-                return (enabledMetrics[.codex] ?? defaults).contains("active-tasks")
+                return (enabledMetrics[.codex] ?? defaults).contains(.activeTasks)
             }
             .removeDuplicates()
             .dropFirst()
@@ -252,7 +253,7 @@ final class MonitorStore: ObservableObject {
         case .codex:
             return visibleModuleValue(for: .codex)
         case .codexWeekly:
-            return codexMetricPercent("weekly")
+            return codexMetricPercent(.weekly)
         }
     }
 
@@ -276,7 +277,7 @@ final class MonitorStore: ObservableObject {
         }
     }
 
-    private func codexMetricPercent(_ name: String) -> Double {
+    private func codexMetricPercent(_ name: MetricID) -> Double {
         guard settings.isVisible(.codex) else {
             return 0
         }
@@ -570,7 +571,7 @@ final class MonitorStore: ObservableObject {
 
         guard isPanelVisible,
               settings.isVisible(.codex),
-              settings.isMetricEnabled("active-tasks", for: .codex) else {
+              settings.isMetricEnabled(.activeTasks, for: .codex) else {
             clearCodexTaskProgress()
             return
         }
@@ -590,7 +591,7 @@ final class MonitorStore: ObservableObject {
     private func refreshCodexTaskProgress() {
         guard isPanelVisible,
               settings.isVisible(.codex),
-              settings.isMetricEnabled("active-tasks", for: .codex) else {
+              settings.isMetricEnabled(.activeTasks, for: .codex) else {
             return
         }
         codexTaskProgressTask?.cancel()
@@ -603,37 +604,22 @@ final class MonitorStore: ObservableObject {
     }
 
     private func applyCodexTaskProgress(_ tasks: [CodexTaskProgress]) {
-        guard settings.isMetricEnabled("active-tasks", for: .codex) else {
+        guard settings.isMetricEnabled(.activeTasks, for: .codex) else {
             clearCodexTaskProgress()
             return
         }
-        guard let index = allModules.firstIndex(where: { $0.kind == .codex }) else { return }
-        allModules[index].metrics.removeAll { $0.name.hasPrefix("active-task-") }
-        for (position, task) in tasks.enumerated() {
-            let progressText = task.percent.map {
-                "\(task.countText) · \(Int($0.rounded()))%"
-            } ?? task.countText
-            allModules[index].metrics.append(contentsOf: [
-                MonitorMetric(name: "active-task-title-\(position)", value: task.title),
-                MonitorMetric(name: "active-task-progress-\(position)", value: progressText),
-                MonitorMetric(name: "active-task-status-\(position)", value: task.activeStep ?? "执行中")
-            ])
-        }
-        modules = visibleModules(from: allModules)
+        guard codexTasks != tasks else { return }
+        codexTasks = tasks
     }
 
     private func clearCodexTaskProgress() {
-        guard let index = allModules.firstIndex(where: { $0.kind == .codex }),
-              allModules[index].metrics.contains(where: { $0.name.hasPrefix("active-task-") }) else {
-            return
-        }
-        allModules[index].metrics.removeAll { $0.name.hasPrefix("active-task-") }
-        modules = visibleModules(from: allModules)
+        guard !codexTasks.isEmpty else { return }
+        codexTasks = []
     }
 
     private func enabledSamplingMetrics(
         for kinds: some Sequence<MonitorKind>
-    ) -> [MonitorKind: Set<String>] {
+    ) -> [MonitorKind: Set<MetricID>] {
         Dictionary(uniqueKeysWithValues: kinds.map { kind in
             let metricIDs = settings.enabledMetrics[kind]
                 ?? Set(kind.availableMetrics.filter(\.isDefault).map(\.id))

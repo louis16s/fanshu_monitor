@@ -5,7 +5,8 @@
 ## 审查结论
 
 - 最近一次完整发布审查基于 `0.3.1`，最后一台外接屏拔除后的内屏恢复已完成真实硬件验证
-- 222 项单元测试、Direct Target UI 启动测试、Release 静态分析、签名校验和本机启动检查通过
+- 227 项单元测试、Direct Target 构建和 Release 静态分析通过
+- UI 测试 bundle 构建通过；本轮本机 XCTest UI runner 未完成执行，未将其计为通过
 - GitHub Actions 在 main 与 pull request 执行日常验证，`v*` tag 负责签名、公证、打包和创建 Release
 - Release workflow 强制要求 Developer ID Application 和 Apple notary 凭据，缺失时拒绝发布
 
@@ -13,10 +14,15 @@
 
 - App/UI：SwiftUI 菜单栏面板、设置窗口和共享视觉组件
 - 状态层：`MonitorStore` 发布运行状态并调度刷新，App 与面板直接观察共享的 `MonitorSettings`，避免设置变化触发整个 Store 刷新
+- 指标边界：`MetricID` 贯穿设置、采样上下文、采样器和面板，落盘时仍使用原始字符串以兼容旧设置
+- Codex 活动任务使用独立的 `codexTasks` 状态流，不再伪装成动态 `MonitorMetric` 或污染额度缓存
 - 采样层：`SamplingCoordinator` actor 管理 worker 生命周期、取消和结果合并
 - 采样器：`SamplingCoordinator` 按可见模块懒加载独立的 `MonitorModuleSamplerWorker`
 - 功能控制器：显示器、鼠标、锁屏、Codex 和更新检查彼此独立，显示器 MainActor 状态与后台 `DisplayControlWorker` 分文件维护
 - 硬件桥接：DDC、DisplayServices、SMC、IOKit 与 HID 显式脱离主 actor，并在后台串行队列执行
+- 系统能力：私有锁屏与显示器隔离符号统一登记到 `SystemCapabilityRegistry`，缺失时保留明确的降级状态
+- 持久化：`MonitorSettings` 只声明设置行为，JSON 编解码由 `PreferencesCodec` 统一处理和记录错误
+- 面板 View：通用、存储、网络和电源行分文件维护，共享 `PanelModuleHeader` 与详情网格
 - 发布层：tag、Release workflow、SHA-256 清单和 release manifest
 
 ## 性能清单
@@ -33,6 +39,8 @@
 - [x] 面板关闭时主调度器降至 5 秒检查间隔
 - [x] 软件调光配置和内建屏拓扑状态使用锁保护，避免跨队列竞争
 - [x] Codex session index 使用进程内偏移量增量读取，不重复读取完整索引或写入额外缓存
+- [x] Codex 活动任务变化只发布任务状态，不再重建整个模块指标数组
+- [x] 指标设置按稳定顺序落盘，避免 `Set` 顺序造成无意义写入差异
 
 ## 显示器可靠性
 
@@ -67,4 +75,4 @@
 
 1. 为真实 DDC 显示器建立可选硬件回归测试台，覆盖不同 VCP 范围和超时设备
 2. 用 Instruments 定期记录面板打开与关闭时的 CPU、唤醒次数和常驻内存
-3. 逐步将字符串指标 ID 收敛为类型化标识，并保持已有设置迁移兼容
+3. 在下一次 UI runner 环境稳定后补跑设置窗口启动与导航用例

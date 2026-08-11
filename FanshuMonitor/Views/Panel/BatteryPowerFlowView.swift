@@ -45,7 +45,7 @@ nonisolated struct BatteryPowerFlowPresentation: Equatable, Sendable {
         min(max((value ?? 0) / allocationTotal, 0), 1)
     }
 
-    private static func watts(_ metrics: [MonitorMetric], named name: String) -> Double? {
+    private static func watts(_ metrics: [MonitorMetric], named name: MetricID) -> Double? {
         guard let value = metrics.first(where: { $0.name == name })?.value else {
             return nil
         }

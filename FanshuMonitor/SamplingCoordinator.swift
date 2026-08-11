@@ -29,7 +29,7 @@ actor SamplingCoordinator {
     func sampleModule(
         kind: MonitorKind,
         previous: MonitorModule?,
-        enabledMetricIDs: Set<String>,
+        enabledMetricIDs: Set<MetricID>,
         panelVisible: Bool,
         mode: MonitorSamplingMode = .routine
     ) async -> MonitorModule? {
@@ -47,7 +47,7 @@ actor SamplingCoordinator {
     func sample(
         kinds: [MonitorKind],
         previousModules: [MonitorModule],
-        enabledMetrics: [MonitorKind: Set<String>] = [:],
+        enabledMetrics: [MonitorKind: Set<MetricID>] = [:],
         panelVisible: Bool = true
     ) async -> SystemMonitorSnapshot? {
         guard !kinds.isEmpty else { return nil }

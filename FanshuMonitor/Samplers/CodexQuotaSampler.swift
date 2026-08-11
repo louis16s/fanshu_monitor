@@ -94,7 +94,7 @@ actor CodexQuotaSampler {
         )
     }
 
-    private static func cachedMetric(_ name: String, in module: MonitorModule?) -> String {
+    private static func cachedMetric(_ name: MetricID, in module: MonitorModule?) -> String {
         module?.metrics.first { $0.name == name }?.value ?? "--"
     }
 

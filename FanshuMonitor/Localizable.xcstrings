@@ -2,6 +2,66 @@
   "version": "1.0",
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "codex.task.running": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "执行中" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Running" } }
+      }
+    },
+    "metric.memory.app-memory": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "应用占用" } },
+        "en": { "stringUnit": { "state": "translated", "value": "App Memory" } }
+      }
+    },
+    "metric.memory.cached": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "缓存" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Cached" } }
+      }
+    },
+    "metric.memory.compressed": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已压缩" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Compressed" } }
+      }
+    },
+    "metric.network.ssid": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无线名称" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Wi-Fi Network" } }
+      }
+    },
+    "metric.network.ipv4": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "IPv4 地址" } },
+        "en": { "stringUnit": { "state": "translated", "value": "IPv4 Address" } }
+      }
+    },
+    "metric.network.ipv6": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "IPv6 地址" } },
+        "en": { "stringUnit": { "state": "translated", "value": "IPv6 Address" } }
+      }
+    },
+    "metric.codex.five-hour": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "5H" } },
+        "en": { "stringUnit": { "state": "translated", "value": "5H" } }
+      }
+    },
+    "metric.codex.next-reset": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "下次刷新" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Next Reset" } }
+      }
+    },
+    "metric.codex.status": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "状态" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Status" } }
+      }
+    },
     "shortcut.power-flow.title": {
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "获取实时功率分流" } },

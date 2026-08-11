@@ -199,12 +199,12 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
 }
 
 nonisolated struct MetricSwitch: Identifiable, Hashable {
-    let id: String
+    let id: MetricID
     let title: String
     let subtitle: String?
     let isDefault: Bool
 
-    init(id: String, title: String, subtitle: String? = nil, isDefault: Bool) {
+    init(id: MetricID, title: String, subtitle: String? = nil, isDefault: Bool) {
         self.id = id
         self.title = title
         self.subtitle = subtitle
@@ -213,20 +213,20 @@ nonisolated struct MetricSwitch: Identifiable, Hashable {
 }
 
 nonisolated struct MonitorMetric: Identifiable, Sendable {
-    let name: String
+    let name: MetricID
     let value: String
 
-    var id: String { name }
+    var id: MetricID { name }
 }
 
 nonisolated extension MonitorKind {
-    static let batteryPowerFlowComponentIDs: Set<String> = [
+    static let batteryPowerFlowComponentIDs: Set<MetricID> = [
         "adapter-input",
         "system-load",
         "battery-flow"
     ]
 
-    func resolvedPanelMetricIDs(from enabledIDs: Set<String>) -> Set<String> {
+    func resolvedPanelMetricIDs(from enabledIDs: Set<MetricID>) -> Set<MetricID> {
         guard self == .battery, enabledIDs.contains("power-flow") else {
             return enabledIDs
         }
@@ -259,7 +259,7 @@ nonisolated struct MonitorModule: Identifiable, Sendable {
             if value >= MonitorConstants.warningThreshold { return .warning }
             return .calm
         case .battery:
-            if metrics.first(where: { $0.name == "type" })?.value == "ac-power" {
+            if metrics.first(where: { $0.name == .batteryType })?.value == "ac-power" {
                 return .calm
             }
             if value <= MonitorConstants.batteryCriticalThreshold { return .critical }

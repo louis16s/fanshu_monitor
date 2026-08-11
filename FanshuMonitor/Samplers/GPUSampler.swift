@@ -138,7 +138,7 @@ nonisolated final class GPUSampler: MonitorSampler {
     }
 
     private func retainedMetric(
-        _ name: String,
+        _ name: MetricID,
         freshValue: String?,
         previous: MonitorModule?,
         initialValue: String

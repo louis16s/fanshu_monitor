@@ -136,7 +136,7 @@ nonisolated final class BatterySampler: MonitorSampler {
     }
 
     private func telemetryValue(
-        _ name: String,
+        _ name: MetricID,
         freshValue: String,
         previous: MonitorModule?,
         shouldCollect: Bool
