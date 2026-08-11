@@ -443,8 +443,10 @@ struct FanshuMonitorTests {
 
     @Test func codexResetCreditsMetricIsDisabledByDefault() {
         let resetCredits = MonitorKind.codex.availableMetrics.first { $0.id == "reset-credits" }
+        let localizedTitle = String(localized: "metric.codex.reset-credits")
 
-        #expect(resetCredits?.title == "重置卡")
+        #expect(!localizedTitle.isEmpty)
+        #expect(resetCredits?.title == localizedTitle)
         #expect(resetCredits?.isDefault == false)
     }
 
