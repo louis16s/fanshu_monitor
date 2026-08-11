@@ -25,14 +25,12 @@ jobs:
       - name: Select toolchain
         run: |
           set -euo pipefail
-          if [[ -d /Applications/Xcode_26.5.app ]]; then
-            sudo xcode-select --switch /Applications/Xcode_26.5.app/Contents/Developer
-          fi
+          sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
           xcodebuild -version
 
       - name: Run unit tests
         run: |
-          set -o pipefail
+          set -euo pipefail
           xcodebuild \
             -project '番薯monitor.xcodeproj' \
             -scheme '番薯Monitor' \
@@ -40,8 +38,20 @@ jobs:
             -destination 'platform=macOS,arch=arm64' \
             -parallel-testing-enabled NO \
             -only-testing:FanshuMonitorTests \
+            -resultBundlePath "$RUNNER_TEMP/FanshuMonitorTests.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
-            test
+            test 2>&1 | tee "$RUNNER_TEMP/FanshuMonitorTests.log"
+
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unit-test-diagnostics
+          path: |
+            ${{ runner.temp }}/FanshuMonitorTests.log
+            ${{ runner.temp }}/FanshuMonitorTests.xcresult
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Build Direct app
         run: |
