@@ -457,6 +457,38 @@ struct DisplayDisconnectRecoveryPolicyTests {
     }
 }
 
+struct DisplayHardwareTopologyTests {
+    @Test func classifiesAppleSiliconDisplayServiceLocations() {
+        #expect(DisplayHardwareServiceLocation(rawValue: "External") == .external)
+        #expect(DisplayHardwareServiceLocation(rawValue: "embedded") == .embedded)
+        #expect(DisplayHardwareServiceLocation(rawValue: nil) == .unknown)
+        #expect(DisplayHardwareServiceLocation(rawValue: "Sidecar") == .unknown)
+    }
+
+    @Test func restoresOnlyWhenHardwareConfirmsTheLastExternalServiceIsGone() {
+        #expect(DisplayHardwareDisconnectRecoveryPolicy.shouldForceRestore(
+            externalServiceCount: 0,
+            isolatedDisplayCount: 1,
+            builtInDisplayIsOffline: true
+        ))
+        #expect(!DisplayHardwareDisconnectRecoveryPolicy.shouldForceRestore(
+            externalServiceCount: 1,
+            isolatedDisplayCount: 1,
+            builtInDisplayIsOffline: true
+        ))
+        #expect(!DisplayHardwareDisconnectRecoveryPolicy.shouldForceRestore(
+            externalServiceCount: nil,
+            isolatedDisplayCount: 1,
+            builtInDisplayIsOffline: true
+        ))
+        #expect(!DisplayHardwareDisconnectRecoveryPolicy.shouldForceRestore(
+            externalServiceCount: 0,
+            isolatedDisplayCount: 0,
+            builtInDisplayIsOffline: false
+        ))
+    }
+}
+
 private final class BuiltInBrightnessAttemptRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [(Float, CGDirectDisplayID)] = []

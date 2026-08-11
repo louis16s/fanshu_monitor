@@ -237,6 +237,17 @@ nonisolated enum DisplayDisconnectRecoveryPolicy {
     }
 }
 
+nonisolated enum DisplayHardwareDisconnectRecoveryPolicy {
+    static func shouldForceRestore(
+        externalServiceCount: Int?,
+        isolatedDisplayCount: Int,
+        builtInDisplayIsOffline: Bool
+    ) -> Bool {
+        externalServiceCount == 0
+            && (isolatedDisplayCount > 0 || builtInDisplayIsOffline)
+    }
+}
+
 nonisolated enum BuiltInBlackoutIntentPolicy {
     static func shouldSuspendForMissingExternal(
         externalDisplayCount: Int,
