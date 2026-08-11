@@ -398,8 +398,62 @@ struct BuiltInDisplayRestorePolicyTests {
 
     @Test func externalDisconnectUsesThirtyFivePercentBrightness() {
         #expect(BuiltInDisplayRestorePolicy.disconnectedExternalBrightness == 35)
-        #expect(BuiltInDisplayRestorePolicy.topologyWatchdogInterval >= 0.5)
+        #expect(BuiltInDisplayRestorePolicy.topologyWatchdogInterval >= 5)
+        #expect(!BuiltInDisplayRestorePolicy.topologyRetryDelays.isEmpty)
         #expect(!BuiltInDisplayRestorePolicy.brightnessRetryDelays.isEmpty)
+    }
+
+    @Test func preservesTheUserIntentWhileSafetyRestoreIsActive() {
+        #expect(BuiltInBlackoutIntentPolicy.shouldSuspendForMissingExternal(
+            externalDisplayCount: 0,
+            blackoutDesired: true,
+            isolatedDisplayCount: 0,
+            builtInDisplayIsOffline: false
+        ))
+        #expect(!BuiltInBlackoutIntentPolicy.shouldSuspendForMissingExternal(
+            externalDisplayCount: 1,
+            blackoutDesired: true,
+            isolatedDisplayCount: 0,
+            builtInDisplayIsOffline: false
+        ))
+        #expect(!BuiltInBlackoutIntentPolicy.shouldSuspendForMissingExternal(
+            externalDisplayCount: 0,
+            blackoutDesired: true,
+            isolatedDisplayCount: 1,
+            builtInDisplayIsOffline: true
+        ))
+    }
+}
+
+struct DisplayDisconnectRecoveryPolicyTests {
+    @Test func forcesRestoreOnlyWhenTheKnownLastExternalDisplayIsRemoved() {
+        #expect(DisplayDisconnectRecoveryPolicy.shouldForceRestore(
+            isRemoval: true,
+            removedDisplayID: 8,
+            cachedBuiltInDisplayID: 1,
+            knownExternalDisplayIDs: [8]
+        ))
+        #expect(!DisplayDisconnectRecoveryPolicy.shouldForceRestore(
+            isRemoval: true,
+            removedDisplayID: 8,
+            cachedBuiltInDisplayID: 1,
+            knownExternalDisplayIDs: [8, 9]
+        ))
+    }
+
+    @Test func neverTreatsTheBuiltInDisplayRemovalAsAnExternalDisconnect() {
+        #expect(!DisplayDisconnectRecoveryPolicy.shouldForceRestore(
+            isRemoval: true,
+            removedDisplayID: 1,
+            cachedBuiltInDisplayID: 1,
+            knownExternalDisplayIDs: [8]
+        ))
+        #expect(!DisplayDisconnectRecoveryPolicy.shouldForceRestore(
+            isRemoval: false,
+            removedDisplayID: 8,
+            cachedBuiltInDisplayID: 1,
+            knownExternalDisplayIDs: [8]
+        ))
     }
 }
 
@@ -419,13 +473,29 @@ private final class BuiltInBrightnessAttemptRecorder: @unchecked Sendable {
     }
 }
 
+private final class BuiltInTopologyAttemptRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var attempts = 0
+
+    func restore(brightness: Float) -> CGDirectDisplayID? {
+        lock.withLock {
+            attempts += 1
+            guard attempts >= 2, abs(brightness - 0.35) < 0.0001 else { return nil }
+            return 42
+        }
+    }
+
+    var count: Int { lock.withLock { attempts } }
+}
+
 struct BuiltInDisconnectRecoveryTests {
     @Test func skipsRestoreWhileAnotherExternalDisplayRemains() async {
         let result: BuiltInDisconnectRecoveryResult = await withCheckedContinuation { continuation in
             DisplayControlWorker().restoreBuiltInAfterExternalDisconnect(
                 brightnessPercent: 35,
-                retryDelays: [0],
-                hasActiveExternalDisplay: { true },
+                topologyRetryDelays: [0],
+                brightnessRetryDelays: [0],
+                hasExternalDisplay: { true },
                 restoreTopology: { _ in 42 },
                 applyBrightness: { _, _ in true },
                 completion: { continuation.resume(returning: $0) }
@@ -435,13 +505,31 @@ struct BuiltInDisconnectRecoveryTests {
         #expect(result == .externalDisplayPresent)
     }
 
+    @Test func forcedLastExternalRemovalBypassesAStaleExternalTopologySnapshot() async {
+        let result: BuiltInDisconnectRecoveryResult = await withCheckedContinuation { continuation in
+            DisplayControlWorker().restoreBuiltInAfterExternalDisconnect(
+                brightnessPercent: 35,
+                forceRestore: true,
+                topologyRetryDelays: [0],
+                brightnessRetryDelays: [0],
+                hasExternalDisplay: { true },
+                restoreTopology: { _ in 42 },
+                applyBrightness: { _, _ in true },
+                completion: { continuation.resume(returning: $0) }
+            )
+        }
+
+        #expect(result == .restored(displayID: 42))
+    }
+
     @Test func restoresTopologyThenRetriesThirtyFivePercentBrightness() async {
         let recorder = BuiltInBrightnessAttemptRecorder()
         let result: BuiltInDisconnectRecoveryResult = await withCheckedContinuation { continuation in
             DisplayControlWorker().restoreBuiltInAfterExternalDisconnect(
                 brightnessPercent: 35,
-                retryDelays: [0, 0],
-                hasActiveExternalDisplay: { false },
+                topologyRetryDelays: [0],
+                brightnessRetryDelays: [0, 0],
+                hasExternalDisplay: { false },
                 restoreTopology: { brightness in
                     abs(brightness - 0.35) < 0.0001 ? 42 : nil
                 },
@@ -455,12 +543,31 @@ struct BuiltInDisconnectRecoveryTests {
         #expect(recorder.snapshot.allSatisfy { abs($0.0 - 0.35) < 0.0001 && $0.1 == 42 })
     }
 
+    @Test func retriesTopologyUntilTheBuiltInDisplayIsActuallyVisible() async {
+        let recorder = BuiltInTopologyAttemptRecorder()
+        let result: BuiltInDisconnectRecoveryResult = await withCheckedContinuation { continuation in
+            DisplayControlWorker().restoreBuiltInAfterExternalDisconnect(
+                brightnessPercent: 35,
+                topologyRetryDelays: [0, 0],
+                brightnessRetryDelays: [0],
+                hasExternalDisplay: { false },
+                restoreTopology: recorder.restore,
+                applyBrightness: { _, _ in true },
+                completion: { continuation.resume(returning: $0) }
+            )
+        }
+
+        #expect(result == .restored(displayID: 42))
+        #expect(recorder.count == 2)
+    }
+
     @Test func doesNotReportACompleteRecoveryWhenBrightnessNeverApplies() async {
         let result: BuiltInDisconnectRecoveryResult = await withCheckedContinuation { continuation in
             DisplayControlWorker().restoreBuiltInAfterExternalDisconnect(
                 brightnessPercent: 35,
-                retryDelays: [0, 0],
-                hasActiveExternalDisplay: { false },
+                topologyRetryDelays: [0],
+                brightnessRetryDelays: [0, 0],
+                hasExternalDisplay: { false },
                 restoreTopology: { _ in 42 },
                 applyBrightness: { _, _ in false },
                 completion: { continuation.resume(returning: $0) }
@@ -472,33 +579,53 @@ struct BuiltInDisconnectRecoveryTests {
 }
 
 struct BuiltInDisplayTopologyResultTests {
-    @Test func acceptsAnAppliedRestoreWhenCoreGraphicsReturnsAnError() {
-        #expect(BuiltInDisplayTopologyResult.succeeded(
-            requestSucceeded: false,
+    @Test func acceptsOnlyAnObservedRestore() {
+        #expect(BuiltInDisplayTopologyResult.reachedTarget(
             targetBlackoutEnabled: false,
             displayIsRestored: true
         ))
     }
 
-    @Test func acceptsAnAppliedBlackoutWhenCoreGraphicsReturnsAnError() {
-        #expect(BuiltInDisplayTopologyResult.succeeded(
-            requestSucceeded: false,
+    @Test func acceptsOnlyAnObservedBlackout() {
+        #expect(BuiltInDisplayTopologyResult.reachedTarget(
             targetBlackoutEnabled: true,
             displayIsRestored: false
         ))
     }
 
     @Test func rejectsATopologyThatDidNotReachItsTargetState() {
-        #expect(!BuiltInDisplayTopologyResult.succeeded(
-            requestSucceeded: false,
+        #expect(!BuiltInDisplayTopologyResult.reachedTarget(
             targetBlackoutEnabled: false,
             displayIsRestored: false
         ))
-        #expect(!BuiltInDisplayTopologyResult.succeeded(
-            requestSucceeded: false,
+        #expect(!BuiltInDisplayTopologyResult.reachedTarget(
             targetBlackoutEnabled: true,
             displayIsRestored: true
         ))
+    }
+}
+
+struct BuiltInDisplayRecoverySnapshotTests {
+    @Test func persistsStableIdentityRuntimeIDAndBrightness() throws {
+        let identity = BuiltInDisplayIdentity(
+            vendorID: 1,
+            modelID: 2,
+            serialNumber: 3,
+            unitNumber: 4
+        )
+        let snapshot = BuiltInDisplayRecoverySnapshot(
+            identity: identity,
+            lastRuntimeID: 42,
+            brightness: 0.35
+        )
+
+        let decoded = try JSONDecoder().decode(
+            BuiltInDisplayRecoverySnapshot.self,
+            from: JSONEncoder().encode(snapshot)
+        )
+
+        #expect(decoded == snapshot)
+        #expect(decoded.schemaVersion == BuiltInDisplayRecoverySnapshot.schemaVersion)
     }
 }
 

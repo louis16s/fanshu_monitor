@@ -206,7 +206,8 @@ nonisolated enum DisplayHeaderBrightnessPolicy {
 
 nonisolated enum BuiltInDisplayRestorePolicy {
     static let disconnectedExternalBrightness = 35.0
-    static let topologyWatchdogInterval: TimeInterval = 0.5
+    static let topologyWatchdogInterval: TimeInterval = 5
+    static let topologyRetryDelays: [TimeInterval] = [0, 0.05, 0.2, 0.5, 1, 2]
     static let brightnessRetryDelays: [TimeInterval] = [0.05, 0.2, 0.5, 1.0, 2.0]
 
     static func shouldRestore(
@@ -219,6 +220,37 @@ nonisolated enum BuiltInDisplayRestorePolicy {
     }
 }
 
+nonisolated enum DisplayDisconnectRecoveryPolicy {
+    static func shouldForceRestore(
+        isRemoval: Bool,
+        removedDisplayID: CGDirectDisplayID,
+        cachedBuiltInDisplayID: CGDirectDisplayID?,
+        knownExternalDisplayIDs: Set<CGDirectDisplayID>
+    ) -> Bool {
+        guard isRemoval,
+              removedDisplayID != cachedBuiltInDisplayID,
+              knownExternalDisplayIDs.count == 1
+        else {
+            return false
+        }
+        return knownExternalDisplayIDs.contains(removedDisplayID)
+    }
+}
+
+nonisolated enum BuiltInBlackoutIntentPolicy {
+    static func shouldSuspendForMissingExternal(
+        externalDisplayCount: Int,
+        blackoutDesired: Bool,
+        isolatedDisplayCount: Int,
+        builtInDisplayIsOffline: Bool
+    ) -> Bool {
+        externalDisplayCount == 0
+            && blackoutDesired
+            && isolatedDisplayCount == 0
+            && !builtInDisplayIsOffline
+    }
+}
+
 nonisolated enum BuiltInDisconnectRecoveryResult: Sendable, Equatable {
     case externalDisplayPresent
     case restored(displayID: CGDirectDisplayID)
@@ -227,12 +259,64 @@ nonisolated enum BuiltInDisconnectRecoveryResult: Sendable, Equatable {
 }
 
 nonisolated enum BuiltInDisplayTopologyResult {
-    static func succeeded(
-        requestSucceeded: Bool,
+    static func reachedTarget(
         targetBlackoutEnabled: Bool,
         displayIsRestored: Bool
     ) -> Bool {
-        requestSucceeded || (targetBlackoutEnabled ? !displayIsRestored : displayIsRestored)
+        targetBlackoutEnabled ? !displayIsRestored : displayIsRestored
+    }
+}
+
+nonisolated struct BuiltInDisplayIdentity: Codable, Equatable, Sendable {
+    let vendorID: UInt32
+    let modelID: UInt32
+    let serialNumber: UInt32
+    let unitNumber: UInt32
+
+    init(vendorID: UInt32, modelID: UInt32, serialNumber: UInt32, unitNumber: UInt32) {
+        self.vendorID = vendorID
+        self.modelID = modelID
+        self.serialNumber = serialNumber
+        self.unitNumber = unitNumber
+    }
+
+    init(displayID: CGDirectDisplayID) {
+        vendorID = CGDisplayVendorNumber(displayID)
+        modelID = CGDisplayModelNumber(displayID)
+        serialNumber = CGDisplaySerialNumber(displayID)
+        unitNumber = CGDisplayUnitNumber(displayID)
+    }
+
+    func matches(displayID: CGDirectDisplayID) -> Bool {
+        self == BuiltInDisplayIdentity(displayID: displayID)
+    }
+}
+
+nonisolated struct BuiltInDisplayRecoverySnapshot: Codable, Equatable, Sendable {
+    static let schemaVersion = 1
+
+    let schemaVersion: Int
+    let identity: BuiltInDisplayIdentity
+    let lastRuntimeID: CGDirectDisplayID
+    let brightness: Double
+
+    init(displayID: CGDirectDisplayID, brightness: Double) {
+        self.init(
+            identity: BuiltInDisplayIdentity(displayID: displayID),
+            lastRuntimeID: displayID,
+            brightness: brightness
+        )
+    }
+
+    init(
+        identity: BuiltInDisplayIdentity,
+        lastRuntimeID: CGDirectDisplayID,
+        brightness: Double
+    ) {
+        schemaVersion = Self.schemaVersion
+        self.identity = identity
+        self.lastRuntimeID = lastRuntimeID
+        self.brightness = min(1, max(0, brightness))
     }
 }
 

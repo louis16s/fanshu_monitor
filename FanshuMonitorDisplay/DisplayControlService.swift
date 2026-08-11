@@ -7,6 +7,7 @@ import OSLog
 nonisolated final class DisplayControlService: @unchecked Sendable {
     private static let cachedBuiltInDisplayIDKey = "displayControl.cachedBuiltInDisplayID"
     private static let cachedBuiltInBrightnessKey = "displayControl.cachedBuiltInBrightness"
+    private static let builtInRecoverySnapshotKey = "displayControl.builtInRecoverySnapshot.v1"
     private let displayServices = DisplayServicesBridge()
     private let ddc = DisplayDDCBridge()
     private let defaults: UserDefaults
@@ -55,10 +56,7 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
                 ? displayServices.getBrightness(displayID: id)
                 : nil
             if isBuiltIn {
-                defaults.set(Int(id), forKey: Self.cachedBuiltInDisplayIDKey)
-                if let appleBrightness {
-                    defaults.set(Double(appleBrightness), forKey: Self.cachedBuiltInBrightnessKey)
-                }
+                cacheBuiltInDisplay(displayID: id, brightness: appleBrightness)
             }
             let hasDDCService = usesDDC && ddc.hasService(for: id)
             let brightnessTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.brightness, displayID: id)
@@ -229,10 +227,9 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             guard let mirrorTarget = displays.first(where: { !$0.isBuiltIn }) else {
                 return false
             }
-            defaults.set(Int(display.id), forKey: Self.cachedBuiltInDisplayIDKey)
             let previousBrightness = displayServices.getBrightness(displayID: display.id)
                 ?? Float(display.brightness / 100)
-            defaults.set(Double(previousBrightness), forKey: Self.cachedBuiltInBrightnessKey)
+            cacheBuiltInDisplay(displayID: display.id, brightness: previousBrightness)
             let didMirror = builtInBlackout.setEnabled(
                 true,
                 displayID: display.id,
@@ -260,19 +257,6 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         return true
     }
 
-    func syncBuiltInBlackouts(keeping displayIDs: Set<CGDirectDisplayID>, displays: [ControlledDisplay]) {
-        builtInBlackout.sync(keeping: displayIDs)
-        guard let mirrorTarget = displays.first(where: { !$0.isBuiltIn })?.id else { return }
-        for displayID in displayIDs {
-            _ = builtInBlackout.setEnabled(
-                true,
-                displayID: displayID,
-                mirrorTargetID: mirrorTarget,
-                previousBrightness: displayServices.getBrightness(displayID: displayID)
-            )
-        }
-    }
-
     func reapplyBuiltInBlackoutsToOnlineDisplays() -> Set<CGDirectDisplayID> {
         var ids = [CGDirectDisplayID](repeating: 0, count: 16)
         var count: UInt32 = 0
@@ -287,9 +271,9 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         }
 
         var appliedDisplayIDs: Set<CGDirectDisplayID> = []
-        for displayID in displayIDs where CGDisplayIsBuiltin(displayID) != 0 {
-            defaults.set(Int(displayID), forKey: Self.cachedBuiltInDisplayIDKey)
+        for displayID in displayIDs where CGDisplayIsBuiltin(displayID) == 1 {
             let previousBrightness = displayServices.getBrightness(displayID: displayID)
+            cacheBuiltInDisplay(displayID: displayID, brightness: previousBrightness)
             if builtInBlackout.setEnabled(
                 true,
                 displayID: displayID,
@@ -334,7 +318,10 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         }
 
         if let restoredBrightnessOverride {
-            defaults.set(Double(restoredBrightnessOverride), forKey: Self.cachedBuiltInBrightnessKey)
+            cacheBuiltInDisplay(
+                displayID: cachedDisplayID,
+                brightness: restoredBrightnessOverride
+            )
         } else if let cachedBrightness = defaults.object(forKey: Self.cachedBuiltInBrightnessKey) as? Double {
             _ = displayServices.setBrightness(
                 displayID: cachedDisplayID,
@@ -344,33 +331,48 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         return cachedDisplayID
     }
 
-    func hasActiveExternalDisplay() -> Bool {
-        guard let displayIDs = activeDisplayIDs() else {
-            AppLogger.ui.error("Unable to query active displays during emergency built-in restore")
-            return true
+    func hasUsableExternalDisplay() -> Bool {
+        if let displayIDs = activeDisplayIDs() {
+            return displayIDs.contains { CGDisplayIsBuiltin($0) == 0 }
         }
-        return displayIDs.contains { CGDisplayIsBuiltin($0) == 0 }
+
+        // The active list can briefly fail while WindowServer commits a
+        // zero-display topology. The online list is useful only as a fallback;
+        // treating an online-but-inactive ghost as usable would block recovery.
+        guard let displayIDs = onlineDisplayIDs() else {
+            AppLogger.ui.error("Unable to query display topology during emergency built-in restore")
+            return false
+        }
+        return displayIDs.contains {
+            CGDisplayIsBuiltin($0) == 0 && CGDisplayIsActive($0) == 1
+        }
     }
 
     func hasOfflineCachedBuiltInDisplay() -> Bool {
-        guard let displayID = cachedBuiltInDisplayID(),
-              CGDisplayIsBuiltin(displayID) != 0
+        guard let displayID = cachedOrDiscoverableBuiltInDisplayID(),
+              CGDisplayIsBuiltin(displayID) == 1
         else {
             return false
         }
         return CGDisplayIsOnline(displayID) != 1 || CGDisplayIsActive(displayID) == 0
     }
 
+    func reconcileRestoredBuiltInDisplays(
+        candidates: Set<CGDirectDisplayID>
+    ) -> Set<CGDirectDisplayID> {
+        builtInBlackout.removeRestoredStates(candidates: candidates)
+    }
+
     func setBuiltInBrightness(_ brightness: Float, displayID: CGDirectDisplayID) -> Bool {
         guard CGDisplayIsOnline(displayID) == 1,
-              CGDisplayIsBuiltin(displayID) != 0
+              CGDisplayIsBuiltin(displayID) == 1
         else {
             return false
         }
         let clamped = min(1, max(0, brightness))
         let succeeded = displayServices.setBrightness(displayID: displayID, value: clamped)
         if succeeded {
-            defaults.set(Double(clamped), forKey: Self.cachedBuiltInBrightnessKey)
+            cacheBuiltInDisplay(displayID: displayID, brightness: clamped)
         }
         return succeeded
     }
@@ -400,21 +402,75 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
     }
 
     private func cachedOrDiscoverableBuiltInDisplayID() -> CGDirectDisplayID? {
-        if let cachedDisplayID = cachedBuiltInDisplayID() {
-            return cachedDisplayID
+        let allDisplayIDs = builtInBlackout.allDisplayIDs()
+        if let snapshot = builtInRecoverySnapshot(),
+           let rediscoveredID = allDisplayIDs.first(where: {
+               CGDisplayIsBuiltin($0) == 1 && snapshot.identity.matches(displayID: $0)
+           }) {
+            cacheBuiltInDisplay(
+                displayID: rediscoveredID,
+                brightness: Float(snapshot.brightness)
+            )
+            return rediscoveredID
         }
 
-        // A display disabled through a session configuration is absent from the
-        // online list, but CoreGraphics still retains its identity for the session.
-        if let displayID = Self.firstBuiltInDisplayID(
-            in: (1...64).map(CGDirectDisplayID.init),
-            isBuiltIn: { CGDisplayIsBuiltin($0) == 1 }
-        ) {
-            defaults.set(Int(displayID), forKey: Self.cachedBuiltInDisplayIDKey)
+        if let displayID = allDisplayIDs.first(where: { CGDisplayIsBuiltin($0) == 1 }) {
+            cacheBuiltInDisplay(displayID: displayID, brightness: nil)
             AppLogger.ui.info("Recovered isolated built-in display identity: \(displayID)")
             return displayID
         }
+
+        if let cachedDisplayID = cachedBuiltInDisplayID(),
+           CGDisplayIsBuiltin(cachedDisplayID) == 1 {
+            return cachedDisplayID
+        }
+
+        // The private all-display list is not guaranteed to exist on every macOS
+        // release. A bounded runtime-ID scan is the final recovery fallback.
+        if let displayID = Self.firstBuiltInDisplayID(
+            in: (1...256).map(CGDirectDisplayID.init),
+            isBuiltIn: { CGDisplayIsBuiltin($0) == 1 }
+        ) {
+            cacheBuiltInDisplay(displayID: displayID, brightness: nil)
+            return displayID
+        }
         return nil
+    }
+
+    private func cacheBuiltInDisplay(displayID: CGDirectDisplayID, brightness: Float?) {
+        guard CGDisplayIsBuiltin(displayID) == 1 else { return }
+        let resolvedBrightness = brightness.map(Double.init)
+            ?? builtInRecoverySnapshot()?.brightness
+            ?? (defaults.object(forKey: Self.cachedBuiltInBrightnessKey) as? Double)
+            ?? 0.35
+        let snapshot = BuiltInDisplayRecoverySnapshot(
+            displayID: displayID,
+            brightness: resolvedBrightness
+        )
+        if defaults.object(forKey: Self.cachedBuiltInDisplayIDKey) as? Int != Int(displayID) {
+            defaults.set(Int(displayID), forKey: Self.cachedBuiltInDisplayIDKey)
+        }
+        let cachedBrightness = defaults.object(forKey: Self.cachedBuiltInBrightnessKey) as? Double
+        if cachedBrightness == nil || abs((cachedBrightness ?? 0) - snapshot.brightness) > 0.001 {
+            defaults.set(snapshot.brightness, forKey: Self.cachedBuiltInBrightnessKey)
+        }
+
+        guard let encoded = try? JSONEncoder().encode(snapshot),
+              defaults.data(forKey: Self.builtInRecoverySnapshotKey) != encoded
+        else {
+            return
+        }
+        defaults.set(encoded, forKey: Self.builtInRecoverySnapshotKey)
+    }
+
+    private func builtInRecoverySnapshot() -> BuiltInDisplayRecoverySnapshot? {
+        guard let data = defaults.data(forKey: Self.builtInRecoverySnapshotKey),
+              let snapshot = try? JSONDecoder().decode(BuiltInDisplayRecoverySnapshot.self, from: data),
+              snapshot.schemaVersion == BuiltInDisplayRecoverySnapshot.schemaVersion
+        else {
+            return nil
+        }
+        return snapshot
     }
 
     private func cachedBuiltInDisplayID() -> CGDirectDisplayID? {
@@ -819,33 +875,65 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
         Bool
     ) -> CGError
 
-    private let skyLightHandle: UnsafeMutableRawPointer?
+    private typealias GetDisplayListFunction = @convention(c) (
+        UInt32,
+        UnsafeMutablePointer<CGDirectDisplayID>?,
+        UnsafeMutablePointer<UInt32>?
+    ) -> CGError
+
+    private let frameworkHandles: [UnsafeMutableRawPointer]
     private let configureDisplayEnabled: ConfigureDisplayEnabledFunction?
+    private let getDisplayList: GetDisplayListFunction?
     private let stateLock = NSLock()
     private var states: [CGDirectDisplayID: IsolationState] = [:]
 
     init() {
-        let skyLightHandle = dlopen(
-            "/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight",
-            RTLD_LAZY | RTLD_LOCAL
-        )
-        self.skyLightHandle = skyLightHandle
+        let frameworkPaths: [String] = [
+            "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics",
+            "/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight"
+        ]
+        frameworkHandles = frameworkPaths.compactMap { path in
+            path.withCString { dlopen($0, RTLD_LAZY | RTLD_LOCAL) }
+        }
         configureDisplayEnabled = Self.resolveConfigureDisplayEnabled(
-            skyLightHandle: skyLightHandle
+            handles: frameworkHandles
+        )
+        getDisplayList = Self.resolveSymbol(
+            handles: frameworkHandles,
+            names: ["CGSGetDisplayList", "SLSGetDisplayList"],
+            as: GetDisplayListFunction.self
         )
     }
 
     private static func resolveConfigureDisplayEnabled(
-        skyLightHandle: UnsafeMutableRawPointer?
+        handles: [UnsafeMutableRawPointer]
     ) -> ConfigureDisplayEnabledFunction? {
-        guard let skyLightHandle else { return nil }
-        for symbolName in ["SLSConfigureDisplayEnabled", "CGSConfigureDisplayEnabled"] {
-            if let symbol = dlsym(skyLightHandle, symbolName) {
-                AppLogger.ui.notice("Using SkyLight display isolation API: \(symbolName, privacy: .public)")
-                return unsafeBitCast(symbol, to: ConfigureDisplayEnabledFunction.self)
+        for symbolName in ["CGSConfigureDisplayEnabled", "SLSConfigureDisplayEnabled"] {
+            if let function = resolveSymbol(
+                handles: handles,
+                names: [symbolName],
+                as: ConfigureDisplayEnabledFunction.self
+            ) {
+                AppLogger.ui.notice("Using display isolation API: \(symbolName, privacy: .public)")
+                return function
             }
         }
-        AppLogger.ui.error("SkyLight display isolation API is unavailable; using mirror fallback")
+        AppLogger.ui.error("Display isolation API is unavailable; using mirror fallback")
+        return nil
+    }
+
+    private static func resolveSymbol<Function>(
+        handles: [UnsafeMutableRawPointer],
+        names: [String],
+        as type: Function.Type
+    ) -> Function? {
+        for handle in handles {
+            for name in names {
+                if let symbol = dlsym(handle, name) {
+                    return unsafeBitCast(symbol, to: type)
+                }
+            }
+        }
         return nil
     }
 
@@ -860,7 +948,7 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
 
         if enabled {
             guard let mirrorTargetID else { return false }
-            guard CGDisplayIsBuiltin(displayID) != 0 || states[displayID] != nil else {
+            guard CGDisplayIsBuiltin(displayID) == 1 || states[displayID] != nil else {
                 return false
             }
 
@@ -869,12 +957,8 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
                 return true
             }
 
-            let disableRequestSucceeded = configureDisplay(displayID: displayID, enabled: false)
-            if BuiltInDisplayTopologyResult.succeeded(
-                requestSucceeded: disableRequestSucceeded,
-                targetBlackoutEnabled: true,
-                displayIsRestored: isDisplayRestored(displayID)
-            ) {
+            _ = configureDisplay(displayID: displayID, enabled: false)
+            if waitForTargetState(displayID: displayID, blackoutEnabled: true) {
                 states[displayID] = IsolationState(
                     previousBrightness: states[displayID]?.previousBrightness ?? previousBrightness,
                     mode: .disconnected
@@ -896,25 +980,16 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
             // A restart loses the in-memory isolation mode. Clear either
             // possible fallback, enable the display, then verify the topology.
             _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
-            let enableSucceeded = restoreDisconnectedDisplay(displayID: displayID)
-            return BuiltInDisplayTopologyResult.succeeded(
-                requestSucceeded: enableSucceeded,
-                targetBlackoutEnabled: false,
-                displayIsRestored: isDisplayRestored(displayID)
-            )
+            _ = restoreDisconnectedDisplay(displayID: displayID)
+            return waitForTargetState(displayID: displayID, blackoutEnabled: false)
         }
-        let restoreRequestSucceeded: Bool
         switch state.mode {
         case .disconnected:
-            restoreRequestSucceeded = restoreDisconnectedDisplay(displayID: displayID)
+            _ = restoreDisconnectedDisplay(displayID: displayID)
         case .mirrored:
-            restoreRequestSucceeded = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+            _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
         }
-        return BuiltInDisplayTopologyResult.succeeded(
-            requestSucceeded: restoreRequestSucceeded,
-            targetBlackoutEnabled: false,
-            displayIsRestored: isDisplayRestored(displayID)
-        )
+        return waitForTargetState(displayID: displayID, blackoutEnabled: false)
     }
 
     func restoreBrightness(for displayID: CGDirectDisplayID) -> Float? {
@@ -929,47 +1004,25 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
         }
     }
 
-    func sync(keeping displayIDs: Set<CGDirectDisplayID>) {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-
-        let removedIDs = Set(states.keys).subtracting(displayIDs)
-        for displayID in removedIDs {
-            guard let state = states[displayID] else { continue }
-            switch state.mode {
-            case .disconnected:
-                _ = configureDisplay(displayID: displayID, enabled: true)
-            case .mirrored:
-                _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
-            }
-        }
-        states = states.filter { displayIDs.contains($0.key) }
-    }
-
     func clearAll() -> [CGDirectDisplayID: Float] {
         stateLock.lock()
         defer { stateLock.unlock() }
 
         let previousStates = states
         for (displayID, state) in previousStates {
-            let requestSucceeded: Bool
             switch state.mode {
             case .disconnected:
-                requestSucceeded = restoreDisconnectedDisplay(displayID: displayID)
+                _ = restoreDisconnectedDisplay(displayID: displayID)
             case .mirrored:
-                requestSucceeded = configureMirroring(displayID: displayID, mirrorTargetID: nil)
+                _ = configureMirroring(displayID: displayID, mirrorTargetID: nil)
             }
-            if BuiltInDisplayTopologyResult.succeeded(
-                requestSucceeded: requestSucceeded,
-                targetBlackoutEnabled: false,
-                displayIsRestored: isDisplayRestored(displayID)
-            ) {
+            if waitForTargetState(displayID: displayID, blackoutEnabled: false) {
                 states.removeValue(forKey: displayID)
             }
         }
 
         return previousStates.reduce(into: [:]) { result, entry in
-            if let brightness = entry.value.previousBrightness {
+            if states[entry.key] == nil, let brightness = entry.value.previousBrightness {
                 result[entry.key] = brightness
             }
         }
@@ -979,7 +1032,24 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
         isDisplayRestored(displayID)
     }
 
+    func removeRestoredStates(
+        candidates: Set<CGDirectDisplayID>
+    ) -> Set<CGDirectDisplayID> {
+        stateLock.withLock {
+            let restoredIDs = Set(candidates.filter {
+                CGDisplayIsBuiltin($0) != 1 || isDisplayRestored($0)
+            })
+            for displayID in restoredIDs {
+                states.removeValue(forKey: displayID)
+            }
+            return restoredIDs
+        }
+    }
+
     private func restoreDisconnectedDisplay(displayID: CGDirectDisplayID) -> Bool {
+        if isDisplayRestored(displayID) {
+            return true
+        }
         let sessionRequestSucceeded = configureDisplay(
             displayID: displayID,
             enabled: true,
@@ -1022,13 +1092,31 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
 
         let completionResult = CGCompleteDisplayConfiguration(config, completionOption)
         if completionResult != .success {
-            AppLogger.ui.error(
+            // WindowServer can apply this private operation while returning a
+            // generic completion error. The configuration object is consumed by
+            // CGCompleteDisplayConfiguration, so verification decides success.
+            AppLogger.ui.notice(
                 "Display topology completion failed for ID \(displayID), enabled: \(enabled, privacy: .public), error: \(completionResult.rawValue, privacy: .public)"
             )
-            CGCancelDisplayConfiguration(config)
             return false
         }
         return true
+    }
+
+    func allDisplayIDs() -> [CGDirectDisplayID] {
+        guard let getDisplayList else {
+            return Array(onlineDisplayIDs())
+        }
+
+        var count: UInt32 = 0
+        guard getDisplayList(0, nil, &count) == .success, count > 0 else {
+            return Array(onlineDisplayIDs())
+        }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard getDisplayList(count, &ids, &count) == .success else {
+            return Array(onlineDisplayIDs())
+        }
+        return Array(ids.prefix(Int(count))).filter { $0 != kCGNullDirectDisplay }
     }
 
     private func onlineDisplayIDs() -> Set<CGDirectDisplayID> {
@@ -1041,8 +1129,26 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
     }
 
     private func isDisplayRestored(_ displayID: CGDirectDisplayID) -> Bool {
-        CGDisplayIsActive(displayID) != 0
+        CGDisplayIsActive(displayID) == 1
             && CGDisplayMirrorsDisplay(displayID) == kCGNullDirectDisplay
+    }
+
+    private func waitForTargetState(
+        displayID: CGDirectDisplayID,
+        blackoutEnabled: Bool
+    ) -> Bool {
+        for delay in [0, 20_000, 80_000, 200_000] as [useconds_t] {
+            if delay > 0 {
+                usleep(delay)
+            }
+            if BuiltInDisplayTopologyResult.reachedTarget(
+                targetBlackoutEnabled: blackoutEnabled,
+                displayIsRestored: isDisplayRestored(displayID)
+            ) {
+                return true
+            }
+        }
+        return false
     }
 
     private func configureMirroring(displayID: CGDirectDisplayID, mirrorTargetID: CGDirectDisplayID?) -> Bool {
@@ -1062,8 +1168,8 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
     }
 
     deinit {
-        if let skyLightHandle {
-            dlclose(skyLightHandle)
+        for handle in frameworkHandles {
+            dlclose(handle)
         }
     }
 }

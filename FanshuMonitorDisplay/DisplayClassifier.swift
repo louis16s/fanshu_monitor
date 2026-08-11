@@ -17,7 +17,7 @@ nonisolated struct DisplayClassifier {
 
     init(
         probeNativeBrightness: @escaping (CGDirectDisplayID) -> Bool = DisplayClassifier.defaultProbeNativeBrightness,
-        isBuiltInDisplay: @escaping (CGDirectDisplayID) -> Bool = { CGDisplayIsBuiltin($0) != 0 },
+        isBuiltInDisplay: @escaping (CGDirectDisplayID) -> Bool = { CGDisplayIsBuiltin($0) == 1 },
         infoProvider: @escaping (CGDirectDisplayID) -> [String: Any] = DisplayClassifier.defaultInfo
     ) {
         self.probeNativeBrightness = probeNativeBrightness
