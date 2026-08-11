@@ -25,8 +25,7 @@ final class DisplayControlController: ObservableObject {
     private var didWakeObserver: NSObjectProtocol?
     private var screensDidWakeObserver: NSObjectProtocol?
     private var powerEventBridge: DisplayPowerEventBridge?
-    private var hardwareTopologyBridge: DisplayHardwareTopologyBridge?
-    private var hardwareTopologyRecoveryTask: Task<Void, Never>?
+    private var hardwareDisconnectMonitor: DisplayHardwareDisconnectMonitor?
     private var refreshWorkItem: DispatchWorkItem?
     private var wakeMaintenanceGeneration = 0
     private var displayCallbackRegistered = false
@@ -80,9 +79,7 @@ final class DisplayControlController: ObservableObject {
         }
         nativeBrightnessSyncTask?.cancel()
         builtInDisconnectWatchdogTask?.cancel()
-        hardwareTopologyRecoveryTask?.cancel()
         powerEventBridge?.stop()
-        hardwareTopologyBridge?.stop()
         Task { @MainActor [service] in
             service.clearBuiltInBlackouts()
             service.clearSoftwareDimming()
@@ -257,13 +254,18 @@ final class DisplayControlController: ObservableObject {
             bridge.start()
         }
 
-        if hardwareTopologyBridge == nil {
-            let bridge = DisplayHardwareTopologyBridge { [weak self] event in
-                self?.handleHardwareTopologyEvent(event)
-            }
-            if bridge.start() {
-                hardwareTopologyBridge = bridge
-                if let externalServiceCount = bridge.externalServiceCount() {
+        if hardwareDisconnectMonitor == nil {
+            let monitor = DisplayHardwareDisconnectMonitor(
+                topologyChanged: { [weak self] in
+                    self?.scheduleRefresh(delay: 0.15)
+                },
+                lastExternalServiceRemoved: { [weak self] in
+                    self?.handleConfirmedExternalHardwareDisconnect()
+                }
+            )
+            if monitor.start() {
+                hardwareDisconnectMonitor = monitor
+                if let externalServiceCount = monitor.externalServiceCount() {
                     AppLogger.ui.notice(
                         "Display hardware monitor started with \(externalServiceCount, privacy: .public) external services"
                     )
@@ -310,10 +312,8 @@ final class DisplayControlController: ObservableObject {
         }
         powerEventBridge?.stop()
         powerEventBridge = nil
-        hardwareTopologyRecoveryTask?.cancel()
-        hardwareTopologyRecoveryTask = nil
-        hardwareTopologyBridge?.stop()
-        hardwareTopologyBridge = nil
+        hardwareDisconnectMonitor?.stop()
+        hardwareDisconnectMonitor = nil
         builtInDisconnectWatchdogTask?.cancel()
         builtInDisconnectWatchdogTask = nil
         stopNativeBrightnessSync()
@@ -381,46 +381,13 @@ final class DisplayControlController: ObservableObject {
         recoverBuiltInDisplayAfterExternalDisconnect(triggerDisplayID: 0)
     }
 
-    private func handleHardwareTopologyEvent(_ event: DisplayHardwareTopologyEvent) {
+    private func handleConfirmedExternalHardwareDisconnect() {
         scheduleRefresh(delay: 0.15)
-        switch event {
-        case .externalServiceAdded:
-            hardwareTopologyRecoveryTask?.cancel()
-            hardwareTopologyRecoveryTask = nil
-            return
-        case .externalServiceRemoved:
-            AppLogger.ui.notice("External display hardware service terminated; scheduling safety restore")
-            scheduleHardwareTopologyRecovery(delay: .milliseconds(180), requireNoExternalService: true)
-        case .displayServiceChanged:
-            // A terminated service can lose its Location property before the
-            // callback is delivered. Recounting after the registry settles is
-            // the fallback for that event ordering.
-            scheduleHardwareTopologyRecovery(delay: .milliseconds(350), requireNoExternalService: true)
-        }
-    }
-
-    private func scheduleHardwareTopologyRecovery(
-        delay: Duration,
-        requireNoExternalService: Bool
-    ) {
-        hardwareTopologyRecoveryTask?.cancel()
-        hardwareTopologyRecoveryTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: delay)
-            guard !Task.isCancelled, let self else { return }
-            self.hardwareTopologyRecoveryTask = nil
-            let externalServiceCount = requireNoExternalService
-                ? self.hardwareTopologyBridge?.externalServiceCount()
-                : 0
-            guard DisplayHardwareDisconnectRecoveryPolicy.shouldForceRestore(
-                externalServiceCount: externalServiceCount,
-                isolatedDisplayCount: self.builtInBlackoutDisplayIDs.count,
-                builtInDisplayIsOffline: self.service.hasOfflineCachedBuiltInDisplay()
-            ) else { return }
-            self.recoverBuiltInDisplayAfterExternalDisconnect(
-                triggerDisplayID: 0,
-                forceRestore: true
-            )
-        }
+        guard requiresPhysicalBuiltInRestore else { return }
+        recoverBuiltInDisplayAfterExternalDisconnect(
+            triggerDisplayID: 0,
+            forceRestore: true
+        )
     }
 
     func scheduleWakeRefreshes(early: Bool = false) {
@@ -1040,7 +1007,7 @@ final class DisplayControlController: ObservableObject {
                 }
                 if !self.builtInDisconnectRecoveryPending, self.requiresPhysicalBuiltInRestore {
                     let hardwareConfirmsNoExternal = DisplayHardwareDisconnectRecoveryPolicy.shouldForceRestore(
-                        externalServiceCount: self.hardwareTopologyBridge?.externalServiceCount(),
+                        externalServiceCount: self.hardwareDisconnectMonitor?.externalServiceCount(),
                         isolatedDisplayCount: self.builtInBlackoutDisplayIDs.count,
                         builtInDisplayIsOffline: self.service.hasOfflineCachedBuiltInDisplay()
                     )

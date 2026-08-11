@@ -25,6 +25,78 @@ nonisolated enum DisplayHardwareServiceLocation: Sendable, Equatable {
     }
 }
 
+/// Converts low-level IOKit events into stable topology notifications. The
+/// controller never needs to reason about registry timing or service location.
+@MainActor
+final class DisplayHardwareDisconnectMonitor {
+    private let topologyChanged: @MainActor @Sendable () -> Void
+    private let lastExternalServiceRemoved: @MainActor @Sendable () -> Void
+    private var bridge: DisplayHardwareTopologyBridge?
+    private var verificationTask: Task<Void, Never>?
+
+    init(
+        topologyChanged: @escaping @MainActor @Sendable () -> Void,
+        lastExternalServiceRemoved: @escaping @MainActor @Sendable () -> Void
+    ) {
+        self.topologyChanged = topologyChanged
+        self.lastExternalServiceRemoved = lastExternalServiceRemoved
+    }
+
+    @discardableResult
+    func start() -> Bool {
+        guard bridge == nil else { return true }
+        let bridge = DisplayHardwareTopologyBridge { [weak self] event in
+            self?.receive(event)
+        }
+        guard bridge.start() else { return false }
+        self.bridge = bridge
+        return true
+    }
+
+    func stop() {
+        verificationTask?.cancel()
+        verificationTask = nil
+        bridge?.stop()
+        bridge = nil
+    }
+
+    func externalServiceCount() -> Int? {
+        bridge?.externalServiceCount()
+    }
+
+    private func receive(_ event: DisplayHardwareTopologyEvent) {
+        topologyChanged()
+        switch event {
+        case .externalServiceAdded:
+            verificationTask?.cancel()
+            verificationTask = nil
+        case .externalServiceRemoved:
+            AppLogger.ui.notice("External display hardware service terminated; verifying final disconnect")
+            scheduleFinalDisconnectVerification(delay: .milliseconds(180))
+        case .displayServiceChanged:
+            // A terminated service can lose its Location property before the
+            // callback is delivered, so unknown changes get a later recount.
+            scheduleFinalDisconnectVerification(delay: .milliseconds(350))
+        }
+    }
+
+    private func scheduleFinalDisconnectVerification(delay: Duration) {
+        verificationTask?.cancel()
+        verificationTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            self.verificationTask = nil
+            guard self.bridge?.externalServiceCount() == 0 else { return }
+            self.lastExternalServiceRemoved()
+        }
+    }
+
+    deinit {
+        verificationTask?.cancel()
+        bridge?.stop()
+    }
+}
+
 /// Watches the Apple Silicon display service tree independently from
 /// WindowServer. CoreGraphics can retain a stale external display after a
 /// physical disconnect, while the DCP service termination still arrives.
