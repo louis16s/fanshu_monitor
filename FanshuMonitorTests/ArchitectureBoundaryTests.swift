@@ -53,3 +53,32 @@ struct SystemCapabilityRegistryTests {
         )
     }
 }
+
+struct PowerFlowAnimationPolicyTests {
+    @Test func usesABoundedLowRefreshRate() {
+        #expect(PowerFlowAnimationPolicy.frameInterval >= 1.0 / 8.0)
+    }
+
+    @Test func animatesOnlyForVisibleActivePowerFlow() {
+        #expect(PowerFlowAnimationPolicy.shouldAnimate(
+            isActive: true,
+            reduceMotion: false,
+            hasActiveFlow: true
+        ))
+        #expect(!PowerFlowAnimationPolicy.shouldAnimate(
+            isActive: false,
+            reduceMotion: false,
+            hasActiveFlow: true
+        ))
+        #expect(!PowerFlowAnimationPolicy.shouldAnimate(
+            isActive: true,
+            reduceMotion: true,
+            hasActiveFlow: true
+        ))
+        #expect(!PowerFlowAnimationPolicy.shouldAnimate(
+            isActive: true,
+            reduceMotion: false,
+            hasActiveFlow: false
+        ))
+    }
+}

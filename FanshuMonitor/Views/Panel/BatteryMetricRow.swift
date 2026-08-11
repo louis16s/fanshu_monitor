@@ -6,6 +6,7 @@ struct BatteryGlassRow: View {
     let module: MonitorModule
     let theme: MonitorPanelTheme
     var details: [MonitorMetric] = []
+    var isPanelVisible = false
     var isExpanded = false
     var toggleExpansion: (() -> Void)?
     @State private var batteryBreathIsDimmed = false
@@ -47,6 +48,7 @@ struct BatteryGlassRow: View {
                         BatteryPowerFlowRow(
                             metrics: module.metrics,
                             isConnectedToPower: isConnectedToPower,
+                            isActive: isPanelVisible && isExpanded,
                             theme: theme
                         )
                     }
@@ -76,6 +78,9 @@ struct BatteryGlassRow: View {
         .onChange(of: isActivelyCharging) { _, _ in
             updateBatteryBreath()
         }
+        .onChange(of: isPanelVisible) { _, _ in
+            updateBatteryBreath()
+        }
         .glassEffect(.regular.tint(theme.rowGlassTint(for: module.kind)), in: .rect(cornerRadius: MonitorConstants.rowCornerRadius, style: .continuous))
     }
 
@@ -95,7 +100,7 @@ struct BatteryGlassRow: View {
     }
 
     private func updateBatteryBreath() {
-        batteryBreathIsDimmed = isActivelyCharging
+        batteryBreathIsDimmed = isPanelVisible && isActivelyCharging
     }
 
     private var powerSymbol: String {

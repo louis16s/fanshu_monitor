@@ -175,6 +175,7 @@ struct MonitorPanelView: View {
                 module: module,
                 theme: theme,
                 details: enabledMetrics(for: module),
+                isPanelVisible: store.isPanelVisible,
                 isExpanded: expandedKinds.contains(module.kind)
             ) {
                 toggleExpansion(for: module.kind)

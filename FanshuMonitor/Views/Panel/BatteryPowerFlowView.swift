@@ -61,9 +61,22 @@ nonisolated struct BatteryPowerFlowPresentation: Equatable, Sendable {
     }
 }
 
+nonisolated enum PowerFlowAnimationPolicy {
+    static let frameInterval: TimeInterval = 1.0 / 6.0
+
+    static func shouldAnimate(
+        isActive: Bool,
+        reduceMotion: Bool,
+        hasActiveFlow: Bool
+    ) -> Bool {
+        isActive && !reduceMotion && hasActiveFlow
+    }
+}
+
 struct BatteryPowerFlowRow: View {
     let metrics: [MonitorMetric]
     let isConnectedToPower: Bool
+    let isActive: Bool
     let theme: MonitorPanelTheme
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -99,6 +112,7 @@ struct BatteryPowerFlowRow: View {
                 PowerFlowCanvas(
                     presentation: presentation,
                     tint: tint,
+                    isActive: isActive,
                     reduceMotion: reduceMotion
                 )
                 .frame(maxWidth: .infinity, minHeight: 54, maxHeight: 54)
@@ -173,12 +187,21 @@ struct BatteryPowerFlowRow: View {
 private struct PowerFlowCanvas: View {
     let presentation: BatteryPowerFlowPresentation
     let tint: Color
+    let isActive: Bool
     let reduceMotion: Bool
+
+    private var shouldAnimate: Bool {
+        PowerFlowAnimationPolicy.shouldAnimate(
+            isActive: isActive,
+            reduceMotion: reduceMotion,
+            hasActiveFlow: presentation.hasActiveFlow
+        )
+    }
 
     var body: some View {
         TimelineView(.animation(
-            minimumInterval: 1.0 / 15.0,
-            paused: reduceMotion || !presentation.hasActiveFlow
+            minimumInterval: PowerFlowAnimationPolicy.frameInterval,
+            paused: !shouldAnimate
         )) { timeline in
             Canvas { context, size in
                 let phase = timeline.date.timeIntervalSinceReferenceDate * 0.72
