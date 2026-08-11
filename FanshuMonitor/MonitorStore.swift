@@ -317,7 +317,10 @@ final class MonitorStore: ObservableObject {
         advance(kinds: kinds)
     }
 
-    private func advance(kinds: some Sequence<MonitorKind>) {
+    private func advance(
+        kinds: some Sequence<MonitorKind>,
+        firstPaintKinds: Set<MonitorKind> = []
+    ) {
         var requestedKinds = Array(Set(kinds))
         if requestedKinds.contains(.codex) {
             requestedKinds.removeAll { $0 == .codex }
@@ -343,12 +346,16 @@ final class MonitorStore: ObservableObject {
                 for kind in requestedKinds {
                     let previous = previousModules.first { $0.kind == kind }
                     let metricIDs = enabledMetrics[kind] ?? []
+                    let mode: MonitorSamplingMode = firstPaintKinds.contains(kind)
+                        ? .firstPaint
+                        : .routine
                     group.addTask {
                         await coordinator.sampleModule(
                             kind: kind,
                             previous: previous,
                             enabledMetricIDs: metricIDs,
-                            panelVisible: panelVisible
+                            panelVisible: panelVisible,
+                            mode: mode
                         )
                     }
                 }
@@ -495,7 +502,14 @@ final class MonitorStore: ObservableObject {
         if visibleKinds.contains(.codex) {
             refreshCodexUsage(force: true)
         }
-        advance(kinds: visibleKinds.filter { $0 != .codex })
+        let immediatelyVisibleKinds = visibleKinds.filter { $0 != .codex }
+        let firstPaintKinds: Set<MonitorKind> = visibleKinds.contains(.battery) ? [.battery] : []
+        advance(kinds: immediatelyVisibleKinds, firstPaintKinds: firstPaintKinds)
+        if !firstPaintKinds.isEmpty {
+            // The first battery pass publishes power flow before slower health
+            // details. Queue one full pass immediately behind it.
+            advance(kinds: firstPaintKinds)
+        }
         configureCodexTaskProgressMonitoring()
     }
 

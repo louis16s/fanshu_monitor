@@ -30,13 +30,15 @@ actor SamplingCoordinator {
         kind: MonitorKind,
         previous: MonitorModule?,
         enabledMetricIDs: Set<String>,
-        panelVisible: Bool
+        panelVisible: Bool,
+        mode: MonitorSamplingMode = .routine
     ) async -> MonitorModule? {
         guard kind != .codex, !Task.isCancelled else { return nil }
         let worker = worker(for: kind)
         let context = MonitorSamplingContext(
             enabledMetricIDs: enabledMetricIDs,
-            panelVisible: panelVisible
+            panelVisible: panelVisible,
+            mode: mode
         )
         let module = await worker.sample(previous: previous, context: context)
         return Task.isCancelled ? nil : module

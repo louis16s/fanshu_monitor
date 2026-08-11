@@ -208,7 +208,7 @@ nonisolated enum BuiltInDisplayRestorePolicy {
     static let disconnectedExternalBrightness = 35.0
     static let topologyWatchdogInterval: TimeInterval = 5
     static let topologyRetryDelays: [TimeInterval] = [0, 0.05, 0.2, 0.5, 1, 2]
-    static let brightnessRetryDelays: [TimeInterval] = [0.05, 0.2, 0.5, 1.0, 2.0]
+    static let brightnessRetryDelays: [TimeInterval] = [0, 0.05, 0.2, 0.5, 1.0, 2.0]
 
     static func shouldRestore(
         externalDisplayCount: Int,
@@ -238,6 +238,9 @@ nonisolated enum DisplayDisconnectRecoveryPolicy {
 }
 
 nonisolated enum DisplayHardwareDisconnectRecoveryPolicy {
+    static let confirmedRemovalDelay: TimeInterval = 0.06
+    static let unknownChangeDelay: TimeInterval = 0.18
+
     static func shouldForceRestore(
         externalServiceCount: Int?,
         isolatedDisplayCount: Int,

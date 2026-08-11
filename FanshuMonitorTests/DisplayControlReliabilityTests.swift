@@ -401,6 +401,12 @@ struct BuiltInDisplayRestorePolicyTests {
         #expect(BuiltInDisplayRestorePolicy.topologyWatchdogInterval >= 5)
         #expect(!BuiltInDisplayRestorePolicy.topologyRetryDelays.isEmpty)
         #expect(!BuiltInDisplayRestorePolicy.brightnessRetryDelays.isEmpty)
+        #expect(BuiltInDisplayRestorePolicy.brightnessRetryDelays.first == 0)
+        #expect(DisplayHardwareDisconnectRecoveryPolicy.confirmedRemovalDelay <= 0.06)
+        #expect(
+            DisplayHardwareDisconnectRecoveryPolicy.unknownChangeDelay
+                > DisplayHardwareDisconnectRecoveryPolicy.confirmedRemovalDelay
+        )
     }
 
     @Test func preservesTheUserIntentWhileSafetyRestoreIsActive() {

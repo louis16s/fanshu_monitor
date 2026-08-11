@@ -4,6 +4,16 @@ import IOKit
 import IOKit.ps
 import OSLog
 
+nonisolated enum BatterySamplingPolicy {
+    static func shouldCollectTelemetry(context: MonitorSamplingContext) -> Bool {
+        context.panelVisible
+    }
+
+    static func shouldCollectSmartDetails(context: MonitorSamplingContext) -> Bool {
+        shouldCollectTelemetry(context: context) && !context.prioritizesFirstPaint
+    }
+}
+
 nonisolated final class BatterySampler: MonitorSampler {
     var kind: MonitorKind { .battery }
 
@@ -39,8 +49,9 @@ nonisolated final class BatterySampler: MonitorSampler {
         let sourceState = description[kIOPSPowerSourceStateKey] as? String
         let connected = sourceState == kIOPSACPowerValue
 
-        let shouldCollectTelemetry = context.panelVisible
-        let smart = shouldCollectTelemetry ? smartBatteryInfo(at: Date()) : nil
+        let shouldCollectTelemetry = BatterySamplingPolicy.shouldCollectTelemetry(context: context)
+        let shouldCollectSmartDetails = BatterySamplingPolicy.shouldCollectSmartDetails(context: context)
+        let smart = shouldCollectSmartDetails ? smartBatteryInfo(at: Date()) : nil
         let powerFlow = shouldCollectTelemetry ? powerTelemetry() : nil
         let adapterWatts = smart?.adapterWatts ?? (shouldCollectTelemetry ? externalAdapterWatts() : nil)
         let chargingPower = connected

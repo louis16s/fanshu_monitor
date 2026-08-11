@@ -170,6 +170,25 @@ struct FanshuMonitorTests {
         #expect(!disabled.shouldCollectExpensiveMetric("temperature"))
     }
 
+    @Test func firstPaintSamplingOnlyAppliesToAVisiblePanel() {
+        let visible = MonitorSamplingContext(
+            enabledMetricIDs: [],
+            panelVisible: true,
+            mode: .firstPaint
+        )
+        let hidden = MonitorSamplingContext(
+            enabledMetricIDs: [],
+            panelVisible: false,
+            mode: .firstPaint
+        )
+
+        #expect(visible.prioritizesFirstPaint)
+        #expect(!hidden.prioritizesFirstPaint)
+        #expect(BatterySamplingPolicy.shouldCollectTelemetry(context: visible))
+        #expect(!BatterySamplingPolicy.shouldCollectSmartDetails(context: visible))
+        #expect(!BatterySamplingPolicy.shouldCollectTelemetry(context: hidden))
+    }
+
     @Test func networkSamplerOnlyPublishesEnabledMetrics() {
         let context = MonitorSamplingContext(
             enabledMetricIDs: ["upload"],

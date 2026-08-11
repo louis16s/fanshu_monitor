@@ -72,18 +72,22 @@ final class DisplayHardwareDisconnectMonitor {
             verificationTask = nil
         case .externalServiceRemoved:
             AppLogger.ui.notice("External display hardware service terminated; verifying final disconnect")
-            scheduleFinalDisconnectVerification(delay: .milliseconds(180))
+            scheduleFinalDisconnectVerification(
+                delay: DisplayHardwareDisconnectRecoveryPolicy.confirmedRemovalDelay
+            )
         case .displayServiceChanged:
             // A terminated service can lose its Location property before the
             // callback is delivered, so unknown changes get a later recount.
-            scheduleFinalDisconnectVerification(delay: .milliseconds(350))
+            scheduleFinalDisconnectVerification(
+                delay: DisplayHardwareDisconnectRecoveryPolicy.unknownChangeDelay
+            )
         }
     }
 
-    private func scheduleFinalDisconnectVerification(delay: Duration) {
+    private func scheduleFinalDisconnectVerification(delay: TimeInterval) {
         verificationTask?.cancel()
         verificationTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: delay)
+            try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, let self else { return }
             self.verificationTask = nil
             guard self.bridge?.externalServiceCount() == 0 else { return }
