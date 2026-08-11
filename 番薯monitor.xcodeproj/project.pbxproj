@@ -18,8 +18,8 @@
 			isa = PBXContainerItemProxy;
 			containerPortal = 2E0C71812FB19C2D00908371 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 2E0C71882FB19C2D00908371;
-			remoteInfo = FanshuMonitor;
+			remoteGlobalIDString = 2E0C71B92FB1A10000908371;
+			remoteInfo = FanshuMonitorDirect;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -223,7 +223,7 @@
 					};
 					2E0C71A12FB19C2E00908371 = {
 						CreatedOnToolsVersion = 26.4.1;
-						TestTargetID = 2E0C71882FB19C2D00908371;
+						TestTargetID = 2E0C71B92FB1A10000908371;
 					};
 				};
 			};
@@ -320,7 +320,7 @@
 		};
 		2E0C71A42FB19C2E00908371 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 2E0C71882FB19C2D00908371 /* FanshuMonitor */;
+			target = 2E0C71B92FB1A10000908371 /* FanshuMonitorDirect */;
 			targetProxy = 2E0C71A32FB19C2E00908371 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -697,7 +697,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = FanshuMonitor;
+				TEST_TARGET_NAME = FanshuMonitorDirect;
 			};
 			name = Debug;
 		};
@@ -716,7 +716,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = FanshuMonitor;
+				TEST_TARGET_NAME = FanshuMonitorDirect;
 			};
 			name = Release;
 		};

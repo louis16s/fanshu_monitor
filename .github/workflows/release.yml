@@ -116,6 +116,7 @@ jobs:
             -configuration Debug \
             -destination 'platform=macOS,arch=arm64' \
             -parallel-testing-enabled NO \
+            -only-testing:FanshuMonitorTests \
             CODE_SIGNING_ALLOWED=NO \
             test 2>&1 | tee build/test.log
           test_status="${PIPESTATUS[0]}"

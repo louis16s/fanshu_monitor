@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 nonisolated struct CodexTaskProgress: Equatable, Identifiable, Sendable {
     let id: String
@@ -48,6 +49,8 @@ actor CodexTaskProgressReader {
     private var statesByURL: [URL: RolloutState] = [:]
     private var titleByThreadID: [String: String] = [:]
     private var lastDiscovery = Date.distantPast
+    private var sessionIndexOffset: UInt64 = 0
+    private var sessionIndexRemainder = Data()
 
     init(
         sessionsRoot: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -86,7 +89,7 @@ actor CodexTaskProgressReader {
 
     private func discoverRecentRollouts(now: Date) {
         lastDiscovery = now
-        titleByThreadID = loadSessionTitles()
+        updateSessionTitles()
 
         guard let enumerator = FileManager.default.enumerator(
             at: sessionsRoot,
@@ -252,26 +255,59 @@ actor CodexTaskProgressReader {
         state.activeStep = active
     }
 
-    private func loadSessionTitles() -> [String: String] {
-        guard let data = try? Data(contentsOf: sessionIndexURL),
-              let text = String(data: data, encoding: .utf8)
-        else {
-            return titleByThreadID
+    private func updateSessionTitles() {
+        let fileSize: UInt64
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: sessionIndexURL.path)
+            guard let size = (attributes[.size] as? NSNumber)?.uint64Value else { return }
+            fileSize = size
+        } catch {
+            AppLogger.codex.debug("Session index unavailable: \(error.localizedDescription, privacy: .public)")
+            return
         }
 
-        var titles: [String: String] = [:]
-        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
-            guard let data = line.data(using: .utf8),
-                  let record = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let id = record["id"] as? String,
-                  let title = record["thread_name"] as? String,
-                  !title.isEmpty
-            else {
-                continue
-            }
-            titles[id] = title
+        if fileSize < sessionIndexOffset {
+            sessionIndexOffset = 0
+            sessionIndexRemainder.removeAll(keepingCapacity: true)
+            titleByThreadID.removeAll(keepingCapacity: true)
         }
-        return titles
+        guard fileSize > sessionIndexOffset else { return }
+
+        do {
+            let handle = try FileHandle(forReadingFrom: sessionIndexURL)
+            defer { try? handle.close() }
+            try handle.seek(toOffset: sessionIndexOffset)
+            let appendedData = try handle.readToEnd() ?? Data()
+            sessionIndexOffset = fileSize
+            processSessionIndex(data: appendedData)
+        } catch {
+            AppLogger.codex.error("Unable to update session index: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func processSessionIndex(data: Data) {
+        var bufferedData = sessionIndexRemainder
+        bufferedData.append(data)
+        let newline = Data([0x0A])
+        var lineStart = bufferedData.startIndex
+
+        while let lineEnd = bufferedData[lineStart...].firstRange(of: newline)?.lowerBound {
+            parseSessionIndexLine(bufferedData[lineStart..<lineEnd])
+            lineStart = bufferedData.index(after: lineEnd)
+        }
+        sessionIndexRemainder = Data(bufferedData[lineStart...])
+    }
+
+    private func parseSessionIndexLine(_ line: Data.SubSequence) {
+        guard !line.isEmpty,
+              let record = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+              let id = record["id"] as? String,
+              let title = record["thread_name"] as? String,
+              !title.isEmpty
+        else {
+            return
+        }
+        titleByThreadID[id] = title
     }
 
     private func threadID(from url: URL) -> String? {

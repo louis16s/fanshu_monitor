@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Test, build, and analyze Direct app
+    runs-on: macos-26
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Select toolchain
+        run: |
+          set -euo pipefail
+          if [[ -d /Applications/Xcode_26.5.app ]]; then
+            sudo xcode-select --switch /Applications/Xcode_26.5.app/Contents/Developer
+          fi
+          xcodebuild -version
+
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project '番薯monitor.xcodeproj' \
+            -scheme '番薯Monitor' \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -parallel-testing-enabled NO \
+            -only-testing:FanshuMonitorTests \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      - name: Build Direct app
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project '番薯monitor.xcodeproj' \
+            -target FanshuMonitorDirect \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Build Direct UI test bundle
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project '番薯monitor.xcodeproj' \
+            -scheme '番薯Monitor UI Tests' \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing
+
+      - name: Analyze Direct app
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project '番薯monitor.xcodeproj' \
+            -target FanshuMonitorDirect \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            CODE_SIGNING_ALLOWED=NO \
+            analyze

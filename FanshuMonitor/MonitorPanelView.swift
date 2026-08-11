@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MonitorPanelView: View {
     @ObservedObject var store: MonitorStore
+    @ObservedObject var settings: MonitorSettings
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openSettings) private var openSettings
     @Namespace private var glassNamespace
@@ -11,7 +12,7 @@ struct MonitorPanelView: View {
     var body: some View {
         let theme = MonitorPanelTheme(
             palette: MonitorPalette(
-                preference: store.settings.colorSchemePreference,
+                preference: settings.colorSchemePreference,
                 colorScheme: colorScheme
             )
         )
@@ -27,8 +28,8 @@ struct MonitorPanelView: View {
                 }
 
                 #if DISPLAY_CONTROL
-                if store.settings.displayModuleVisible {
-                    DisplayControlsSection(settings: store.settings, controller: store.displayController)
+                if settings.displayModuleVisible {
+                    DisplayControlsSection(settings: settings, controller: store.displayController)
                         .glassEffectID("display-controls", in: glassNamespace)
                 }
                 #endif
@@ -40,7 +41,7 @@ struct MonitorPanelView: View {
             .background(panelBackgroundColor)
         }
         .containerBackground(.clear, for: .window)
-        .background(TransparentWindowBackground(colorSchemeOverride: store.settings.themePreference.colorScheme))
+        .background(TransparentWindowBackground(colorSchemeOverride: settings.themePreference.colorScheme))
         .onAppear {
             store.panelDidAppear()
         }
@@ -184,7 +185,7 @@ struct MonitorPanelView: View {
                 theme: theme,
                 detail: module.summary,
                 details: enabledMetrics(for: module),
-                showsCodexTasks: store.settings.isMetricEnabled("active-tasks", for: .codex),
+                showsCodexTasks: settings.isMetricEnabled("active-tasks", for: .codex),
                 isExpanded: expandedKinds.contains(module.kind)
             ) {
                 toggleExpansion(for: module.kind)
@@ -193,7 +194,7 @@ struct MonitorPanelView: View {
     }
 
     private func enabledMetrics(for module: MonitorModule) -> [MonitorMetric] {
-        let enabledIds = store.settings.enabledMetrics[module.kind] ?? defaultMetricIds(for: module.kind)
+        let enabledIds = settings.enabledMetrics[module.kind] ?? defaultMetricIds(for: module.kind)
         let resolvedIds = module.kind.resolvedPanelMetricIDs(from: enabledIds)
         return module.metrics.filter { resolvedIds.contains($0.name) }
     }

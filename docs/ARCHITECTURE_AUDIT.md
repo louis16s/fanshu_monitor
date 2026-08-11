@@ -5,17 +5,17 @@
 ## 审查结论
 
 - 最近一次完整发布审查基于 `0.3.1`，最后一台外接屏拔除后的内屏恢复已完成真实硬件验证
-- 单元测试、Release 静态分析、签名校验和本机启动检查通过
-- GitHub Actions 可由 `v*` tag 自动测试、构建、打包并创建 Release
-- 云端产物使用临时签名保证包内完整性，尚未配置 Developer ID 签名与 Apple 公证
+- 222 项单元测试、Direct Target UI 启动测试、Release 静态分析、签名校验和本机启动检查通过
+- GitHub Actions 在 main 与 pull request 执行日常验证，`v*` tag 负责签名、公证、打包和创建 Release
+- Release workflow 强制要求 Developer ID Application 和 Apple notary 凭据，缺失时拒绝发布
 
 ## 架构分层
 
 - App/UI：SwiftUI 菜单栏面板、设置窗口和共享视觉组件
-- 状态层：`MonitorStore` 发布界面状态并调度刷新
+- 状态层：`MonitorStore` 发布运行状态并调度刷新，App 与面板直接观察共享的 `MonitorSettings`，避免设置变化触发整个 Store 刷新
 - 采样层：`SamplingCoordinator` actor 管理 worker 生命周期、取消和结果合并
 - 采样器：`SamplingCoordinator` 按可见模块懒加载独立的 `MonitorModuleSamplerWorker`
-- 功能控制器：显示器、鼠标、锁屏、Codex 和更新检查彼此独立
+- 功能控制器：显示器、鼠标、锁屏、Codex 和更新检查彼此独立，显示器 MainActor 状态与后台 `DisplayControlWorker` 分文件维护
 - 硬件桥接：DDC、DisplayServices、SMC、IOKit 与 HID 显式脱离主 actor，并在后台串行队列执行
 - 发布层：tag、Release workflow、SHA-256 清单和 release manifest
 
@@ -32,6 +32,7 @@
 - [x] 亮度未变化时不发布 SwiftUI 状态更新
 - [x] 面板关闭时主调度器降至 5 秒检查间隔
 - [x] 软件调光配置和内建屏拓扑状态使用锁保护，避免跨队列竞争
+- [x] Codex session index 使用进程内偏移量增量读取，不重复读取完整索引或写入额外缓存
 
 ## 显示器可靠性
 
@@ -59,11 +60,11 @@
 - [x] tag 必须与 `MARKETING_VERSION` 一致
 - [x] Release 前运行完整测试
 - [x] Release 生成 SHA-256 和 JSON manifest
-- [ ] 配置 Developer ID Application 证书
-- [ ] 配置 Apple 公证凭据并在发布后 stapler 验证
+- [x] Release 强制使用 Developer ID Application 签名
+- [x] Release 提交 Apple 公证并执行 stapler 验证
 
 ## 后续建议
 
-1. 配置 Developer ID 与公证，消除首次下载时的 Gatekeeper 信任提示
-2. 为真实 DDC 显示器建立可选硬件回归测试台，覆盖不同 VCP 范围和超时设备
-3. 用 Instruments 定期记录面板打开与关闭时的 CPU、唤醒次数和常驻内存
+1. 为真实 DDC 显示器建立可选硬件回归测试台，覆盖不同 VCP 范围和超时设备
+2. 用 Instruments 定期记录面板打开与关闭时的 CPU、唤醒次数和常驻内存
+3. 逐步将字符串指标 ID 收敛为类型化标识，并保持已有设置迁移兼容

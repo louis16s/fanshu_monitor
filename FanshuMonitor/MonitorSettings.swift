@@ -193,7 +193,11 @@ final class MonitorSettings: ObservableObject {
         mouseForwardAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseForwardAction) ?? "") ?? .launchpad
         mouseGestureAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseGestureAction) ?? "") ?? .passThrough
         if let data = defaults.data(forKey: Keys.mouseCustomShortcuts),
-           let storedShortcuts = try? JSONDecoder().decode([String: MouseKeyboardShortcut].self, from: data) {
+           let storedShortcuts = Self.decode(
+               [String: MouseKeyboardShortcut].self,
+               from: data,
+               key: Keys.mouseCustomShortcuts
+           ) {
             mouseCustomShortcuts = Dictionary(
                 uniqueKeysWithValues: storedShortcuts.compactMap { rawSlot, shortcut in
                     MouseButtonSlot(rawValue: rawSlot).map { ($0, shortcut) }
@@ -202,7 +206,11 @@ final class MonitorSettings: ObservableObject {
         }
         lockScreenPoliciesEnabled = defaults.object(forKey: Keys.lockScreenPoliciesEnabled) as? Bool ?? false
         if let data = defaults.data(forKey: Keys.lockScreenPolicies),
-           let policies = try? JSONDecoder().decode([LockScreenPolicy].self, from: data) {
+           let policies = Self.decode(
+               [LockScreenPolicy].self,
+               from: data,
+               key: Keys.lockScreenPolicies
+           ) {
             lockScreenPolicies = Array(policies.prefix(Self.maximumLockScreenPolicies))
         }
         if let storedKinds = defaults.array(forKey: Keys.visibleKinds) as? [String] {
@@ -409,14 +417,20 @@ final class MonitorSettings: ObservableObject {
     var lockScreenBaseline: ScreenSaverLockBaseline? {
         get {
             guard let data = defaults.data(forKey: Keys.lockScreenBaseline) else { return nil }
-            return try? JSONDecoder().decode(ScreenSaverLockBaseline.self, from: data)
+            return Self.decode(
+                ScreenSaverLockBaseline.self,
+                from: data,
+                key: Keys.lockScreenBaseline
+            )
         }
         set {
             guard let newValue else {
                 defaults.removeObject(forKey: Keys.lockScreenBaseline)
                 return
             }
-            defaults.set(try? JSONEncoder().encode(newValue), forKey: Keys.lockScreenBaseline)
+            if let data = Self.encode(newValue, key: Keys.lockScreenBaseline) {
+                defaults.set(data, forKey: Keys.lockScreenBaseline)
+            }
         }
     }
 
@@ -676,7 +690,8 @@ final class MonitorSettings: ObservableObject {
                 let storedShortcuts = Dictionary(
                     uniqueKeysWithValues: newValue.map { ($0.key.rawValue, $0.value) }
                 )
-                self?.persist(try? JSONEncoder().encode(storedShortcuts), forKey: Keys.mouseCustomShortcuts)
+                guard let data = Self.encode(storedShortcuts, key: Keys.mouseCustomShortcuts) else { return }
+                self?.persist(data, forKey: Keys.mouseCustomShortcuts)
             }
             .store(in: &cancellables)
 
@@ -690,7 +705,8 @@ final class MonitorSettings: ObservableObject {
         $lockScreenPolicies
             .dropFirst()
             .sink { [weak self] newValue in
-                self?.persist(try? JSONEncoder().encode(newValue), forKey: Keys.lockScreenPolicies)
+                guard let data = Self.encode(newValue, key: Keys.lockScreenPolicies) else { return }
+                self?.persist(data, forKey: Keys.lockScreenPolicies)
             }
             .store(in: &cancellables)
 
@@ -716,6 +732,32 @@ final class MonitorSettings: ObservableObject {
 
     private func persist<T>(_ value: T, forKey key: String) {
         defaults.set(value, forKey: key)
+    }
+
+    private static func decode<Value: Decodable>(
+        _ type: Value.Type,
+        from data: Data,
+        key: String
+    ) -> Value? {
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            AppLogger.settings.error(
+                "Unable to decode preference \(key, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+            return nil
+        }
+    }
+
+    private static func encode<Value: Encodable>(_ value: Value, key: String) -> Data? {
+        do {
+            return try JSONEncoder().encode(value)
+        } catch {
+            AppLogger.settings.error(
+                "Unable to encode preference \(key, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+            return nil
+        }
     }
 
     private func persistLaunchAtLogin(_ newValue: Bool) {

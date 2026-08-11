@@ -43,8 +43,7 @@ final class MonitorStore: ObservableObject {
     private var lastMenuBarIconKey = ""
     private var terminationSignalSource: DispatchSourceSignal?
 
-    init() {
-        let settings = MonitorSettings()
+    init(settings: MonitorSettings = MonitorSettings()) {
         let initialModules = MonitorKind.allCases.map { kind in
             if kind == .codex, let cachedModule = CodexQuotaCache.loadModule() {
                 return cachedModule
@@ -82,12 +81,6 @@ final class MonitorStore: ObservableObject {
         mouseController.configure(settings: settings)
         lockScreenController.configure(settings: settings)
         configureTerminationSignalHandler()
-        settings.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
         #if DISPLAY_CONTROL
         Publishers.MergeMany(
             settings.$displayModuleVisible.map { _ in () }.eraseToAnyPublisher(),

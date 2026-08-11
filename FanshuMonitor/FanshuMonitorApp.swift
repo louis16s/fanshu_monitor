@@ -15,12 +15,19 @@ extension NSAppearance {
 
 @main
 struct FanshuMonitorApp: App {
-    @StateObject private var monitorStore = MonitorStore()
+    @StateObject private var settings: MonitorSettings
+    @StateObject private var monitorStore: MonitorStore
     @Environment(\.colorScheme) private var colorScheme
+
+    init() {
+        let settings = MonitorSettings()
+        _settings = StateObject(wrappedValue: settings)
+        _monitorStore = StateObject(wrappedValue: MonitorStore(settings: settings))
+    }
 
     var body: some Scene {
         MenuBarExtra {
-            MonitorPanelView(store: monitorStore)
+            MonitorPanelView(store: monitorStore, settings: settings)
                 .preferredColorScheme(effectiveColorScheme)
                 .environment(\.locale, effectiveLocale)
         } label: {
@@ -34,7 +41,7 @@ struct FanshuMonitorApp: App {
 
         #if DEBUG
         WindowGroup("番薯Monitor Preview") {
-            ContentView(store: monitorStore)
+            ContentView(store: monitorStore, settings: settings)
                 .preferredColorScheme(effectiveColorScheme)
                 .environment(\.locale, effectiveLocale)
         }
@@ -43,7 +50,7 @@ struct FanshuMonitorApp: App {
 
         Settings {
             SettingsRootView(
-                settings: monitorStore.settings,
+                settings: settings,
                 mouseController: monitorStore.mouseController,
                 lockScreenController: monitorStore.lockScreenController,
                 updateChecker: monitorStore.updateChecker
@@ -55,11 +62,11 @@ struct FanshuMonitorApp: App {
     }
 
     private var effectiveColorScheme: ColorScheme? {
-        monitorStore.settings.themePreference.colorScheme
+        settings.themePreference.colorScheme
     }
 
     private var effectiveLocale: Locale {
-        monitorStore.settings.languagePreference.locale ?? .current
+        settings.languagePreference.locale ?? .current
     }
 }
 
