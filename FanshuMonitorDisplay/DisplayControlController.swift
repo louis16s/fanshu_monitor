@@ -41,12 +41,32 @@ final class DisplayControlController: ObservableObject {
     private var builtInBlackoutSuspendedForMissingExternal = false
     private var builtInDisconnectWatchdogTask: Task<Void, Never>?
     private var builtInDisconnectWatchdogGeneration = 0
+    private var isSystemSleeping = false
+    private lazy var blackoutIntentState = DisplayBlackoutIntentState(
+        desired: defaults.bool(forKey: Self.builtInBlackoutPreferenceKey)
+    )
+    private lazy var earlyWakeTopologyMaintainer = DisplayEarlyWakeTopologyMaintainer(
+        worker: worker,
+        service: service,
+        blackoutDesired: { [blackoutIntentState] in
+            blackoutIntentState.isDesired
+        },
+        topologyApplied: { [weak self] displayIDs in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.builtInBlackoutDisplayIDs.formUnion(displayIDs)
+                self.builtInBlackoutSuspendedForMissingExternal = false
+                self.scheduleRefresh(delay: 0.03)
+            }
+        }
+    )
     private var isBuiltInBlackoutDesired: Bool {
         get {
             defaults.bool(forKey: Self.builtInBlackoutPreferenceKey)
         }
         set {
             defaults.set(newValue, forKey: Self.builtInBlackoutPreferenceKey)
+            blackoutIntentState.setDesired(newValue)
             configureBuiltInDisconnectWatchdog()
         }
     }
@@ -250,9 +270,15 @@ final class DisplayControlController: ObservableObject {
         }
 
         if powerEventBridge == nil {
-            let bridge = DisplayPowerEventBridge { [weak self] event in
-                self?.handlePowerEvent(event)
-            }
+            let earlyWakeTopologyMaintainer = earlyWakeTopologyMaintainer
+            let bridge = DisplayPowerEventBridge(
+                earlyHandler: { event in
+                    earlyWakeTopologyMaintainer.handle(event)
+                },
+                handler: { [weak self] event in
+                    self?.handlePowerEvent(event)
+                }
+            )
             powerEventBridge = bridge
             bridge.start()
         }
@@ -315,6 +341,7 @@ final class DisplayControlController: ObservableObject {
         }
         powerEventBridge?.stop()
         powerEventBridge = nil
+        earlyWakeTopologyMaintainer.cancel()
         hardwareTopologyMonitor?.stop()
         hardwareTopologyMonitor = nil
         builtInDisconnectWatchdogTask?.cancel()
@@ -386,6 +413,11 @@ final class DisplayControlController: ObservableObject {
     }
 
     private func handleConfirmedExternalHardwareDisconnect() {
+        guard DisplayWakeMaintenancePolicy.shouldVerifyExternalDisconnect(
+            isSystemSleeping: isSystemSleeping
+        ) else {
+            return
+        }
         scheduleRefresh(delay: 0.15)
         guard requiresPhysicalBuiltInRestore else { return }
         recoverBuiltInDisplayAfterExternalDisconnect(
@@ -486,17 +518,25 @@ final class DisplayControlController: ObservableObject {
     }
 
     private func handlePowerEvent(_ event: DisplayPowerEvent) {
-        guard isBuiltInBlackoutDesired else { return }
         switch event {
         case .willSleep:
+            isSystemSleeping = true
+            hardwareTopologyMonitor?.setSystemSleeping(true)
+            guard isBuiltInBlackoutDesired else { return }
             AppLogger.ui.notice("Preparing isolated built-in display for sleep")
             performWakeMaintenancePass(
                 generation: wakeMaintenanceGeneration,
                 fullRefresh: false
             )
         case .willPowerOn:
+            isSystemSleeping = false
+            hardwareTopologyMonitor?.setSystemSleeping(false)
+            guard isBuiltInBlackoutDesired else { return }
             scheduleWakeRefreshes(early: true)
         case .hasPoweredOn:
+            isSystemSleeping = false
+            hardwareTopologyMonitor?.setSystemSleeping(false)
+            guard isBuiltInBlackoutDesired else { return }
             scheduleWakeRefreshes()
         }
     }

@@ -33,6 +33,7 @@ final class DisplayHardwareTopologyMonitor {
     private let lastExternalServiceRemoved: @MainActor @Sendable () -> Void
     private var bridge: DisplayHardwareTopologyBridge?
     private var verificationTask: Task<Void, Never>?
+    private var isSystemSleeping = false
 
     init(
         topologyChanged: @escaping @MainActor @Sendable (DisplayHardwareTopologyEvent) -> Void,
@@ -64,6 +65,14 @@ final class DisplayHardwareTopologyMonitor {
         bridge?.externalServiceCount()
     }
 
+    func setSystemSleeping(_ sleeping: Bool) {
+        isSystemSleeping = sleeping
+        if sleeping {
+            verificationTask?.cancel()
+            verificationTask = nil
+        }
+    }
+
     private func receive(_ event: DisplayHardwareTopologyEvent) {
         topologyChanged(event)
         switch event {
@@ -72,12 +81,22 @@ final class DisplayHardwareTopologyMonitor {
             verificationTask = nil
         case .externalServiceRemoved:
             AppLogger.ui.notice("External display hardware service terminated; verifying final disconnect")
+            guard DisplayWakeMaintenancePolicy.shouldVerifyExternalDisconnect(
+                isSystemSleeping: isSystemSleeping
+            ) else {
+                return
+            }
             scheduleFinalDisconnectVerification(
                 delay: DisplayHardwareDisconnectRecoveryPolicy.confirmedRemovalDelay
             )
         case .displayServiceChanged:
             // A terminated service can lose its Location property before the
             // callback is delivered, so unknown changes get a later recount.
+            guard DisplayWakeMaintenancePolicy.shouldVerifyExternalDisconnect(
+                isSystemSleeping: isSystemSleeping
+            ) else {
+                return
+            }
             scheduleFinalDisconnectVerification(
                 delay: DisplayHardwareDisconnectRecoveryPolicy.unknownChangeDelay
             )

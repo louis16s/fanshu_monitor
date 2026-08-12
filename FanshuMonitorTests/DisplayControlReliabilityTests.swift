@@ -516,6 +516,69 @@ struct DisplayHardwareTopologyTests {
         #expect((delays.last ?? .infinity) <= 1.2)
         #expect(DisplayExternalConnectionPolicy.discoveryDelay < 0.15)
     }
+
+    @Test func earlyWakeMaintenanceIsFastBoundedAndIgnoresSleepDisconnects() {
+        let earlyDelays = DisplayWakeMaintenancePolicy.earlyRetryDelays
+        let settledDelays = DisplayWakeMaintenancePolicy.settledRetryDelays
+
+        #expect(earlyDelays.first == 0)
+        #expect(earlyDelays == earlyDelays.sorted())
+        #expect((earlyDelays.last ?? .infinity) <= 0.6)
+        #expect(settledDelays.first == 0)
+        #expect((settledDelays.last ?? .infinity) <= 0.8)
+        #expect(!DisplayWakeMaintenancePolicy.shouldVerifyExternalDisconnect(
+            isSystemSleeping: true
+        ))
+        #expect(DisplayWakeMaintenancePolicy.shouldVerifyExternalDisconnect(
+            isSystemSleeping: false
+        ))
+    }
+
+    @Test func earlyWakeMaintenanceRetriesUntilTopologyIsApplied() async {
+        let recorder = EarlyWakeMaintenanceRecorder()
+        let maintainer = DisplayEarlyWakeTopologyMaintainer(
+            blackoutDesired: { true },
+            reapplyTopology: { completion in
+                completion(recorder.nextResult())
+            },
+            topologyApplied: { displayIDs in
+                recorder.recordApplied(displayIDs)
+            }
+        )
+
+        maintainer.handle(.willPowerOn)
+        try? await Task.sleep(for: .milliseconds(180))
+
+        #expect(recorder.attemptCount >= 2)
+        #expect(recorder.appliedIDs == [42])
+    }
+}
+
+private final class EarlyWakeMaintenanceRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var attempts = 0
+    private var storedAppliedIDs: Set<CGDirectDisplayID> = []
+
+    func nextResult() -> Set<CGDirectDisplayID> {
+        lock.withLock {
+            attempts += 1
+            return attempts >= 2 ? [42] : []
+        }
+    }
+
+    func recordApplied(_ displayIDs: Set<CGDirectDisplayID>) {
+        lock.withLock {
+            storedAppliedIDs = displayIDs
+        }
+    }
+
+    var attemptCount: Int {
+        lock.withLock { attempts }
+    }
+
+    var appliedIDs: Set<CGDirectDisplayID> {
+        lock.withLock { storedAppliedIDs }
+    }
 }
 
 private final class BuiltInBrightnessAttemptRecorder: @unchecked Sendable {
