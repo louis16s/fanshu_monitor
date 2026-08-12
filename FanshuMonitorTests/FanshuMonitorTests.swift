@@ -143,7 +143,7 @@ struct FanshuMonitorTests {
             at: start.addingTimeInterval(0.81),
             visibleKinds: kinds,
             panelVisible: true
-        )) == [.cpu, .gpu, .memory, .network])
+        )) == kinds)
         #expect(Set(schedule.dueKinds(
             at: start.addingTimeInterval(2),
             visibleKinds: kinds,

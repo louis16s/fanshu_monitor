@@ -43,7 +43,7 @@ final class MonitorRefreshSchedule {
         tickInterval: TimeInterval = 0.8,
         intervals: [MonitorKind: TimeInterval] = [
             .cpu: 0.8, .gpu: 0.8, .memory: 0.8,
-            .storage: 10, .network: 0.8, .battery: 2, .codex: 5
+            .storage: 10, .network: 0.8, .battery: 0.8, .codex: 5
         ]
     ) {
         self.tickInterval = tickInterval

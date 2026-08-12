@@ -538,13 +538,12 @@ final class MonitorStore: ObservableObject {
             refreshCodexUsage(force: true)
         }
         let immediatelyVisibleKinds = visibleKinds.filter { $0 != .codex }
-        let firstPaintKinds = visibleKinds.intersection([.battery, .storage])
+        // Root capacity is cheap, while disk health and external-volume scans
+        // can take seconds. Battery telemetry is also cheap and must run in the
+        // routine pass immediately so USB-PD input changes reach the animation
+        // without waiting for storage diagnostics.
+        let firstPaintKinds = visibleKinds.intersection([.storage])
         advance(kinds: immediatelyVisibleKinds, firstPaintKinds: firstPaintKinds)
-        if !firstPaintKinds.isEmpty {
-            // Publish inexpensive first-paint values before health, external
-            // volume, and battery telemetry work. Queue one full pass behind it.
-            advance(kinds: firstPaintKinds)
-        }
         configureCodexTaskProgressMonitoring()
     }
 
