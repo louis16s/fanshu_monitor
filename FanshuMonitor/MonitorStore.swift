@@ -161,6 +161,7 @@ final class MonitorStore: ObservableObject {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.syncSamplerResidency()
+                    self.configureSamplingTimer()
                     if self.settings.ringSource == .network,
                        self.settings.isVisible(.network) {
                         self.advance(kinds: [MonitorKind.network])
@@ -178,6 +179,7 @@ final class MonitorStore: ObservableObject {
                 let activeKinds = self.activeSamplingKinds
                 self.cancelSamplingTask()
                 self.syncSamplerResidency()
+                self.configureSamplingTimer()
                 self.refreshSchedule.reset()
                 self.modules = self.visibleModules(from: self.allModules)
                 self.advance(kinds: activeKinds)
@@ -522,7 +524,15 @@ final class MonitorStore: ObservableObject {
         modules.filter { settings.isVisible($0.kind) }
     }
 
-    func panelDidAppear() {
+    func setPanelVisible(_ isVisible: Bool) {
+        if isVisible {
+            panelDidAppear()
+        } else {
+            panelDidDisappear()
+        }
+    }
+
+    private func panelDidAppear() {
         guard !isPanelVisible else { return }
         isPanelVisible = true
         requestWiFiAuthorizationIfNeeded(activateApp: true)
@@ -547,7 +557,7 @@ final class MonitorStore: ObservableObject {
         configureCodexTaskProgressMonitoring()
     }
 
-    func panelDidDisappear() {
+    private func panelDidDisappear() {
         guard isPanelVisible else { return }
         isPanelVisible = false
         cancelSamplingTask()
@@ -669,6 +679,10 @@ final class MonitorStore: ObservableObject {
 
     private func configureSamplingTimer() {
         timerCancellable?.cancel()
+        timerCancellable = nil
+        guard isPanelVisible || !activeSamplingKinds.isEmpty else {
+            return
+        }
         let interval = refreshSchedule.timerInterval(panelVisible: isPanelVisible)
         timerCancellable = Timer.publish(
             every: interval,

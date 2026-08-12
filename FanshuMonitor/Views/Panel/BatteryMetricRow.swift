@@ -2,6 +2,12 @@ import SwiftUI
 
 // MARK: - Battery Row
 
+nonisolated enum BatteryBreathingAnimationPolicy {
+    static func shouldAnimate(isPanelVisible: Bool, isActivelyCharging: Bool) -> Bool {
+        isPanelVisible && isActivelyCharging
+    }
+}
+
 struct BatteryGlassRow: View {
     let module: MonitorModule
     let theme: MonitorPanelTheme
@@ -24,9 +30,9 @@ struct BatteryGlassRow: View {
                 valueColor: theme.valueText
             ) {
                 PanelModuleIcon(systemName: powerSymbol, color: tint)
-                    .opacity(isActivelyCharging && batteryBreathIsDimmed ? 0.46 : 1)
+                    .opacity(shouldAnimateBatteryBreath && batteryBreathIsDimmed ? 0.46 : 1)
                     .animation(
-                        isActivelyCharging
+                        shouldAnimateBatteryBreath
                             ? .easeInOut(duration: MonitorConstants.batteryAnimationDuration).repeatForever(autoreverses: true)
                             : .easeInOut(duration: 0.18),
                         value: batteryBreathIsDimmed
@@ -99,8 +105,15 @@ struct BatteryGlassRow: View {
             && positiveWattValue(rawValue("charging-power")) != nil
     }
 
+    private var shouldAnimateBatteryBreath: Bool {
+        BatteryBreathingAnimationPolicy.shouldAnimate(
+            isPanelVisible: isPanelVisible,
+            isActivelyCharging: isActivelyCharging
+        )
+    }
+
     private func updateBatteryBreath() {
-        batteryBreathIsDimmed = isPanelVisible && isActivelyCharging
+        batteryBreathIsDimmed = shouldAnimateBatteryBreath
     }
 
     private var powerSymbol: String {

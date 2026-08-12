@@ -42,11 +42,10 @@ struct MonitorPanelView: View {
         }
         .containerBackground(.clear, for: .window)
         .background(TransparentWindowBackground(colorSchemeOverride: settings.themePreference.colorScheme))
-        .onAppear {
-            store.panelDidAppear()
-        }
-        .onDisappear {
-            store.panelDidDisappear()
+        .background {
+            PanelWindowVisibilityTracker { isVisible in
+                store.setPanelVisible(isVisible)
+            }
         }
     }
 

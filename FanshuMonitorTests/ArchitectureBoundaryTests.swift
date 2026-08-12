@@ -88,3 +88,20 @@ struct PowerFlowAnimationPolicyTests {
         ))
     }
 }
+
+struct BatteryBreathingAnimationPolicyTests {
+    @Test func animatesOnlyWhileThePanelIsVisibleAndBatteryIsCharging() {
+        #expect(BatteryBreathingAnimationPolicy.shouldAnimate(
+            isPanelVisible: true,
+            isActivelyCharging: true
+        ))
+        #expect(!BatteryBreathingAnimationPolicy.shouldAnimate(
+            isPanelVisible: false,
+            isActivelyCharging: true
+        ))
+        #expect(!BatteryBreathingAnimationPolicy.shouldAnimate(
+            isPanelVisible: true,
+            isActivelyCharging: false
+        ))
+    }
+}
