@@ -220,6 +220,22 @@ nonisolated enum BuiltInDisplayRestorePolicy {
     }
 }
 
+/// A disabled built-in panel is temporarily absent from CoreGraphics' online
+/// list, but it is still a real display owned by the application. Keep its
+/// row in the panel while that state is intentional or recoverable.
+nonisolated enum BuiltInDisplayPresentationPolicy {
+    static func shouldKeepCachedRow(
+        detectedBuiltInCount: Int,
+        blackoutDesired: Bool,
+        isolatedDisplayCount: Int,
+        hasCachedDisplay: Bool
+    ) -> Bool {
+        detectedBuiltInCount == 0
+            && hasCachedDisplay
+            && (blackoutDesired || isolatedDisplayCount > 0)
+    }
+}
+
 /// Built-in isolation crosses the login-window boundary, so disabling and
 /// safety restoration must update the same persistent display configuration.
 nonisolated enum BuiltInDisplayConfigurationPolicy {

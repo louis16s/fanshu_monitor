@@ -353,11 +353,7 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
     }
 
     func hasOfflineCachedBuiltInDisplay() -> Bool {
-        guard let displayID = cachedOrDiscoverableBuiltInDisplayID(),
-              CGDisplayIsBuiltin(displayID) == 1
-        else {
-            return false
-        }
+        guard let displayID = cachedOrDiscoverableBuiltInDisplayID() else { return false }
         return CGDisplayIsOnline(displayID) != 1 || CGDisplayIsActive(displayID) == 0
     }
 
@@ -437,6 +433,16 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         ) {
             cacheBuiltInDisplay(displayID: displayID, brightness: nil)
             return displayID
+        }
+
+        // A permanently disabled built-in display can fail both the built-in
+        // classification and the online-list query until WindowServer applies
+        // the next topology update. The cached ID was written only after a
+        // successful built-in classification, so it remains the safest
+        // identity for restoring and presenting the row during this gap.
+        if let cachedDisplayID = cachedBuiltInDisplayID(),
+           builtInRecoverySnapshot() != nil {
+            return cachedDisplayID
         }
         return nil
     }

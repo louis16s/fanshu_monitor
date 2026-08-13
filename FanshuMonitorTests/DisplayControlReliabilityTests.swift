@@ -370,6 +370,36 @@ struct DisplayCapabilityFormatterTests {
 }
 
 struct BuiltInDisplayRestorePolicyTests {
+    @Test func keepsAClosedBuiltInRowVisibleWhileBlackoutIsIntentional() {
+        #expect(BuiltInDisplayPresentationPolicy.shouldKeepCachedRow(
+            detectedBuiltInCount: 0,
+            blackoutDesired: true,
+            isolatedDisplayCount: 0,
+            hasCachedDisplay: true
+        ))
+        #expect(BuiltInDisplayPresentationPolicy.shouldKeepCachedRow(
+            detectedBuiltInCount: 0,
+            blackoutDesired: false,
+            isolatedDisplayCount: 1,
+            hasCachedDisplay: true
+        ))
+    }
+
+    @Test func doesNotKeepAStaleBuiltInRowAfterRestore() {
+        #expect(!BuiltInDisplayPresentationPolicy.shouldKeepCachedRow(
+            detectedBuiltInCount: 0,
+            blackoutDesired: false,
+            isolatedDisplayCount: 0,
+            hasCachedDisplay: true
+        ))
+        #expect(!BuiltInDisplayPresentationPolicy.shouldKeepCachedRow(
+            detectedBuiltInCount: 1,
+            blackoutDesired: true,
+            isolatedDisplayCount: 1,
+            hasCachedDisplay: true
+        ))
+    }
+
     @Test func restoresWhenTheLastExternalDisplayDisconnects() {
         #expect(BuiltInDisplayRestorePolicy.shouldRestore(
             externalDisplayCount: 0,

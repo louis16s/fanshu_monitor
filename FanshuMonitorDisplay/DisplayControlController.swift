@@ -142,10 +142,16 @@ final class DisplayControlController: ObservableObject {
                     }
                     return display
                 }
-                if self.isBuiltInBlackoutDesired,
+                let cachedBuiltInRow = self.cachedBuiltInDisplay
+                    ?? self.service.isolatedBuiltInPlaceholder()
+                if BuiltInDisplayPresentationPolicy.shouldKeepCachedRow(
+                    detectedBuiltInCount: mergedDisplays.filter(\.isBuiltIn).count,
+                    blackoutDesired: self.isBuiltInBlackoutDesired,
+                    isolatedDisplayCount: self.builtInBlackoutDisplayIDs.count,
+                    hasCachedDisplay: cachedBuiltInRow != nil
+                ),
                    !mergedDisplays.contains(where: \.isBuiltIn),
-                   var cachedBuiltInDisplay = self.cachedBuiltInDisplay
-                    ?? self.service.isolatedBuiltInPlaceholder() {
+                   var cachedBuiltInDisplay = cachedBuiltInRow {
                     cachedBuiltInDisplay.brightness = 0
                     cachedBuiltInDisplay.supportsBrightness = false
                     cachedBuiltInDisplay.brightnessUnavailableReason = "已关闭"
