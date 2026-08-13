@@ -102,18 +102,11 @@ struct GeneralSettingsView: View {
 
             HStack {
                 Spacer()
-                if #available(macOS 26, *) {
-                    Button(String(localized: "settings.reset-settings")) {
-                        showsResetConfirmation = true
-                    }
-                    .controlSize(.small)
-                    .buttonStyle(.glass)
-                } else {
-                    Button(String(localized: "settings.reset-settings")) {
-                        showsResetConfirmation = true
-                    }
-                    .controlSize(.small)
+                Button(String(localized: "settings.reset-settings")) {
+                    showsResetConfirmation = true
                 }
+                .controlSize(.small)
+                .buttonStyle(.glass)
             }
             .padding(.top, -2)
             .padding(.trailing, 2)

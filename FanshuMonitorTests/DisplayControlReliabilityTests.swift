@@ -497,6 +497,18 @@ struct DisplayHardwareTopologyTests {
             isolatedDisplayCount: 1,
             builtInDisplayIsOffline: true
         ))
+        #expect(!DisplayHardwareDisconnectRecoveryPolicy.shouldAttemptWatchdogRecovery(
+            externalServiceCount: 1,
+            builtInRestoreRequired: true
+        ))
+        #expect(DisplayHardwareDisconnectRecoveryPolicy.shouldAttemptWatchdogRecovery(
+            externalServiceCount: 0,
+            builtInRestoreRequired: true
+        ))
+        #expect(DisplayHardwareDisconnectRecoveryPolicy.shouldAttemptWatchdogRecovery(
+            externalServiceCount: nil,
+            builtInRestoreRequired: true
+        ))
         #expect(!DisplayHardwareDisconnectRecoveryPolicy.shouldForceRestore(
             externalServiceCount: nil,
             isolatedDisplayCount: 1,
@@ -535,8 +547,8 @@ struct DisplayHardwareTopologyTests {
     }
 
     @Test func earlyWakeMaintenanceRetriesUntilTopologyIsApplied() async {
-        let recorder = EarlyWakeMaintenanceRecorder()
-        let maintainer = DisplayEarlyWakeTopologyMaintainer(
+        let recorder = WakeTopologyRecorder(succeedsAfter: 2)
+        let coordinator = DisplayTopologyMaintenanceCoordinator(
             blackoutDesired: { true },
             reapplyTopology: { completion in
                 completion(recorder.nextResult())
@@ -546,29 +558,76 @@ struct DisplayHardwareTopologyTests {
             }
         )
 
-        maintainer.handle(.willPowerOn)
+        coordinator.handle(.willPowerOn)
         try? await Task.sleep(for: .milliseconds(180))
 
         #expect(recorder.attemptCount >= 2)
         #expect(recorder.appliedIDs == [42])
     }
+
+    @Test func settledWakeEventDoesNotRepeatASuccessfulTopologyRequest() async {
+        let recorder = WakeTopologyRecorder(succeedsAfter: 1)
+        let coordinator = DisplayTopologyMaintenanceCoordinator(
+            blackoutDesired: { true },
+            reapplyTopology: { completion in
+                completion(recorder.nextResult())
+            },
+            topologyApplied: { displayIDs in
+                recorder.recordApplied(displayIDs)
+            }
+        )
+
+        coordinator.handle(.willPowerOn)
+        try? await Task.sleep(for: .milliseconds(40))
+        coordinator.handle(.hasPoweredOn)
+        try? await Task.sleep(for: .milliseconds(120))
+
+        #expect(recorder.attemptCount == 1)
+        #expect(recorder.appliedCount == 1)
+    }
+
+    @Test func externalConnectionMaintenanceStopsAfterSuccess() async {
+        let recorder = WakeTopologyRecorder(succeedsAfter: 2)
+        let coordinator = DisplayTopologyMaintenanceCoordinator(
+            blackoutDesired: { true },
+            reapplyTopology: { completion in
+                completion(recorder.nextResult())
+            },
+            topologyApplied: { displayIDs in
+                recorder.recordApplied(displayIDs)
+            }
+        )
+
+        coordinator.requestExternalConnectionMaintenance()
+        try? await Task.sleep(for: .milliseconds(260))
+
+        #expect(recorder.attemptCount == 2)
+        #expect(recorder.appliedCount == 1)
+    }
 }
 
-private final class EarlyWakeMaintenanceRecorder: @unchecked Sendable {
+private final class WakeTopologyRecorder: @unchecked Sendable {
     private let lock = NSLock()
+    private let succeedsAfter: Int
     private var attempts = 0
     private var storedAppliedIDs: Set<CGDirectDisplayID> = []
+    private var appliedEvents = 0
+
+    init(succeedsAfter: Int) {
+        self.succeedsAfter = succeedsAfter
+    }
 
     func nextResult() -> Set<CGDirectDisplayID> {
         lock.withLock {
             attempts += 1
-            return attempts >= 2 ? [42] : []
+            return attempts >= succeedsAfter ? [42] : []
         }
     }
 
     func recordApplied(_ displayIDs: Set<CGDirectDisplayID>) {
         lock.withLock {
             storedAppliedIDs = displayIDs
+            appliedEvents += 1
         }
     }
 
@@ -578,6 +637,10 @@ private final class EarlyWakeMaintenanceRecorder: @unchecked Sendable {
 
     var appliedIDs: Set<CGDirectDisplayID> {
         lock.withLock { storedAppliedIDs }
+    }
+
+    var appliedCount: Int {
+        lock.withLock { appliedEvents }
     }
 }
 
@@ -937,6 +1000,41 @@ struct DisplayControlWorkerTests {
         #expect(secondStarted.wait(timeout: .now() + 1) == .success)
         #expect(secondFinished.wait(timeout: .now() + 1) == .success)
     }
+
+    @Test func matchingDiscoveryRequestsShareOneHardwareScan() {
+        let worker = DisplayControlWorker()
+        let scans = ThreadSafeCount()
+        let firstStarted = DispatchSemaphore(value: 0)
+        let allowFirstToFinish = DispatchSemaphore(value: 0)
+        let completions = DispatchGroup()
+        completions.enter()
+        completions.enter()
+
+        worker.refresh(
+            activeControls: [.brightness],
+            performDiscovery: {
+                scans.increment()
+                firstStarted.signal()
+                _ = allowFirstToFinish.wait(timeout: .now() + 2)
+                return []
+            },
+            completion: { _ in completions.leave() }
+        )
+        #expect(firstStarted.wait(timeout: .now() + 1) == .success)
+
+        worker.refresh(
+            activeControls: [.brightness],
+            performDiscovery: {
+                scans.increment()
+                return []
+            },
+            completion: { _ in completions.leave() }
+        )
+
+        allowFirstToFinish.signal()
+        #expect(completions.wait(timeout: .now() + 1) == .success)
+        #expect(scans.value == 1)
+    }
 }
 
 private final class ThreadSafeValues: @unchecked Sendable {
@@ -950,6 +1048,21 @@ private final class ThreadSafeValues: @unchecked Sendable {
     func append(_ value: Double) {
         lock.withLock {
             storage.append(value)
+        }
+    }
+}
+
+private final class ThreadSafeCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = 0
+
+    var value: Int {
+        lock.withLock { storage }
+    }
+
+    func increment() {
+        lock.withLock {
+            storage += 1
         }
     }
 }

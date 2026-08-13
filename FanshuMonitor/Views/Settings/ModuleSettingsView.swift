@@ -147,7 +147,6 @@ private struct MetricSelectionRow: View {
     }
 }
 
-#if DISPLAY_CONTROL
 struct DisplayModuleSettingsView: View {
     @ObservedObject var settings: MonitorSettings
     var body: some View {
@@ -263,4 +262,3 @@ private struct BrightnessStepControl: View {
         }
     }
 }
-#endif

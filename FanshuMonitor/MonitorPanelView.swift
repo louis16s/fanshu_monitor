@@ -27,12 +27,10 @@ struct MonitorPanelView: View {
                         .glassEffectID("metric-\(module.kind.id)", in: glassNamespace)
                 }
 
-                #if DISPLAY_CONTROL
                 if settings.displayModuleVisible {
                     DisplayControlsSection(settings: settings, controller: store.displayController)
                         .glassEffectID("display-controls", in: glassNamespace)
                 }
-                #endif
             }
             .padding(.top, 6)
             .padding(.horizontal, 10)

@@ -14,6 +14,18 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         let completion: @Sendable (DisplayWriteResult) -> Void
     }
 
+    private struct DiscoveryRequest: Sendable {
+        let activeControls: Set<DisplayControlKind>
+        let performDiscovery: @Sendable () -> [ControlledDisplay]
+        var completions: [@Sendable ([ControlledDisplay]) -> Void]
+    }
+
+    private struct ActiveDiscovery: Sendable {
+        let id: UInt64
+        let generation: UInt64
+        var request: DiscoveryRequest
+    }
+
     private let stateQueue = DispatchQueue(label: "fanshu.display-control.state", qos: .userInitiated)
     private let hardwareQueue = DispatchQueue(
         label: "fanshu.display-control.hardware",
@@ -33,6 +45,9 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
     private var debounceTimers: [ControlKey: DispatchWorkItem] = [:]
     private var debounceGenerations: [ControlKey: UInt64] = [:]
     private var discoveryGeneration: UInt64 = 0
+    private var nextDiscoveryID: UInt64 = 0
+    private var activeDiscovery: ActiveDiscovery?
+    private var pendingDiscovery: DiscoveryRequest?
     private var cachedDiscovery: (
         displays: [ControlledDisplay],
         activeControls: Set<DisplayControlKind>,
@@ -69,19 +84,69 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
                 return
             }
 
-            self.discoveryGeneration &+= 1
-            let generation = self.discoveryGeneration
-            self.discoveryQueue.async {
-                let displays = performDiscovery()
-                self.stateQueue.async {
-                    guard generation == self.discoveryGeneration else {
-                        return
-                    }
-                    self.cachedDiscovery = (displays, activeControls, now)
-                    completion(displays)
+            let request = DiscoveryRequest(
+                activeControls: activeControls,
+                performDiscovery: performDiscovery,
+                completions: [completion]
+            )
+            if var active = self.activeDiscovery {
+                if active.generation == self.discoveryGeneration,
+                   active.request.activeControls == activeControls,
+                   self.pendingDiscovery == nil {
+                    active.request.completions.append(completion)
+                    self.activeDiscovery = active
+                } else {
+                    self.enqueuePendingDiscovery(request)
                 }
+                return
+            }
+            self.startDiscovery(request)
+        }
+    }
+
+    private func startDiscovery(_ request: DiscoveryRequest) {
+        nextDiscoveryID &+= 1
+        let active = ActiveDiscovery(
+            id: nextDiscoveryID,
+            generation: discoveryGeneration,
+            request: request
+        )
+        activeDiscovery = active
+        discoveryQueue.async {
+            let displays = request.performDiscovery()
+            self.stateQueue.async {
+                self.finishDiscovery(id: active.id, displays: displays)
             }
         }
+    }
+
+    private func finishDiscovery(id: UInt64, displays: [ControlledDisplay]) {
+        guard let active = activeDiscovery, active.id == id else { return }
+        activeDiscovery = nil
+        if active.generation == discoveryGeneration {
+            cachedDiscovery = (
+                displays,
+                active.request.activeControls,
+                Date()
+            )
+            active.request.completions.forEach { $0(displays) }
+        }
+        if let pendingDiscovery {
+            self.pendingDiscovery = nil
+            startDiscovery(pendingDiscovery)
+        }
+    }
+
+    private func enqueuePendingDiscovery(_ request: DiscoveryRequest) {
+        guard let pendingDiscovery else {
+            self.pendingDiscovery = request
+            return
+        }
+        self.pendingDiscovery = DiscoveryRequest(
+            activeControls: request.activeControls,
+            performDiscovery: request.performDiscovery,
+            completions: pendingDiscovery.completions + request.completions
+        )
     }
 
     func readNativeBrightness(
@@ -256,6 +321,23 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         stateQueue.async {
             self.discoveryGeneration &+= 1
             self.cachedDiscovery = nil
+            guard var active = self.activeDiscovery,
+                  !active.request.completions.isEmpty else {
+                return
+            }
+            let staleCompletions = active.request.completions
+            active.request.completions.removeAll()
+            self.activeDiscovery = active
+            if var pendingDiscovery = self.pendingDiscovery {
+                pendingDiscovery.completions = staleCompletions + pendingDiscovery.completions
+                self.pendingDiscovery = pendingDiscovery
+            } else {
+                self.pendingDiscovery = DiscoveryRequest(
+                    activeControls: active.request.activeControls,
+                    performDiscovery: active.request.performDiscovery,
+                    completions: staleCompletions
+                )
+            }
         }
     }
 

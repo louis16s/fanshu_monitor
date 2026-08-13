@@ -13,9 +13,22 @@ APP_BUNDLE="$OUTPUTS_DIR/$APP_NAME.app"
 ZIP_PATH="$OUTPUTS_DIR/$APP_NAME.zip"
 BACKUP_DIR="$OUTPUTS_DIR/backups/$(date +%Y%m%d-%H%M%S)-before-run-refresh"
 BUILD_LOG="${TMPDIR:-/tmp}/fanshu-monitor-xcodebuild.log"
+APP_EXECUTABLE="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
 usage() {
   echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2
+}
+
+stop_app() {
+  local attempt
+  pkill -f "$APP_EXECUTABLE" >/dev/null 2>&1 || true
+  for attempt in 1 2 3 4 5; do
+    if ! pgrep -f "$APP_EXECUTABLE" >/dev/null 2>&1; then
+      return
+    fi
+    sleep 0.1
+  done
+  pkill -9 -f "$APP_EXECUTABLE" >/dev/null 2>&1 || true
 }
 
 build_release() {
@@ -46,6 +59,7 @@ build_release() {
     exit 1
   fi
 
+  stop_app
   mkdir -p "$BACKUP_DIR"
   if [[ -d "$APP_BUNDLE" ]]; then
     ditto "$APP_BUNDLE" "$BACKUP_DIR/$APP_NAME.app"
@@ -66,8 +80,7 @@ build_release() {
 }
 
 open_app() {
-  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
-  sleep 0.3
+  stop_app
   /usr/bin/open -n "$APP_BUNDLE"
 }
 
@@ -78,7 +91,7 @@ case "$MODE" in
     open_app
     ;;
   --debug|debug)
-    pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+    stop_app
     lldb -- "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
     ;;
   --logs|logs)
@@ -92,7 +105,11 @@ case "$MODE" in
   --verify|verify)
     open_app
     sleep 1
-    pgrep -x "$APP_NAME" >/dev/null
+    process_count="$(pgrep -f "$APP_EXECUTABLE" | wc -l | tr -d ' ')"
+    if [[ "$process_count" != "1" ]]; then
+      echo "Expected one running app process, found $process_count" >&2
+      exit 1
+    fi
     ;;
   *)
     usage

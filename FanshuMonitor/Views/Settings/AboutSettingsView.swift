@@ -84,23 +84,15 @@ struct AboutSettingsView: View {
 
     @ViewBuilder
     private var websiteButton: some View {
-        if #available(macOS 26, *) {
-            Button {
-                NSWorkspace.shared.open(websiteURL)
-            } label: {
-                Image(systemName: "arrow.up.right")
-            }
-            .buttonStyle(.glass)
-            .controlSize(.small)
-            .help(String(localized: "about.open-website"))
-            .accessibilityLabel(String(localized: "about.open-website"))
-        } else {
-            Link(destination: websiteURL) {
-                Image(systemName: "arrow.up.right")
-            }
-            .help(String(localized: "about.open-website"))
-            .accessibilityLabel(String(localized: "about.open-website"))
+        Button {
+            NSWorkspace.shared.open(websiteURL)
+        } label: {
+            Image(systemName: "arrow.up.right")
         }
+        .buttonStyle(.glass)
+        .controlSize(.small)
+        .help(String(localized: "about.open-website"))
+        .accessibilityLabel(String(localized: "about.open-website"))
     }
 
     @ViewBuilder
@@ -134,15 +126,9 @@ struct AboutSettingsView: View {
 
     @ViewBuilder
     private func updateButton(title: String, action: @escaping () -> Void) -> some View {
-        if #available(macOS 26, *) {
-            Button(title, action: action)
-                .buttonStyle(.glass)
-                .controlSize(.small)
-        } else {
-            Button(title, action: action)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-        }
+        Button(title, action: action)
+            .buttonStyle(.glass)
+            .controlSize(.small)
     }
 
     private var updateStatusSymbol: String {

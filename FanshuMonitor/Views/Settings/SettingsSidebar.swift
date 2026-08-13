@@ -5,9 +5,7 @@ enum SettingsRoute: Hashable {
     case lockScreen
     case mouse
     case module(MonitorKind)
-    #if DISPLAY_CONTROL
     case displayModule
-    #endif
     case about
 }
 
@@ -42,10 +40,8 @@ struct SettingsSidebar: View {
                         .tag(SettingsRoute.module(kind))
                 }
 
-                #if DISPLAY_CONTROL
                 Label(String(localized: "settings.sidebar.display"), systemImage: "display")
                     .tag(SettingsRoute.displayModule)
-                #endif
             }
 
             Section {

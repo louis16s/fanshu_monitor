@@ -41,10 +41,8 @@ struct SettingsRootView: View {
             MouseSettingsView(settings: settings, controller: mouseController)
         case .module(let kind):
             ModuleSettingsView(kind: kind, settings: settings)
-        #if DISPLAY_CONTROL
         case .displayModule:
             DisplayModuleSettingsView(settings: settings)
-        #endif
         case .about:
             AboutSettingsView(settings: settings, updateChecker: updateChecker)
         }

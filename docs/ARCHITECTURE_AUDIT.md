@@ -1,11 +1,11 @@
 # 架构审查清单
 
-更新日期：2026-08-11
+更新日期：2026-08-13
 
 ## 审查结论
 
 - 最近一次完整发布审查基于 `0.3.1`，最后一台外接屏拔除后的内屏恢复已完成真实硬件验证
-- 227 项单元测试、Direct Target 构建和 Release 静态分析通过
+- 完整单元测试、Direct Target 构建和 Release 静态分析通过
 - UI 测试 bundle 构建通过；本轮本机 XCTest UI runner 未完成执行，未将其计为通过
 - GitHub Actions 在 main 与 pull request 执行日常验证，`v*` tag 负责签名、公证、打包和创建 Release
 - Release workflow 强制要求 Developer ID Application 和 Apple notary 凭据，缺失时拒绝发布
@@ -20,6 +20,7 @@
 - 采样器：`SamplingCoordinator` 按可见模块懒加载独立的 `MonitorModuleSamplerWorker`
 - 功能控制器：显示器、鼠标、锁屏、Codex 和更新检查彼此独立，显示器 MainActor 状态与后台 `DisplayControlWorker` 分文件维护
 - 硬件桥接：DDC、DisplayServices、SMC、IOKit 与 HID 显式脱离主 actor，并在后台串行队列执行
+- 工程目标：只保留正式 `FanshuMonitorDirect` app target，测试、CI 与 Release 共用同一产品边界
 - 系统能力：私有锁屏与显示器隔离符号统一登记到 `SystemCapabilityRegistry`，缺失时保留明确的降级状态
 - 持久化：`MonitorSettings` 只声明设置行为，JSON 编解码由 `PreferencesCodec` 统一处理和记录错误
 - 面板 View：通用、存储、网络和电源行分文件维护，共享 `PanelModuleHeader` 与详情网格
@@ -50,6 +51,7 @@
 - [x] 滑杆写入合并，键盘档位写入保持顺序
 - [x] DDC 故障熔断按显示器和控制项隔离
 - [x] DDC 拓扑探测单独串行，连续插拔不会让旧探测覆盖新拓扑
+- [x] 相同显示器发现请求共享在途结果，过期请求只补跑最新一次硬件扫描
 - [x] 慢速 DDC 探测不阻塞其他显示器的原生亮度读写
 - [x] 屏幕重排、插拔和唤醒会刷新显示器映射
 - [x] Apple Silicon 外接屏拔除由独立 IOKit DCP 服务监听确认，不依赖单一 WindowServer 回调
@@ -57,7 +59,10 @@
 - [x] IOKit 原始事件、去抖和最终断开确认封装在硬件监视器中，显示控制器只执行高层恢复动作
 - [x] 拔除最后一台外接屏后，真实硬件测试在约 369 毫秒内恢复内建屏并设置 35% 亮度
 - [x] 内屏隔离与外接断开恢复使用成对的持久拓扑事务，登录窗口不会先回到内屏优先
-- [x] 外接 DCP 服务接入后走独立拓扑快速通道，不等待 DDC 探测即恢复外接优先
+- [x] 外接 DCP 接入和睡眠唤醒共用单一拓扑协调器，不等待 DDC 探测且成功后立即停止剩余重试
+- [x] IOKit、NSWorkspace 与硬件接入通知重叠时不会并发重复配置
+- [x] 安全恢复 watchdog 在外接硬件服务仍存在时不提交内屏恢复，避免 WindowServer 拓扑竞争
+- [x] 内建屏已经处于隔离状态时只登记状态，不重复提交相同的私有显示器配置
 - [x] 原生亮度读取等待同屏写入完成
 - [x] 过期读取和过期写入结果不会覆盖最新状态
 

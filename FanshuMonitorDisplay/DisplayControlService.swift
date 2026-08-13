@@ -965,8 +965,14 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
                 return false
             }
 
-            if states[displayID]?.mode == .disconnected,
-               !onlineDisplayIDs().contains(displayID) {
+            let displayIsAlreadyIsolated = !onlineDisplayIDs().contains(displayID)
+                || CGDisplayIsActive(displayID) == 0
+            if displayIsAlreadyIsolated {
+                states[displayID] = IsolationState(
+                    previousBrightness: states[displayID]?.previousBrightness ?? previousBrightness,
+                    mode: .disconnected,
+                    isPersistent: true
+                )
                 return true
             }
 

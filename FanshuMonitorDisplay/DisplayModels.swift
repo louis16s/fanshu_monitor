@@ -257,6 +257,15 @@ nonisolated enum DisplayHardwareDisconnectRecoveryPolicy {
         externalServiceCount == 0
             && (isolatedDisplayCount > 0 || builtInDisplayIsOffline)
     }
+
+    static func shouldAttemptWatchdogRecovery(
+        externalServiceCount: Int?,
+        builtInRestoreRequired: Bool
+    ) -> Bool {
+        guard builtInRestoreRequired else { return false }
+        guard let externalServiceCount else { return true }
+        return externalServiceCount == 0
+    }
 }
 
 nonisolated enum DisplayExternalConnectionPolicy {

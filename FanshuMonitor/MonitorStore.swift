@@ -20,10 +20,8 @@ final class MonitorStore: ObservableObject {
         loadLevel: .idle
     )
     @Published var isPanelVisible = false
-    #if DISPLAY_CONTROL
     let displayController = DisplayControlController()
     private var brightnessKeyEventTap: BrightnessKeyEventTap?
-    #endif
     let mouseController = MouseControlController()
     let lockScreenController = LockScreenPolicyController()
     let updateChecker = UpdateChecker()
@@ -79,11 +77,9 @@ final class MonitorStore: ObservableObject {
         updateMenuBarTargetComputeLoadIfNeeded(force: true)
         updateMenuBarIcon(force: true)
         refreshSchedule.markRefreshed(settings.visibleKinds, at: Date())
-        #if DISPLAY_CONTROL
         displayController.settings = settings
         brightnessKeyEventTap = BrightnessKeyEventTap(settings: settings, displayController: displayController)
         configureDisplayControlServices()
-        #endif
         mouseController.configure(settings: settings)
         lockScreenController.configure(settings: settings)
         wiFiLocationAuthorizationController.authorizationDidChange = { [weak self] status in
@@ -91,7 +87,6 @@ final class MonitorStore: ObservableObject {
             self?.advance(kinds: [MonitorKind.network])
         }
         configureTerminationSignalHandler()
-        #if DISPLAY_CONTROL
         Publishers.MergeMany(
             settings.$displayModuleVisible.map { _ in () }.eraseToAnyPublisher(),
             settings.$displayBrightnessControlEnabled.map { _ in () }.eraseToAnyPublisher(),
@@ -115,7 +110,6 @@ final class MonitorStore: ObservableObject {
                 self.displayController.settings = self.settings
             }
             .store(in: &cancellables)
-        #endif
         settings.$codexRefreshIntervalMinutes
             .dropFirst()
             .receive(on: DispatchQueue.main)
@@ -209,9 +203,7 @@ final class MonitorStore: ObservableObject {
         NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
             .sink { [weak self] _ in
                 self?.settings.synchronizeBeforeTermination()
-                #if DISPLAY_CONTROL
                 self?.displayController.prepareBuiltInDisplayForTermination()
-                #endif
             }
             .store(in: &cancellables)
         animationTimerCancellable = Timer.publish(every: MonitorConstants.animationInterval, on: .main, in: .common)
@@ -237,9 +229,7 @@ final class MonitorStore: ObservableObject {
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         source.setEventHandler { [weak self] in
             self?.settings.synchronizeBeforeTermination()
-            #if DISPLAY_CONTROL
             self?.displayController.prepareBuiltInDisplayForTermination()
-            #endif
             exit(EXIT_SUCCESS)
         }
         terminationSignalSource = source
@@ -432,9 +422,7 @@ final class MonitorStore: ObservableObject {
     }
 
     private func refreshInputServicesAfterActivation() {
-        #if DISPLAY_CONTROL
         brightnessKeyEventTap?.refreshPermissionState()
-        #endif
         mouseController.refreshButtonTapIfPossible()
     }
 
@@ -448,7 +436,6 @@ final class MonitorStore: ObservableObject {
         requestWiFiAuthorizationIfNeeded(activateApp: true)
     }
 
-    #if DISPLAY_CONTROL
     private func configureDisplayControlServices() {
         displayController.settings = settings
 
@@ -483,7 +470,6 @@ final class MonitorStore: ObservableObject {
                 )
             )
     }
-    #endif
 
     private func updateMenuBarTargetComputeLoadIfNeeded(force: Bool = false) {
         let currentLoad = combinedComputeLoad
@@ -537,9 +523,7 @@ final class MonitorStore: ObservableObject {
         isPanelVisible = true
         requestWiFiAuthorizationIfNeeded(activateApp: true)
         cancelSamplingTask()
-        #if DISPLAY_CONTROL
         displayController.setPanelVisible(true)
-        #endif
         syncSamplerResidency()
         configureSamplingTimer()
         let visibleKinds = settings.visibleKinds
@@ -561,9 +545,7 @@ final class MonitorStore: ObservableObject {
         guard isPanelVisible else { return }
         isPanelVisible = false
         cancelSamplingTask()
-        #if DISPLAY_CONTROL
         displayController.setPanelVisible(false)
-        #endif
         syncSamplerResidency()
         configureSamplingTimer()
         configureCodexTaskProgressMonitoring()

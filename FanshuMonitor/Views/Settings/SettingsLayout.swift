@@ -173,14 +173,9 @@ struct SettingsIconHeader<Accessory: View>: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 14)
 
-        if #available(macOS 26, *) {
-            GlassEffectContainer {
-                header
-                    .glassEffect(.regular, in: .rect(cornerRadius: 12))
-            }
-        } else {
+        GlassEffectContainer {
             header
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .glassEffect(.regular, in: .rect(cornerRadius: 12))
         }
     }
 }
