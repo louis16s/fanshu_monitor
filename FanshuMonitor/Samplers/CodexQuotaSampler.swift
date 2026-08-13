@@ -161,11 +161,11 @@ actor CodexQuotaSampler {
     }
 
     private static func formattedFiveHourReset(_ date: Date?) -> String {
-        date.map { quotaTimeFormatter.string(from: $0) } ?? "--"
+        date.map { makeQuotaTimeFormatter().string(from: $0) } ?? "--"
     }
 
     private static func formattedWeeklyReset(_ date: Date?) -> String {
-        date.map { quotaDateFormatter.string(from: $0) } ?? "--"
+        date.map { makeQuotaDateFormatter().string(from: $0) } ?? "--"
     }
 
     private static func resetCreditsText(_ count: Int?) -> String {
@@ -188,19 +188,19 @@ actor CodexQuotaSampler {
     }
 }
 
-nonisolated private let quotaTimeFormatter: DateFormatter = {
+nonisolated private func makeQuotaTimeFormatter() -> DateFormatter {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "zh_CN")
     formatter.dateFormat = "MM/dd HH:mm"
     return formatter
-}()
+}
 
-nonisolated private let quotaDateFormatter: DateFormatter = {
+nonisolated private func makeQuotaDateFormatter() -> DateFormatter {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "zh_CN")
     formatter.dateFormat = "yyyy.M.d"
     return formatter
-}()
+}
 
 nonisolated enum CodexUsageError: LocalizedError, Equatable {
     case missingAuthFile(String)

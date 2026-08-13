@@ -45,14 +45,37 @@ nonisolated enum LogitechMouseDeviceMatcher {
     }
 }
 
+nonisolated enum LogitechMouseDeviceDiscovery {
+    static func supportedDevices() -> [IOHIDDevice] {
+        let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        IOHIDManagerSetDeviceMatching(
+            manager,
+            [kIOHIDVendorIDKey as String: LogitechMouseDeviceMatcher.vendorID] as CFDictionary
+        )
+        guard IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess else {
+            return []
+        }
+        defer { IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone)) }
+        guard let devices = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else {
+            return []
+        }
+        return devices.filter(LogitechMouseDeviceMatcher.isSupported)
+    }
+}
+
 nonisolated final class LogitechMousePresenceMonitor: @unchecked Sendable {
     typealias PresenceHandler = @Sendable (Bool) -> Void
 
     private let queue = DispatchQueue(label: "com.fanshu.monitor.mouse-presence", qos: .utility)
+    private let queueKey = DispatchSpecificKey<Void>()
     private let stateLock = NSLock()
     private var manager: IOHIDManager?
     private var handler: PresenceHandler?
     private var lastPresence: Bool?
+
+    init() {
+        queue.setSpecific(key: queueKey, value: ())
+    }
 
     deinit {
         stop()
@@ -111,9 +134,14 @@ nonisolated final class LogitechMousePresenceMonitor: @unchecked Sendable {
             return value
         }
         guard let manager else { return }
-        queue.sync {
+        let closeManager = {
             IOHIDManagerCancel(manager)
             IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+        }
+        if DispatchQueue.getSpecific(key: queueKey) != nil {
+            closeManager()
+        } else {
+            queue.sync(execute: closeManager)
         }
     }
 

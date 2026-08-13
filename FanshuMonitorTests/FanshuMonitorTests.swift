@@ -151,6 +151,18 @@ struct FanshuMonitorTests {
         )) == kinds)
     }
 
+    @Test func failedRefreshIsEligibleAgainWithoutWaitingForFullInterval() {
+        let schedule = MonitorRefreshSchedule()
+        let start = Date(timeIntervalSinceReferenceDate: 1_000)
+
+        #expect(schedule.dueKinds(at: start, visibleKinds: [.cpu]) == [.cpu])
+        schedule.markFailed([.cpu])
+        #expect(schedule.dueKinds(
+            at: start.addingTimeInterval(0.01),
+            visibleKinds: [.cpu]
+        ) == [.cpu])
+    }
+
     @Test func expensiveMetricsRequireSelectionAndAVisiblePanel() {
         let visible = MonitorSamplingContext(
             enabledMetricIDs: ["temperature"],

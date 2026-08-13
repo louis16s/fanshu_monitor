@@ -103,7 +103,10 @@ nonisolated final class SMCReader {
         case "ui16 ":
             return Double(UInt16(byteArray[0]) * 256 + UInt16(byteArray[1]))
         case "flt ":
-            let floatValue: Float = byteArray.withUnsafeBytes { $0.load(fromByteOffset: 0, as: Float.self) }
+            let floatBits = byteArray.prefix(4).enumerated().reduce(UInt32.zero) { result, element in
+                result | (UInt32(element.element) << UInt32(element.offset * 8))
+            }
+            let floatValue = Float(bitPattern: floatBits)
             return Double(floatValue)
         default:
             return nil

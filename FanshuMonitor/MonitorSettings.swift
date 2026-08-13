@@ -793,6 +793,9 @@ final class MonitorSettings: ObservableObject {
         lockScreenPoliciesEnabled = false
         lockScreenPolicies = []
         visibleKinds = Set(MonitorKind.allCases).subtracting([.storage, .network])
+        for kind in MonitorKind.allCases {
+            defaults.removeObject(forKey: Keys.enabledMetricsPrefix + kind.rawValue)
+        }
         enabledMetrics = [:]
     }
 }

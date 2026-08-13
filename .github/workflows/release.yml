@@ -30,9 +30,16 @@ jobs:
       - name: Select toolchain
         run: |
           set -euo pipefail
-          if [[ -d /Applications/Xcode_26.5.app ]]; then
-            sudo xcode-select --switch /Applications/Xcode_26.5.app/Contents/Developer
-          fi
+          for developer_dir in \
+            /Applications/Xcode_26.6.app/Contents/Developer \
+            /Applications/Xcode.app/Contents/Developer; do
+            if [[ -d "$developer_dir" ]]; then
+              sudo xcode-select --switch "$developer_dir"
+              break
+            fi
+          done
+          test "$(xcode-select -p)" = /Applications/Xcode_26.6.app/Contents/Developer \
+            || test "$(xcode-select -p)" = /Applications/Xcode.app/Contents/Developer
           sw_vers
           xcodebuild -version
 
@@ -137,6 +144,12 @@ jobs:
       - name: Build Release app
         run: |
           set -euo pipefail
+          xcodebuild \
+            -project '番薯monitor.xcodeproj' \
+            -target FanshuMonitorDirect \
+            -configuration Release \
+            CODE_SIGNING_ALLOWED=NO \
+            analyze
           xcodebuild \
             -project '番薯monitor.xcodeproj' \
             -scheme '番薯Monitor' \

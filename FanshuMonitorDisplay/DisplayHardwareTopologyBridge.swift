@@ -61,8 +61,8 @@ final class DisplayHardwareTopologyMonitor {
         bridge = nil
     }
 
-    func externalServiceCount() -> Int? {
-        bridge?.externalServiceCount()
+    func externalServiceCount() async -> Int? {
+        await bridge?.externalServiceCount()
     }
 
     func setSystemSleeping(_ sleeping: Bool) {
@@ -109,7 +109,7 @@ final class DisplayHardwareTopologyMonitor {
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, let self else { return }
             self.verificationTask = nil
-            guard self.bridge?.externalServiceCount() == 0 else { return }
+            guard await self.bridge?.externalServiceCount() == 0 else { return }
             self.lastExternalServiceRemoved()
         }
     }
@@ -139,6 +139,10 @@ nonisolated final class DisplayHardwareTopologyBridge: @unchecked Sendable {
     private static let serviceClass = "DCPAVServiceProxy"
 
     private let handler: @MainActor @Sendable (DisplayHardwareTopologyEvent) -> Void
+    private let reconciliationQueue = DispatchQueue(
+        label: "com.fanshu.monitor.display-topology-reconcile",
+        qos: .utility
+    )
     private var notificationPort: IONotificationPortRef?
     private var iterators: [io_iterator_t: ServiceEvent] = [:]
     private var knownLocations: [UInt64: DisplayHardwareServiceLocation] = [:]
@@ -198,7 +202,15 @@ nonisolated final class DisplayHardwareTopologyBridge: @unchecked Sendable {
         }
     }
 
-    func externalServiceCount() -> Int? {
+    func externalServiceCount() async -> Int? {
+        await withCheckedContinuation { continuation in
+            reconciliationQueue.async {
+                continuation.resume(returning: Self.readExternalServiceCount())
+            }
+        }
+    }
+
+    private static func readExternalServiceCount() -> Int? {
         guard let matching = IOServiceMatching(Self.serviceClass) else { return nil }
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else {

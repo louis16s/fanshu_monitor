@@ -514,7 +514,7 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             return "视网膜显示器"
         }
 
-        if let info = CoreDisplay_DisplayCreateInfoDictionary(id)?.takeRetainedValue() as? [String: Any],
+        if let info = PrivateDisplayAPI.shared.displayInfoDictionary(for: id),
            let localizedNames = info["DisplayProductName"] as? [String: String] {
             let name = localizedNames[Locale.current.identifier]
                 ?? localizedNames["zh_CN"]
@@ -1208,16 +1208,10 @@ nonisolated private final class BuiltInDisplayBlackoutService: @unchecked Sendab
 
 nonisolated private final class DisplayServicesBridge: Sendable {
     func getBrightness(displayID: CGDirectDisplayID) -> Float? {
-        var value: Float = -1
-        let result = DisplayServicesGetBrightness(displayID, &value)
-        guard result == 0, value >= 0 else {
-            return nil
-        }
-        return min(1, max(0, value))
+        PrivateDisplayAPI.shared.readBrightness(for: displayID)
     }
 
     func setBrightness(displayID: CGDirectDisplayID, value: Float) -> Bool {
-        let clampedValue = min(1, max(0, value))
-        return DisplayServicesSetBrightness(displayID, clampedValue) == 0
+        PrivateDisplayAPI.shared.setBrightness(for: displayID, value: value)
     }
 }

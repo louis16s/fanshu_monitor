@@ -119,7 +119,7 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
             let percentage = range.percentage(from: values.current)
             registry.recordReadSuccess(key)
 
-            displayDDCLog.notice(
+            displayDDCLog.debug(
                 "Read DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public) code \(vcp.rawValue, privacy: .public) raw \(values.current, privacy: .public)/\(values.max, privacy: .public) range \(range.min, privacy: .public)-\(range.max, privacy: .public) mapped \(percentage, privacy: .public)"
             )
             return min(100, max(0, percentage))
@@ -164,7 +164,7 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
             )
             if value <= 0, muteSuccess {
                 registry.recordWriteSuccess(key)
-                displayDDCLog.notice("Wrote DDC mute display \(displayID, privacy: .public)")
+                displayDDCLog.debug("Wrote DDC mute display \(displayID, privacy: .public)")
                 return .success()
             }
         }
@@ -176,7 +176,7 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
                 vcpCode: vcp.rawValue,
                 value: ddcValue
             )
-            displayDDCLog.notice(
+            displayDDCLog.debug(
                 "Write DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public) code \(vcp.rawValue, privacy: .public) value \(ddcValue, privacy: .public) range \(range.min, privacy: .public)-\(range.max, privacy: .public) success \(success, privacy: .public)"
             )
             if success {
@@ -558,12 +558,12 @@ nonisolated private enum DDCTransport {
                     guard let baseAddress = buffer.baseAddress else {
                         return false
                     }
-                    return IOAVServiceWriteI2C(
-                        service,
-                        UInt32(Self.sevenBitAddress),
-                        UInt32(dataAddress),
-                        baseAddress,
-                        packetCount
+                    return PrivateDisplayAPI.shared.writeI2C(
+                        service: service,
+                        chipAddress: UInt32(Self.sevenBitAddress),
+                        dataAddress: UInt32(dataAddress),
+                        inputBuffer: baseAddress,
+                        inputBufferSize: packetCount
                     ) == KERN_SUCCESS
                 }
             }
@@ -579,12 +579,12 @@ nonisolated private enum DDCTransport {
                     guard let baseAddress = buffer.baseAddress else {
                         return false
                     }
-                    return IOAVServiceReadI2C(
-                        service,
-                        UInt32(Self.sevenBitAddress),
-                        0,
-                        baseAddress,
-                        replyCount
+                    return PrivateDisplayAPI.shared.readI2C(
+                        service: service,
+                        chipAddress: UInt32(Self.sevenBitAddress),
+                        offset: 0,
+                        outputBuffer: baseAddress,
+                        outputBufferSize: replyCount
                     ) == KERN_SUCCESS
                 }
                 if success, reply.count >= 2 {
@@ -801,7 +801,7 @@ nonisolated private final class Arm64DDCMatcher {
             IOOptionBits(kIORegistryIterateRecursively)
         ), let location = unmanagedLocation.takeRetainedValue() as? String,
            location == "External",
-           let avService = IOAVServiceCreateWithService(kCFAllocatorDefault, entry)?.takeRetainedValue()
+           let avService = PrivateDisplayAPI.shared.createAVService(for: entry)
         else {
             return
         }
@@ -810,7 +810,7 @@ nonisolated private final class Arm64DDCMatcher {
     }
 
     private func matchScore(displayID: CGDirectDisplayID, registryService: RegistryService) -> Int {
-        guard let info = CoreDisplay_DisplayCreateInfoDictionary(displayID)?.takeRetainedValue() as NSDictionary? else {
+        guard let info = PrivateDisplayAPI.shared.displayInfoDictionary(for: displayID) as NSDictionary? else {
             return 0
         }
 

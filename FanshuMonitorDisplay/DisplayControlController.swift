@@ -294,7 +294,11 @@ final class DisplayControlController: ObservableObject {
             )
             if monitor.start() {
                 hardwareTopologyMonitor = monitor
-                if let externalServiceCount = monitor.externalServiceCount() {
+                Task { @MainActor [weak self, monitor] in
+                    guard let self,
+                          self.hardwareTopologyMonitor === monitor,
+                          let externalServiceCount = await monitor.externalServiceCount()
+                    else { return }
                     AppLogger.ui.notice(
                         "Display hardware monitor started with \(externalServiceCount, privacy: .public) external services"
                     )
@@ -1040,7 +1044,7 @@ final class DisplayControlController: ObservableObject {
                 else {
                     break
                 }
-                let externalServiceCount = self.hardwareTopologyMonitor?.externalServiceCount()
+                let externalServiceCount = await self.hardwareTopologyMonitor?.externalServiceCount()
                 if !self.builtInDisconnectRecoveryPending,
                    DisplayHardwareDisconnectRecoveryPolicy.shouldAttemptWatchdogRecovery(
                        externalServiceCount: externalServiceCount,

@@ -20,6 +20,7 @@
 - 采样器：`SamplingCoordinator` 按可见模块懒加载独立的 `MonitorModuleSamplerWorker`
 - 功能控制器：显示器、鼠标、锁屏、Codex 和更新检查彼此独立，显示器 MainActor 状态与后台 `DisplayControlWorker` 分文件维护
 - 硬件桥接：DDC、DisplayServices、SMC、IOKit 与 HID 显式脱离主 actor，并在后台串行队列执行
+- 显示器私有能力：CoreDisplay、DisplayServices、IOAVService 与 OSD 统一通过 `PrivateDisplayAPI` 运行时解析，缺失时只关闭对应能力，不阻止应用启动
 - 工程目标：只保留正式 `FanshuMonitorDirect` app target，测试、CI 与 Release 共用同一产品边界
 - 系统能力：私有锁屏与显示器隔离符号统一登记到 `SystemCapabilityRegistry`，缺失时保留明确的降级状态
 - 持久化：`MonitorSettings` 只声明设置行为，JSON 编解码由 `PreferencesCodec` 统一处理和记录错误
@@ -75,6 +76,7 @@
 - [x] Release 生成 SHA-256 和 JSON manifest
 - [x] Release 强制使用 Developer ID Application 签名
 - [x] Release 提交 Apple 公证并执行 stapler 验证
+- [x] 私有显示器框架不再直接链接，Release 不依赖当前系统是否暴露对应链接目标
 
 ## 后续建议
 

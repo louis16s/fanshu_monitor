@@ -100,8 +100,11 @@ final class MouseControlController: ObservableObject {
         deviceRequestGeneration &+= 1
         isApplyingDPI = false
         let requestGeneration = deviceRequestGeneration
+        let listener = hidButtonListener
         Task { [weak self, mouseWorker] in
+            await listener?.suspendForDeviceOperation()
             let result = await mouseWorker.detectDevice(readDPI: readDPI)
+            listener?.resumeAfterDeviceOperation()
             guard let self, requestGeneration == self.deviceRequestGeneration else { return }
             self.device = result
             if let result {
@@ -124,9 +127,12 @@ final class MouseControlController: ObservableObject {
         let requestGeneration = deviceRequestGeneration
         isApplyingDPI = true
         statusText = "正在设置 DPI"
+        let listener = hidButtonListener
 
         Task { [weak self, mouseWorker] in
+            await listener?.suspendForDeviceOperation()
             let success = await mouseWorker.setDPI(clamped)
+            listener?.resumeAfterDeviceOperation()
             guard let self, requestGeneration == self.deviceRequestGeneration else { return }
             self.isApplyingDPI = false
             if success {

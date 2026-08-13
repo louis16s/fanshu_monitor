@@ -30,7 +30,7 @@ nonisolated final class LogitechHIDPPService: @unchecked Sendable {
     }
 
     private nonisolated func withClient<T>(_ operation: (HIDPPClient) -> T?) -> T? {
-        for device in enumerateLogitechDevices() {
+        for device in LogitechMouseDeviceDiscovery.supportedDevices() {
             let client = HIDPPClient(device: device)
             guard client.open() else { continue }
             defer { client.close() }
@@ -42,20 +42,6 @@ nonisolated final class LogitechHIDPPService: @unchecked Sendable {
             }
         }
         return nil
-    }
-
-    private nonisolated func enumerateLogitechDevices() -> [IOHIDDevice] {
-        let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        let matching = [kIOHIDVendorIDKey as String: LogitechMouseDeviceMatcher.vendorID] as CFDictionary
-        IOHIDManagerSetDeviceMatching(manager, matching)
-        guard IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess else {
-            return []
-        }
-        defer { IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone)) }
-        guard let set = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else {
-            return []
-        }
-        return Array(set).filter(LogitechMouseDeviceMatcher.isSupported)
     }
 
     private nonisolated static func intProperty(_ device: IOHIDDevice, _ key: CFString) -> Int {

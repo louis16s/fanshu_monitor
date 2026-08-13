@@ -435,18 +435,6 @@
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "FanshuMonitorDisplay/DisplayBridgingHeader.h";
-				FRAMEWORK_SEARCH_PATHS = (
-					"",
-					"/System/Library/PrivateFrameworks",
-				);
-				OTHER_LDFLAGS = (
-					"-framework",
-					CoreDisplay,
-					"-framework",
-					DisplayServices,
-					"-framework",
-					OSD,
-				);
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -495,18 +483,6 @@
 				STRIP_INSTALLED_PRODUCT = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Osize";
 				SWIFT_OBJC_BRIDGING_HEADER = "FanshuMonitorDisplay/DisplayBridgingHeader.h";
-				FRAMEWORK_SEARCH_PATHS = (
-					"",
-					"/System/Library/PrivateFrameworks",
-				);
-				OTHER_LDFLAGS = (
-					"-framework",
-					CoreDisplay,
-					"-framework",
-					DisplayServices,
-					"-framework",
-					OSD,
-				);
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;

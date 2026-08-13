@@ -10,6 +10,9 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
     private var restartAttempt = 0
     private var workerRunLoop: CFRunLoop?
     private var gestureMapping = MouseButtonMapping(action: .passThrough, shortcut: nil)
+    private var suspensionWaiters: [CheckedContinuation<Void, Never>] = []
+    private var deviceOperationSuspensionCount = 0
+    private var shouldResumeAfterDeviceOperation = false
 
     deinit {
         stop()
@@ -44,6 +47,7 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
         let runLoop = stateLock.withLock {
             desiredRunning = false
             restartAttempt = 0
+            shouldResumeAfterDeviceOperation = false
             return workerRunLoop
         }
         if let runLoop {
@@ -51,9 +55,53 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
         }
     }
 
+    func suspendForDeviceOperation() async {
+        let runLoop = stateLock.withLock { () -> CFRunLoop? in
+            deviceOperationSuspensionCount += 1
+            guard deviceOperationSuspensionCount == 1, desiredRunning else {
+                return nil
+            }
+            shouldResumeAfterDeviceOperation = true
+            desiredRunning = false
+            restartAttempt = 0
+            return workerRunLoop
+        }
+        guard runLoop != nil || stateLock.withLock({ workerActive }) else { return }
+        if let runLoop {
+            CFRunLoopStop(runLoop)
+        }
+
+        await withCheckedContinuation { continuation in
+            let resumeImmediately = stateLock.withLock {
+                if workerActive {
+                    suspensionWaiters.append(continuation)
+                    return false
+                }
+                return true
+            }
+            if resumeImmediately {
+                continuation.resume()
+            }
+        }
+    }
+
+    func resumeAfterDeviceOperation() {
+        let shouldResume = stateLock.withLock {
+            guard deviceOperationSuspensionCount > 0 else { return false }
+            deviceOperationSuspensionCount -= 1
+            guard deviceOperationSuspensionCount == 0 else { return false }
+            let value = shouldResumeAfterDeviceOperation
+            shouldResumeAfterDeviceOperation = false
+            return value
+        }
+        if shouldResume {
+            start()
+        }
+    }
+
     private func listen() {
         autoreleasepool {
-            guard let device = Self.enumerateLogitechDevices().first else { return }
+            guard let device = LogitechMouseDeviceDiscovery.supportedDevices().first else { return }
 
             let client = Client(device: device)
             guard client.open() else { return }
@@ -99,16 +147,19 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
     }
 
     private func workerDidExit() {
-        let restartDelay = stateLock.withLock { () -> TimeInterval? in
+        let result = stateLock.withLock { () -> (TimeInterval?, [CheckedContinuation<Void, Never>]) in
             workerActive = false
             workerRunLoop = nil
-            guard desiredRunning else { return nil }
+            let waiters = suspensionWaiters
+            suspensionWaiters.removeAll()
+            guard desiredRunning else { return (nil, waiters) }
             let delay = min(30, pow(2, Double(restartAttempt)))
             restartAttempt = min(restartAttempt + 1, 5)
             workerActive = true
-            return delay
+            return (delay, waiters)
         }
-        if let restartDelay {
+        result.1.forEach { $0.resume() }
+        if let restartDelay = result.0 {
             queue.asyncAfter(deadline: .now() + restartDelay) { [weak self] in
                 guard let self else { return }
                 guard self.shouldContinue else {
@@ -122,20 +173,6 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
 
     private var currentGestureMapping: MouseButtonMapping {
         stateLock.withLock { gestureMapping }
-    }
-
-    private static func enumerateLogitechDevices() -> [IOHIDDevice] {
-        let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        IOHIDManagerSetDeviceMatching(
-            manager,
-            [kIOHIDVendorIDKey as String: LogitechMouseDeviceMatcher.vendorID] as CFDictionary
-        )
-        guard IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess else {
-            return []
-        }
-        defer { IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone)) }
-        guard let set = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else { return [] }
-        return Array(set).filter(LogitechMouseDeviceMatcher.isSupported)
     }
 
     private final class Client {

@@ -5,11 +5,11 @@ nonisolated func percent(_ value: Double) -> String {
 }
 
 nonisolated func bytes(_ value: Double) -> String {
-    byteFormatter.string(fromByteCount: Int64(max(0, value)))
+    makeByteFormatter(style: .file).string(fromByteCount: Int64(max(0, value)))
 }
 
 nonisolated func memoryBytes(_ value: Double) -> String {
-    memoryByteFormatter.string(fromByteCount: Int64(max(0, value)))
+    makeByteFormatter(style: .memory).string(fromByteCount: Int64(max(0, value)))
 }
 
 nonisolated func wattString(_ value: Double?, rounded: Bool = false) -> String {
@@ -36,19 +36,12 @@ nonisolated func nonZeroWatts(_ value: Double?) -> Double? {
     return value
 }
 
-nonisolated(unsafe) private let byteFormatter: ByteCountFormatter = {
+nonisolated private func makeByteFormatter(style: ByteCountFormatter.CountStyle) -> ByteCountFormatter {
     let formatter = ByteCountFormatter()
     formatter.allowedUnits = [.useGB, .useMB]
-    formatter.countStyle = .file
+    formatter.countStyle = style
     return formatter
-}()
-
-nonisolated(unsafe) private let memoryByteFormatter: ByteCountFormatter = {
-    let formatter = ByteCountFormatter()
-    formatter.allowedUnits = [.useGB, .useMB]
-    formatter.countStyle = .memory
-    return formatter
-}()
+}
 
 nonisolated func bytesPerSecond(_ value: Double) -> String {
     let safeValue = max(0, value)

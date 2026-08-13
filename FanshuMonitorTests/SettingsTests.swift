@@ -312,6 +312,20 @@ struct SettingsTests {
         #expect(!reloaded.isMetricEnabled("health", for: .storage))
     }
 
+    @Test func resetAllRemovesPersistedMetricSelections() {
+        let suite = "resetAllRemovesPersistedMetricSelections"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(["used"], forKey: "settings.enabledMetrics.storage")
+
+        let settings = MonitorSettings(defaults: defaults)
+        settings.resetAll()
+
+        #expect(defaults.object(forKey: "settings.enabledMetrics.storage") == nil)
+        let reloaded = MonitorSettings(defaults: defaults)
+        #expect(reloaded.isMetricEnabled("health", for: .storage))
+    }
+
     @Test func mouseControlDefaultsAreLowOverhead() {
         let defaults = UserDefaults(suiteName: "mouseControlDefaultsAreLowOverhead")!
         defaults.removePersistentDomain(forName: "mouseControlDefaultsAreLowOverhead")

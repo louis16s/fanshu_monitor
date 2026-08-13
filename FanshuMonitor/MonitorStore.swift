@@ -32,8 +32,7 @@ final class MonitorStore: ObservableObject {
     private var timerCancellable: AnyCancellable?
     private var animationTimerCancellable: AnyCancellable?
     private let samplingCoordinator = SamplingCoordinator()
-    private var samplingTask: Task<Void, Never>?
-    private var pendingSamplingKinds: Set<MonitorKind> = []
+    private var samplingTasks: [MonitorKind: Task<Void, Never>] = [:]
     private var codexRefreshTask: Task<Void, Never>?
     private var codexTaskProgressTask: Task<Void, Never>?
     private var codexTaskProgressTimerCancellable: AnyCancellable?
@@ -194,6 +193,16 @@ final class MonitorStore: ObservableObject {
                 self?.requestWiFiAuthorizationIfNeeded()
             }
             .store(in: &cancellables)
+        settings.$enabledMetrics
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.cancelSamplingTask()
+                self.refreshSchedule.reset()
+                self.advance(kinds: self.activeSamplingKinds)
+            }
+            .store(in: &cancellables)
         configureSamplingTimer()
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
@@ -214,7 +223,8 @@ final class MonitorStore: ObservableObject {
     }
 
     deinit {
-        samplingTask?.cancel()
+        samplingTasks.values.forEach { $0.cancel() }
+        samplingTasks.removeAll()
         codexRefreshTask?.cancel()
         codexTaskProgressTask?.cancel()
         codexTaskProgressTimerCancellable?.cancel()
@@ -339,13 +349,6 @@ final class MonitorStore: ObservableObject {
         }
         guard !requestedKinds.isEmpty else { return }
 
-        guard samplingTask == nil else {
-            pendingSamplingKinds.formUnion(requestedKinds)
-            return
-        }
-
-        samplingGeneration &+= 1
-        let requestGeneration = samplingGeneration
         let enabledMetrics = enabledSamplingMetrics(for: requestedKinds)
         let panelVisible = isPanelVisible
         if panelVisible,
@@ -355,45 +358,35 @@ final class MonitorStore: ObservableObject {
         }
         let coordinator = samplingCoordinator
         let previousModules = allModules
+        let requestGeneration = samplingGeneration
 
-        samplingTask = Task { [weak self] in
-            guard let self else { return }
-            await withTaskGroup(of: MonitorModule?.self) { group in
-                for kind in requestedKinds {
-                    let previous = previousModules.first { $0.kind == kind }
-                    let metricIDs = enabledMetrics[kind] ?? []
-                    let mode: MonitorSamplingMode = firstPaintKinds.contains(kind)
-                        ? .firstPaint
-                        : .routine
-                    group.addTask {
-                        await coordinator.sampleModule(
-                            kind: kind,
-                            previous: previous,
-                            enabledMetricIDs: metricIDs,
-                            panelVisible: panelVisible,
-                            mode: mode
-                        )
-                    }
-                }
+        for kind in requestedKinds where samplingTasks[kind] == nil {
+            let previous = previousModules.first { $0.kind == kind }
+            let metricIDs = enabledMetrics[kind] ?? []
+            let mode: MonitorSamplingMode = firstPaintKinds.contains(kind)
+                ? .firstPaint
+                : .routine
 
-                for await module in group {
-                    guard !Task.isCancelled,
-                          let module,
-                          requestGeneration == self.samplingGeneration
-                    else {
-                        group.cancelAll()
-                        return
-                    }
+            samplingTasks[kind] = Task { [weak self] in
+                let module = await coordinator.sampleModule(
+                    kind: kind,
+                    previous: previous,
+                    enabledMetricIDs: metricIDs,
+                    panelVisible: panelVisible,
+                    mode: mode
+                )
+                guard let self else { return }
+
+                // A canceled generation must not touch the task or schedule
+                // belonging to a newer request for the same module.
+                guard requestGeneration == self.samplingGeneration else { return }
+                self.samplingTasks[kind] = nil
+                if !Task.isCancelled, let module {
                     self.mergeSampledModule(module)
+                    self.refreshSchedule.markRefreshed([kind], at: Date())
+                } else {
+                    self.refreshSchedule.markFailed([kind])
                 }
-            }
-
-            guard requestGeneration == self.samplingGeneration else { return }
-            self.samplingTask = nil
-            let pendingKinds = self.pendingSamplingKinds
-            self.pendingSamplingKinds.removeAll()
-            if !pendingKinds.isEmpty {
-                self.advance(kinds: pendingKinds)
             }
         }
     }
@@ -567,9 +560,8 @@ final class MonitorStore: ObservableObject {
     }
 
     private func cancelSamplingTask() {
-        samplingTask?.cancel()
-        samplingTask = nil
-        pendingSamplingKinds.removeAll()
+        samplingTasks.values.forEach { $0.cancel() }
+        samplingTasks.removeAll()
         samplingGeneration &+= 1
     }
 

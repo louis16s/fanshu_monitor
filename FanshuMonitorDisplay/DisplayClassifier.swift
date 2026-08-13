@@ -82,12 +82,10 @@ nonisolated struct DisplayClassifier {
     }
 
     nonisolated static func defaultProbeNativeBrightness(_ displayID: CGDirectDisplayID) -> Bool {
-        var brightness: Float = -1
-        let result = DisplayServicesGetBrightness(displayID, &brightness)
-        return result == 0 && brightness >= 0
+        PrivateDisplayAPI.shared.readBrightness(for: displayID) != nil
     }
 
     nonisolated static func defaultInfo(_ displayID: CGDirectDisplayID) -> [String: Any] {
-        CoreDisplay_DisplayCreateInfoDictionary(displayID)?.takeRetainedValue() as? [String: Any] ?? [:]
+        PrivateDisplayAPI.shared.displayInfoDictionary(for: displayID) ?? [:]
     }
 }

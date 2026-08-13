@@ -25,7 +25,16 @@ jobs:
       - name: Select toolchain
         run: |
           set -euo pipefail
-          sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
+          for developer_dir in \
+            /Applications/Xcode_26.6.app/Contents/Developer \
+            /Applications/Xcode.app/Contents/Developer; do
+            if [[ -d "$developer_dir" ]]; then
+              sudo xcode-select --switch "$developer_dir"
+              break
+            fi
+          done
+          test "$(xcode-select -p)" = /Applications/Xcode_26.6.app/Contents/Developer \
+            || test "$(xcode-select -p)" = /Applications/Xcode.app/Contents/Developer
           xcodebuild -version
 
       - name: Run unit tests

@@ -75,6 +75,15 @@ final class MonitorRefreshSchedule {
         }
     }
 
+    /// A request is reserved when it is scheduled so the timer cannot enqueue
+    /// duplicate work. Failed or cancelled requests must release that
+    /// reservation and become eligible on the next tick.
+    func markFailed(_ kinds: some Sequence<MonitorKind>) {
+        for kind in kinds {
+            lastRefreshDates.removeValue(forKey: kind)
+        }
+    }
+
     func setInterval(_ interval: TimeInterval, for kind: MonitorKind) {
         intervals[kind] = max(tickInterval, interval)
     }

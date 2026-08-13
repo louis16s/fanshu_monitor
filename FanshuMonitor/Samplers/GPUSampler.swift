@@ -6,10 +6,11 @@ import OSLog
 nonisolated final class GPUSampler: MonitorSampler {
     var kind: MonitorKind { .gpu }
     private lazy var smcReader = SMCReader()
+    private var lastUnavailableLogDate: Date?
 
     func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
         guard let reading = gpuReading() else {
-            AppLogger.sampler.error("gpuReading() returned nil, GPU data unavailable")
+            logUnavailable("gpuReading() returned nil, GPU data unavailable")
             return previous ?? MonitorModule.placeholder(kind: .gpu)
         }
 
@@ -76,7 +77,7 @@ nonisolated final class GPUSampler: MonitorSampler {
     private func gpuReading() -> GPUReading? {
         let accelerators = acceleratorServices()
         guard !accelerators.isEmpty else {
-            AppLogger.sampler.error("No IOAccelerator services found")
+            logUnavailable("No IOAccelerator services found")
             return nil
         }
         defer {
@@ -86,7 +87,7 @@ nonisolated final class GPUSampler: MonitorSampler {
         var best: GPUReading?
         for accelerator in accelerators {
             guard let stats = registryDictionaryValue(accelerator, "PerformanceStatistics") else {
-                AppLogger.sampler.error("Failed to read PerformanceStatistics from IOAccelerator service")
+                logUnavailable("Failed to read PerformanceStatistics from IOAccelerator service")
                 continue
             }
 
@@ -113,11 +114,20 @@ nonisolated final class GPUSampler: MonitorSampler {
         return best
     }
 
+    private func logUnavailable(_ message: String) {
+        let now = Date()
+        guard lastUnavailableLogDate.map({ now.timeIntervalSince($0) >= 60 }) ?? true else {
+            return
+        }
+        lastUnavailableLogDate = now
+        AppLogger.sampler.error("\(message, privacy: .public)")
+    }
+
     private func acceleratorServices() -> [io_service_t] {
         var iterator: io_iterator_t = 0
         let result = IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator)
         guard result == KERN_SUCCESS else {
-            AppLogger.sampler.error("IOServiceGetMatchingServices for IOAccelerator failed with result: \(result)")
+            logUnavailable("IOServiceGetMatchingServices for IOAccelerator failed with result: \(result)")
             return []
         }
         defer { IOObjectRelease(iterator) }
