@@ -44,6 +44,7 @@ struct SettingsTests {
 
     @Test func codexOptionsGroupQuotasBeforeTasksAndExtras() {
         #expect(MonitorKind.codex.availableMetrics.map(\.id) == [
+            "plan",
             "five-hour",
             "five-hour-reset",
             "weekly",
@@ -99,6 +100,19 @@ struct SettingsTests {
         let settings = MonitorSettings(defaults: defaults)
 
         #expect(settings.codexRefreshIntervalMinutes == 5)
+    }
+
+    @Test func codexHeaderDetailPreferencePersists() {
+        let suite = "codexHeaderDetailPreferencePersists"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+
+        let settings = MonitorSettings(defaults: defaults)
+        #expect(settings.codexHeaderDetailPreference == .plan)
+        settings.codexHeaderDetailPreference = .remaining
+
+        let reloaded = MonitorSettings(defaults: defaults)
+        #expect(reloaded.codexHeaderDetailPreference == .remaining)
     }
 
     @Test func codexResetCreditsIsOptionalByDefault() {
@@ -277,16 +291,16 @@ struct SettingsTests {
         #expect(settings.canEnableMetric("temperature", for: .gpu))
     }
 
-    @Test func codexPlanIsNotASelectableMetric() {
-        let defaults = UserDefaults(suiteName: "codexPlanIsNotASelectableMetric")!
-        defaults.removePersistentDomain(forName: "codexPlanIsNotASelectableMetric")
+    @Test func codexPlanCanBeSelectedForTheDetailGrid() {
+        let defaults = UserDefaults(suiteName: "codexPlanCanBeSelectedForTheDetailGrid")!
+        defaults.removePersistentDomain(forName: "codexPlanCanBeSelectedForTheDetailGrid")
         let settings = MonitorSettings(defaults: defaults)
 
-        #expect(!MonitorKind.codex.availableMetrics.contains { $0.id == "plan" })
+        #expect(MonitorKind.codex.availableMetrics.contains { $0.id == "plan" })
         #expect(!settings.isMetricEnabled("plan", for: .codex))
-        #expect(!settings.canEnableMetric("plan", for: .codex))
+        #expect(settings.canEnableMetric("plan", for: .codex))
         settings.setMetric("plan", enabled: true, for: .codex)
-        #expect(!settings.isMetricEnabled("plan", for: .codex))
+        #expect(settings.isMetricEnabled("plan", for: .codex))
     }
 
     @Test func storageDefaultsIncludeDiskHealth() {

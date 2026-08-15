@@ -107,6 +107,22 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
     }
 }
 
+enum CodexHeaderDetailPreference: String, CaseIterable, Identifiable {
+    case plan
+    case remaining
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .plan:
+            String(localized: "settings.codex-header.plan")
+        case .remaining:
+            String(localized: "settings.codex-header.remaining")
+        }
+    }
+}
+
 final class MonitorSettings: ObservableObject {
     @Published var launchAtLogin: Bool = false
     @Published var themePreference: AppThemePreference = .system
@@ -124,6 +140,7 @@ final class MonitorSettings: ObservableObject {
     @Published var displaySoftwareDimmingEnabled: Bool = true
     @Published var brightnessKeyStepPercent: Double = 5
     @Published var codexRefreshIntervalMinutes: Double = 5
+    @Published var codexHeaderDetailPreference: CodexHeaderDetailPreference = .plan
     @Published var updateChecksEnabled: Bool = true
     @Published var brightnessKeyInterceptionEnabled: Bool = true
     @Published var mouseControlEnabled: Bool = false
@@ -182,6 +199,9 @@ final class MonitorSettings: ObservableObject {
         displaySoftwareDimmingEnabled = defaults.object(forKey: Keys.displaySoftwareDimmingEnabled) as? Bool ?? true
         brightnessKeyStepPercent = defaults.object(forKey: Keys.brightnessKeyStepPercent) as? Double ?? 5
         codexRefreshIntervalMinutes = defaults.object(forKey: Keys.codexRefreshIntervalMinutes) as? Double ?? 5
+        codexHeaderDetailPreference = CodexHeaderDetailPreference(
+            rawValue: defaults.string(forKey: Keys.codexHeaderDetailPreference) ?? ""
+        ) ?? .plan
         updateChecksEnabled = defaults.object(forKey: Keys.updateChecksEnabled) as? Bool ?? true
         brightnessKeyInterceptionEnabled = defaults.object(forKey: Keys.brightnessKeyInterceptionEnabled) as? Bool ?? true
         mouseControlEnabled = defaults.object(forKey: Keys.mouseControlEnabled) as? Bool ?? false
@@ -471,6 +491,7 @@ final class MonitorSettings: ObservableObject {
                     "5H刷新": "five-hour-reset",
                     "周刷新": "weekly-reset",
                     "重置卡": "reset-credits",
+                    "套餐": "plan",
                     "运行中的任务": "active-tasks",
                     "进行中任务": "active-tasks",
                     "活动任务": "active-tasks",
@@ -617,6 +638,13 @@ final class MonitorSettings: ObservableObject {
             .dropFirst()
             .sink { [weak self] newValue in
                 self?.persist(min(60, max(1, newValue)), forKey: Keys.codexRefreshIntervalMinutes)
+            }
+            .store(in: &cancellables)
+
+        $codexHeaderDetailPreference
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.persist(newValue.rawValue, forKey: Keys.codexHeaderDetailPreference)
             }
             .store(in: &cancellables)
 
@@ -780,6 +808,7 @@ final class MonitorSettings: ObservableObject {
         displaySoftwareDimmingEnabled = true
         brightnessKeyStepPercent = 5
         codexRefreshIntervalMinutes = 5
+        codexHeaderDetailPreference = .plan
         updateChecksEnabled = true
         brightnessKeyInterceptionEnabled = true
         mouseControlEnabled = false
@@ -817,6 +846,7 @@ private enum Keys {
     static let displaySoftwareDimmingEnabled = "settings.display.softwareDimmingEnabled"
     static let brightnessKeyStepPercent = "settings.display.brightnessKeyStepPercent"
     static let codexRefreshIntervalMinutes = "settings.codexRefreshIntervalMinutes"
+    static let codexHeaderDetailPreference = "settings.codex.headerDetailPreference"
     static let updateChecksEnabled = "settings.updateChecksEnabled"
     static let brightnessKeyInterceptionEnabled = "settings.brightnessKeyInterceptionEnabled"
     static let mouseControlEnabled = "settings.mouse.controlEnabled"

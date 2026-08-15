@@ -62,6 +62,12 @@
         "en": { "stringUnit": { "state": "translated", "value": "5H" } }
       }
     },
+    "metric.codex.plan": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "套餐" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Plan" } }
+      }
+    },
     "metric.codex.next-reset": {
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "下次刷新" } },
@@ -1729,7 +1735,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "额度"
+            "value": "限额"
           }
         },
         "en": {
@@ -1738,6 +1744,30 @@
             "value": "Limits"
           }
         }
+      }
+    },
+    "settings.codex-header": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "标题显示" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Header Value" } }
+      }
+    },
+    "settings.codex-header.subtitle": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择 Codex Limits 后显示的信息" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Choose what appears after Codex Limits" } }
+      }
+    },
+    "settings.codex-header.plan": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "套餐" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Plan" } }
+      }
+    },
+    "settings.codex-header.remaining": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "剩余用量" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Remaining" } }
       }
     },
     "settings.codex-activity": {

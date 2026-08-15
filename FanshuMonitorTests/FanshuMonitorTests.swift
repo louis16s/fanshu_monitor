@@ -829,6 +829,17 @@ struct FanshuMonitorTests {
 
         #expect(presentation.hasFiveHourQuota)
         #expect(presentation.progressValue == 47)
+        #expect(presentation.fiveHourText == "47%")
+    }
+
+    @Test func codexQuotaPresentationIdentifiesAWeeklyFallback() {
+        let presentation = CodexQuotaPresentation(metrics: [
+            MonitorMetric(name: "five-hour", value: "--"),
+            MonitorMetric(name: "weekly", value: "80%")
+        ])
+
+        #expect(!presentation.hasFiveHourQuota)
+        #expect(presentation.hasWeeklyQuota)
     }
 
     @Test func codexTaskProgressReadsEveryActiveConversationTitle() async throws {

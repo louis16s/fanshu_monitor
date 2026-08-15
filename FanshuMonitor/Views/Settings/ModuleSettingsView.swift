@@ -21,6 +21,19 @@ struct ModuleSettingsView: View {
 
             if kind == .codex {
                 SettingsGroup("Codex") {
+                    SettingsRow(title: String(localized: "settings.codex-header"), subtitle: String(localized: "settings.codex-header.subtitle")) {
+                        Picker("", selection: $settings.codexHeaderDetailPreference) {
+                            ForEach(CodexHeaderDetailPreference.allCases) { preference in
+                                Text(preference.title).tag(preference)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 154)
+                    }
+
+                    SettingsDivider()
+
                     SettingsRow(title: String(localized: "settings.codex-refresh-interval"), subtitle: String(localized: "settings.codex-refresh-interval.subtitle")) {
                         Stepper(value: $settings.codexRefreshIntervalMinutes, in: 1...60, step: 1) {
                             Text(codexRefreshIntervalText)

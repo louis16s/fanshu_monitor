@@ -2,6 +2,7 @@ import Foundation
 
 struct CodexQuotaPresentation: Equatable, Sendable {
     let fiveHourPercent: Double?
+    let fiveHourText: String
     let weeklyPercent: Double?
     let weeklyText: String
     let weeklyResetText: String
@@ -9,6 +10,7 @@ struct CodexQuotaPresentation: Equatable, Sendable {
     init(metrics: [MonitorMetric]) {
         let values = Dictionary(metrics.map { ($0.name, $0.value) }, uniquingKeysWith: { _, latest in latest })
         fiveHourPercent = Self.percent(from: values["five-hour"])
+        fiveHourText = Self.displayValue(values["five-hour"])
         weeklyPercent = Self.percent(from: values["weekly"])
         weeklyText = Self.displayValue(values["weekly"])
         weeklyResetText = Self.displayValue(values["weekly-reset"])
@@ -16,6 +18,10 @@ struct CodexQuotaPresentation: Equatable, Sendable {
 
     var hasFiveHourQuota: Bool {
         fiveHourPercent != nil
+    }
+
+    var hasWeeklyQuota: Bool {
+        weeklyPercent != nil
     }
 
     var progressValue: Double {

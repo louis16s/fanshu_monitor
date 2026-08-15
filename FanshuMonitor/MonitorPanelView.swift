@@ -181,7 +181,7 @@ struct MonitorPanelView: View {
             MetricGlassRow(
                 module: module,
                 theme: theme,
-                detail: module.summary,
+                detail: codexHeaderDetail(for: module),
                 details: enabledMetrics(for: module),
                 codexTasks: settings.isMetricEnabled(.activeTasks, for: .codex)
                     ? store.codexTasks
@@ -197,6 +197,20 @@ struct MonitorPanelView: View {
         let enabledIds = settings.enabledMetrics[module.kind] ?? defaultMetricIds(for: module.kind)
         let resolvedIds = module.kind.resolvedPanelMetricIDs(from: enabledIds)
         return module.metrics.filter { resolvedIds.contains($0.name) }
+    }
+
+    private func codexHeaderDetail(for module: MonitorModule) -> String {
+        switch settings.codexHeaderDetailPreference {
+        case .plan:
+            return module.metrics.first { $0.name == .plan }?.value ?? module.summary
+        case .remaining:
+            let presentation = CodexQuotaPresentation(metrics: module.metrics)
+            if presentation.hasFiveHourQuota {
+                return "5H \(presentation.fiveHourText)"
+            }
+            guard presentation.hasWeeklyQuota else { return "--" }
+            return "\(String(localized: "metric.codex.weekly")) \(presentation.weeklyText)"
+        }
     }
 
     private func defaultMetricIds(for kind: MonitorKind) -> Set<MetricID> {
