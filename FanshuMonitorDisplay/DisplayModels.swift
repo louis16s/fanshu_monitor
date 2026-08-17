@@ -305,6 +305,34 @@ nonisolated enum BuiltInBlackoutIntentPolicy {
     }
 }
 
+nonisolated enum BuiltInBlackoutMaintenanceAction: Equatable {
+    case recordIsolation
+    case retryPreservingIntent
+}
+
+nonisolated enum BuiltInBlackoutMaintenancePolicy {
+    static func action(afterAttemptSucceeded succeeded: Bool) -> BuiltInBlackoutMaintenanceAction {
+        succeeded ? .recordIsolation : .retryPreservingIntent
+    }
+
+    static func shouldRunDisconnectRecovery(isSystemSleeping: Bool) -> Bool {
+        !isSystemSleeping
+    }
+
+    static func shouldReapplyUnexpectedRestore(
+        externalServiceCount: Int?,
+        hasKnownExternalDisplay: Bool,
+        blackoutDesired: Bool,
+        builtInDisplayIsOffline: Bool
+    ) -> Bool {
+        guard blackoutDesired, !builtInDisplayIsOffline else { return false }
+        if let externalServiceCount {
+            return externalServiceCount > 0
+        }
+        return hasKnownExternalDisplay
+    }
+}
+
 nonisolated enum BuiltInDisconnectRecoveryResult: Sendable, Equatable {
     case externalDisplayPresent
     case restored(displayID: CGDirectDisplayID)

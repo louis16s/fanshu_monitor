@@ -474,6 +474,59 @@ struct BuiltInDisplayRestorePolicyTests {
             builtInDisplayIsOffline: true
         ))
     }
+
+    @Test func automaticIsolationFailurePreservesIntentForRetry() {
+        #expect(
+            BuiltInBlackoutMaintenancePolicy.action(afterAttemptSucceeded: false)
+                == .retryPreservingIntent
+        )
+        #expect(
+            BuiltInBlackoutMaintenancePolicy.action(afterAttemptSucceeded: true)
+                == .recordIsolation
+        )
+    }
+
+    @Test func watchdogNeverRestoresTheBuiltInDisplayDuringSystemSleep() {
+        #expect(!BuiltInBlackoutMaintenancePolicy.shouldRunDisconnectRecovery(
+            isSystemSleeping: true
+        ))
+        #expect(BuiltInBlackoutMaintenancePolicy.shouldRunDisconnectRecovery(
+            isSystemSleeping: false
+        ))
+    }
+
+    @Test func watchdogReappliesOnlyWhenExternalHardwareStillExists() {
+        #expect(BuiltInBlackoutMaintenancePolicy.shouldReapplyUnexpectedRestore(
+            externalServiceCount: 1,
+            hasKnownExternalDisplay: true,
+            blackoutDesired: true,
+            builtInDisplayIsOffline: false
+        ))
+        #expect(!BuiltInBlackoutMaintenancePolicy.shouldReapplyUnexpectedRestore(
+            externalServiceCount: 0,
+            hasKnownExternalDisplay: true,
+            blackoutDesired: true,
+            builtInDisplayIsOffline: false
+        ))
+        #expect(!BuiltInBlackoutMaintenancePolicy.shouldReapplyUnexpectedRestore(
+            externalServiceCount: 1,
+            hasKnownExternalDisplay: true,
+            blackoutDesired: false,
+            builtInDisplayIsOffline: false
+        ))
+        #expect(!BuiltInBlackoutMaintenancePolicy.shouldReapplyUnexpectedRestore(
+            externalServiceCount: 1,
+            hasKnownExternalDisplay: true,
+            blackoutDesired: true,
+            builtInDisplayIsOffline: true
+        ))
+        #expect(BuiltInBlackoutMaintenancePolicy.shouldReapplyUnexpectedRestore(
+            externalServiceCount: nil,
+            hasKnownExternalDisplay: true,
+            blackoutDesired: true,
+            builtInDisplayIsOffline: false
+        ))
+    }
 }
 
 struct DisplayDisconnectRecoveryPolicyTests {
@@ -614,6 +667,28 @@ struct DisplayHardwareTopologyTests {
 
         #expect(recorder.attemptCount == 1)
         #expect(recorder.appliedCount == 1)
+    }
+
+    @Test func repeatedSleepWakeCyclesReapplyTheRequestedTopology() async {
+        let recorder = WakeTopologyRecorder(succeedsAfter: 1)
+        let coordinator = DisplayTopologyMaintenanceCoordinator(
+            blackoutDesired: { true },
+            reapplyTopology: { completion in
+                completion(recorder.nextResult())
+            },
+            topologyApplied: { displayIDs in
+                recorder.recordApplied(displayIDs)
+            }
+        )
+
+        coordinator.handle(.willPowerOn)
+        try? await Task.sleep(for: .milliseconds(40))
+        coordinator.handle(.willSleep)
+        coordinator.handle(.willPowerOn)
+        try? await Task.sleep(for: .milliseconds(40))
+
+        #expect(recorder.attemptCount == 2)
+        #expect(recorder.appliedCount == 2)
     }
 
     @Test func externalConnectionMaintenanceStopsAfterSuccess() async {

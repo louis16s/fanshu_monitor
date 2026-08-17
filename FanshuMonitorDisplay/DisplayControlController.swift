@@ -53,6 +53,7 @@ final class DisplayControlController: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.builtInBlackoutDisplayIDs.formUnion(displayIDs)
+                self.builtInBlackoutActionFailed = false
                 self.builtInBlackoutSuspendedForMissingExternal = false
                 self.scheduleRefresh(delay: 0.03)
             }
@@ -455,6 +456,11 @@ final class DisplayControlController: ObservableObject {
     func scheduleWakeDiscoveryRefreshes(early: Bool = false) {
         AppLogger.ui.notice("Display wake detected; refreshing display inventory")
         worker.invalidateDiscoveryCache()
+        if isBuiltInBlackoutDesired {
+            // NSWorkspace wake notifications are a fallback for power events
+            // that WindowServer can omit after repeated dark-wake cycles.
+            topologyMaintenanceCoordinator.requestExternalConnectionMaintenance()
+        }
         wakeRefreshGeneration &+= 1
         let generation = wakeRefreshGeneration
         let delays: [TimeInterval] = early
@@ -947,10 +953,15 @@ final class DisplayControlController: ObservableObject {
                         Task { @MainActor [self] in
                             self.builtInBlackoutOperationPending = false
                             self.builtInBlackoutActionFailed = !succeeded
-                            guard succeeded else {
-                                self.isBuiltInBlackoutDesired = false
+                            guard BuiltInBlackoutMaintenancePolicy.action(
+                                afterAttemptSucceeded: succeeded
+                            ) == .recordIsolation else {
                                 self.builtInBlackoutDisplayIDs.remove(display.id)
-                                AppLogger.ui.error("Automatic built-in display blackout failed; cleared stale desired state")
+                                AppLogger.ui.error(
+                                    "Automatic built-in display blackout failed; preserving user intent for retry"
+                                )
+                                self.topologyMaintenanceCoordinator
+                                    .requestExternalConnectionMaintenance()
                                 return
                             }
                             self.cachedBuiltInDisplay = display
@@ -1050,7 +1061,18 @@ final class DisplayControlController: ObservableObject {
                 else {
                     break
                 }
+                guard BuiltInBlackoutMaintenancePolicy.shouldRunDisconnectRecovery(
+                    isSystemSleeping: self.isSystemSleeping
+                ) else {
+                    try? await Task.sleep(
+                        for: .seconds(BuiltInDisplayRestorePolicy.topologyWatchdogInterval)
+                    )
+                    continue
+                }
                 let externalServiceCount = await self.hardwareTopologyMonitor?.externalServiceCount()
+                let builtInDisplayIsOffline = self.service.hasOfflineCachedBuiltInDisplay()
+                let hasKnownExternalDisplay = externalServiceCount == nil
+                    && self.service.hasUsableExternalDisplay()
                 if !self.builtInDisconnectRecoveryPending,
                    DisplayHardwareDisconnectRecoveryPolicy.shouldAttemptWatchdogRecovery(
                        externalServiceCount: externalServiceCount,
@@ -1059,12 +1081,23 @@ final class DisplayControlController: ObservableObject {
                     let hardwareConfirmsNoExternal = DisplayHardwareDisconnectRecoveryPolicy.shouldForceRestore(
                         externalServiceCount: externalServiceCount,
                         isolatedDisplayCount: self.builtInBlackoutDisplayIDs.count,
-                        builtInDisplayIsOffline: self.service.hasOfflineCachedBuiltInDisplay()
+                        builtInDisplayIsOffline: builtInDisplayIsOffline
                     )
                     self.recoverBuiltInDisplayAfterExternalDisconnect(
                         triggerDisplayID: 0,
                         forceRestore: hardwareConfirmsNoExternal
                     )
+                } else if !self.builtInBlackoutOperationPending,
+                          BuiltInBlackoutMaintenancePolicy.shouldReapplyUnexpectedRestore(
+                              externalServiceCount: externalServiceCount,
+                              hasKnownExternalDisplay: hasKnownExternalDisplay,
+                              blackoutDesired: self.isBuiltInBlackoutDesired,
+                              builtInDisplayIsOffline: builtInDisplayIsOffline
+                          ) {
+                    AppLogger.ui.notice(
+                        "Built-in display unexpectedly restored while an external display remains; reapplying isolation"
+                    )
+                    self.topologyMaintenanceCoordinator.requestExternalConnectionMaintenance()
                 }
                 try? await Task.sleep(
                     for: .seconds(BuiltInDisplayRestorePolicy.topologyWatchdogInterval)
