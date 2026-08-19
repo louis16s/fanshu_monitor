@@ -9,6 +9,7 @@ import Foundation
 import Testing
 @testable import FanshuMonitor
 
+@MainActor
 struct FanshuMonitorTests {
 
     @Test func monitorSeverityCalculation() {
@@ -149,6 +150,24 @@ struct FanshuMonitorTests {
             visibleKinds: kinds,
             panelVisible: true
         )) == kinds)
+    }
+
+    @Test func resettingSelectedKindsDoesNotDisturbOtherRefreshReservations() {
+        let schedule = MonitorRefreshSchedule()
+        let start = Date(timeIntervalSinceReferenceDate: 2_000)
+
+        _ = schedule.dueKinds(
+            at: start,
+            visibleKinds: [.cpu, .gpu],
+            panelVisible: true
+        )
+        schedule.reset([.cpu])
+
+        #expect(schedule.dueKinds(
+            at: start.addingTimeInterval(0.1),
+            visibleKinds: [.cpu, .gpu],
+            panelVisible: true
+        ) == [.cpu])
     }
 
     @Test func failedRefreshIsEligibleAgainWithoutWaitingForFullInterval() {

@@ -69,6 +69,12 @@ final class MonitorRefreshSchedule {
         lastRefreshDates.removeAll()
     }
 
+    func reset(_ kinds: some Sequence<MonitorKind>) {
+        for kind in kinds {
+            lastRefreshDates.removeValue(forKey: kind)
+        }
+    }
+
     func markRefreshed(_ kinds: some Sequence<MonitorKind>, at date: Date) {
         for kind in kinds {
             lastRefreshDates[kind] = date

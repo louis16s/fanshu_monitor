@@ -1,6 +1,6 @@
 # 架构审查清单
 
-更新日期：2026-08-13
+更新日期：2026-08-20
 
 ## 审查结论
 
@@ -14,6 +14,7 @@
 
 - App/UI：SwiftUI 菜单栏面板、设置窗口和共享视觉组件
 - 状态层：`MonitorStore` 发布运行状态并调度刷新，App 与面板直接观察共享的 `MonitorSettings`，避免设置变化触发整个 Store 刷新
+- 主线程边界：`MonitorStore`、`MonitorSettings` 和锁屏策略显式运行在 `MainActor`；采样 worker、Codex 读取和硬件桥接留在 actor 或串行后台边界
 - 指标边界：`MetricID` 贯穿设置、采样上下文、采样器和面板，落盘时仍使用原始字符串以兼容旧设置
 - Codex 活动任务使用独立的 `codexTasks` 状态流，不再伪装成动态 `MonitorMetric` 或污染额度缓存
 - 采样层：`SamplingCoordinator` actor 管理 worker 生命周期、取消和结果合并
@@ -24,6 +25,7 @@
 - 工程目标：只保留正式 `FanshuMonitorDirect` app target，测试、CI 与 Release 共用同一产品边界
 - 系统能力：私有锁屏与显示器隔离符号统一登记到 `SystemCapabilityRegistry`，缺失时保留明确的降级状态
 - 持久化：`MonitorSettings` 只声明设置行为，JSON 编解码由 `PreferencesCodec` 统一处理和记录错误
+- 设置持久化：`MonitorSettingsPersistence` 集中管理 Combine 绑定、UserDefaults 写入和登录项更新，保留原有 key 与迁移行为
 - 面板 View：通用、存储、网络和电源行分文件维护，共享 `PanelModuleHeader` 与详情网格
 - 发布层：tag、Release workflow、SHA-256 清单和 release manifest
 
@@ -39,6 +41,9 @@
 - [x] 内建亮度同步停止后不保留计时任务
 - [x] 亮度未变化时不发布 SwiftUI 状态更新
 - [x] 面板关闭时主调度器降至 5 秒检查间隔
+- [x] 指标开关变化只重置受影响模块的刷新预约，不再让所有模块立即重复采样
+- [x] 采样器生命周期更新带 generation guard，旧的异步释放请求不能覆盖最新可见模块状态
+- [x] 网络接口临时读取失败保留最后一次有效值，并对同一轮失败限频记录
 - [x] 软件调光配置和内建屏拓扑状态使用锁保护，避免跨队列竞争
 - [x] Codex session index 使用进程内偏移量增量读取，不重复读取完整索引或写入额外缓存
 - [x] Codex 活动任务变化只发布任务状态，不再重建整个模块指标数组
@@ -66,6 +71,14 @@
 - [x] 内建屏已经处于隔离状态时只登记状态，不重复提交相同的私有显示器配置
 - [x] 原生亮度读取等待同屏写入完成
 - [x] 过期读取和过期写入结果不会覆盖最新状态
+
+## 本轮阶段一、二改动
+
+- [x] `SamplingCoordinator` 继续作为采样 worker 的唯一生命周期入口，`MonitorStore` 只负责主线程状态和调度
+- [x] `MonitorSettingsPersistence` 从设置声明中拆出，减少设置模型的职责范围
+- [x] 显示器软件调光、内屏隔离和 DisplayServices 桥接拆为独立硬件服务文件，保留 `DisplayControlService` 外部 API
+- [x] 锁屏系统通知、睡眠唤醒、电源源和 watchdog 拆为 `LockScreenSystemObserver`，策略判断仍由 `LockScreenPolicyController` 负责
+- [x] 删除退出时强制 `UserDefaults.synchronize()`，避免不必要的同步磁盘写入
 
 ## 安全与发布
 

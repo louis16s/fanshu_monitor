@@ -10,16 +10,20 @@ nonisolated struct SystemMonitorSnapshot: Sendable {
 actor SamplingCoordinator {
     private var workers: [MonitorKind: MonitorModuleSamplerWorker] = [:]
     private let codexSampler = CodexQuotaSampler()
+    private var samplerResidencyGeneration: UInt64 = 0
 
     func setCodexRefreshInterval(_ interval: TimeInterval) async {
         await codexSampler.setRefreshInterval(interval)
     }
 
     func retainSamplers(for visibleKinds: Set<MonitorKind>) async {
+        samplerResidencyGeneration &+= 1
+        let generation = samplerResidencyGeneration
         workers = workers.filter { visibleKinds.contains($0.key) }
         if !visibleKinds.contains(.codex) {
             await codexSampler.release()
         }
+        guard generation == samplerResidencyGeneration else { return }
     }
 
     func loadedSamplerKinds() -> Set<MonitorKind> {

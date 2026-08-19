@@ -59,6 +59,7 @@ private final class LockAttemptProbe {
     }
 }
 
+@MainActor
 struct LockScreenPolicyTests {
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)

@@ -105,17 +105,13 @@ final class LockScreenPolicyController: ObservableObject {
 
     private weak var settings: MonitorSettings?
     private var cancellables = Set<AnyCancellable>()
-    private var workspaceObservers: [NSObjectProtocol] = []
-    private var systemObservers: [NSObjectProtocol] = []
-    private var distributedObservers: [NSObjectProtocol] = []
+    private let systemObserver = LockScreenSystemObserver()
     private var transitionTimer: Timer?
     private var idleLockTimer: Timer?
-    private var sessionWatchdogTimer: Timer?
     private var lockAttemptTask: Task<Void, Never>?
     private var recoveryTask: Task<Void, Never>?
     private var environmentMaintenanceTimer: Timer?
     private var baselineRestoreRetryTimer: Timer?
-    private var powerSourceRunLoopSource: CFRunLoopSource?
     private var lastAppliedConfiguration: AppliedConfiguration?
     private var baselineIsRestored = false
     private var didRequestLockForCurrentIdlePeriod = false
@@ -539,116 +535,27 @@ final class LockScreenPolicyController: ObservableObject {
     }
 
     private func setSystemEventObserving(_ enabled: Bool) {
-        if enabled {
-            setPowerSourceObserving(true)
-        }
-        let isObserving = !workspaceObservers.isEmpty
-            || !systemObservers.isEmpty
-            || !distributedObservers.isEmpty
-        guard enabled != isObserving else { return }
-        if !enabled {
-            setPowerSourceObserving(false)
-            workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
-            systemObservers.forEach(NotificationCenter.default.removeObserver)
-            distributedObservers.forEach(DistributedNotificationCenter.default().removeObserver)
-            workspaceObservers.removeAll()
-            systemObservers.removeAll()
-            distributedObservers.removeAll()
-            sessionWatchdogTimer?.invalidate()
-            sessionWatchdogTimer = nil
+        guard enabled else {
+            systemObserver.stop()
             return
         }
 
-        let workspaceCenter = NSWorkspace.shared.notificationCenter
-        workspaceObservers = [
-            workspaceCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.handleSystemDidWake()
-                }
-            },
-            workspaceCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.handleSystemWillSleep()
-                }
-            },
-            workspaceCenter.addObserver(forName: NSWorkspace.sessionDidBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.handleSessionDidBecomeActive()
-                }
-            },
-            workspaceCenter.addObserver(forName: NSWorkspace.sessionDidResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.handleSessionDidResignActive()
-                }
-            }
-        ]
-        systemObservers = [
-            NotificationCenter.default.addObserver(forName: NSNotification.Name.NSSystemTimeZoneDidChange, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor [weak self] in self?.reevaluate() }
-            },
-            NotificationCenter.default.addObserver(forName: NSNotification.Name.NSSystemClockDidChange, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor [weak self] in self?.reevaluate() }
-            },
-            NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.prepareForTermination()
-                }
-            }
-        ]
-
-        let distributedCenter = DistributedNotificationCenter.default()
-        distributedObservers = [
-            distributedCenter.addObserver(
-                forName: Notification.Name("com.apple.screenIsLocked"),
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.handleScreenDidLock()
-                }
-            },
-            distributedCenter.addObserver(
-                forName: Notification.Name("com.apple.screenIsUnlocked"),
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.handleSessionDidBecomeActive()
-                }
-            }
-        ]
-
-        sessionWatchdogTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.reconcileSessionState()
-            }
-        }
-        sessionWatchdogTimer?.tolerance = 5
+        systemObserver.start(using: LockScreenSystemObserver.Handlers(
+            didWake: { [weak self] in self?.handleSystemDidWake() },
+            willSleep: { [weak self] in self?.handleSystemWillSleep() },
+            sessionBecameActive: { [weak self] in self?.handleSessionDidBecomeActive() },
+            sessionResignedActive: { [weak self] in self?.handleSessionDidResignActive() },
+            timeChanged: { [weak self] in self?.reevaluate() },
+            screenLocked: { [weak self] in self?.handleScreenDidLock() },
+            screenUnlocked: { [weak self] in self?.handleSessionDidBecomeActive() },
+            sessionWatchdog: { [weak self] in self?.reconcileSessionState() },
+            powerSourceChanged: { [weak self] in self?.reevaluate() },
+            willTerminate: { [weak self] in self?.prepareForTermination() }
+        ))
     }
 
     private func setPowerSourceObserving(_ enabled: Bool) {
-        if !enabled {
-            if let powerSourceRunLoopSource {
-                CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)
-            }
-            powerSourceRunLoopSource = nil
-            return
-        }
-        guard powerSourceRunLoopSource == nil else { return }
-
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        powerSourceRunLoopSource = IOPSCreateLimitedPowerNotification({ context in
-            guard let context else { return }
-            let controller = Unmanaged<LockScreenPolicyController>
-                .fromOpaque(context)
-                .takeUnretainedValue()
-            Task { @MainActor in
-                controller.reevaluate()
-            }
-        }, context)?.takeRetainedValue()
-        if let powerSourceRunLoopSource {
-            CFRunLoopAddSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)
-        }
+        systemObserver.setPowerSourceObserving(enabled)
     }
 
     func handleSystemWillSleep() {
@@ -779,16 +686,8 @@ final class LockScreenPolicyController: ObservableObject {
         cancelRecoveryTask()
         cancelBaselineRestoreRetry()
         stopDirectLockEnvironment()
-        sessionWatchdogTimer?.invalidate()
-        sessionWatchdogTimer = nil
+        systemObserver.stop()
         cancellables.removeAll()
-        workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
-        systemObservers.forEach(NotificationCenter.default.removeObserver)
-        distributedObservers.forEach(DistributedNotificationCenter.default().removeObserver)
-        workspaceObservers.removeAll()
-        systemObservers.removeAll()
-        distributedObservers.removeAll()
-        setPowerSourceObserving(false)
     }
 
     deinit {
@@ -798,12 +697,5 @@ final class LockScreenPolicyController: ObservableObject {
         recoveryTask?.cancel()
         baselineRestoreRetryTimer?.invalidate()
         environmentMaintenanceTimer?.invalidate()
-        sessionWatchdogTimer?.invalidate()
-        workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
-        systemObservers.forEach(NotificationCenter.default.removeObserver)
-        distributedObservers.forEach(DistributedNotificationCenter.default().removeObserver)
-        if let powerSourceRunLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)
-        }
     }
 }

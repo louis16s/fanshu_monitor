@@ -5,6 +5,7 @@ import Darwin
 import Foundation
 import OSLog
 
+@MainActor
 final class MonitorStore: ObservableObject {
     let settings: MonitorSettings
 
@@ -33,6 +34,7 @@ final class MonitorStore: ObservableObject {
     private var animationTimerCancellable: AnyCancellable?
     private let samplingCoordinator = SamplingCoordinator()
     private var samplingTasks: [MonitorKind: Task<Void, Never>] = [:]
+    private var samplerResidencyTask: Task<Void, Never>?
     private var codexRefreshTask: Task<Void, Never>?
     private var codexTaskProgressTask: Task<Void, Never>?
     private var codexTaskProgressTimerCancellable: AnyCancellable?
@@ -42,8 +44,10 @@ final class MonitorStore: ObservableObject {
     private var menuBarTargetComputeLoad = 0.0
     private var lastMenuBarIconKey = ""
     private var terminationSignalSource: DispatchSourceSignal?
+    private var lastEnabledMetricsSnapshot: [MonitorKind: Set<MetricID>] = [:]
 
-    init(settings: MonitorSettings = MonitorSettings()) {
+    init(settings: MonitorSettings? = nil) {
+        let settings = settings ?? MonitorSettings()
         let initialModules = MonitorKind.allCases.map { kind in
             if kind == .codex, let cachedModule = CodexQuotaCache.loadModule() {
                 return cachedModule
@@ -54,6 +58,7 @@ final class MonitorStore: ObservableObject {
             return MonitorModule.placeholder(kind: kind)
         }
         self.settings = settings
+        lastEnabledMetricsSnapshot = settings.enabledMetrics
         refreshSchedule.setInterval(settings.codexRefreshIntervalMinutes * 60, for: .codex)
         allModules = initialModules
         modules = initialModules.filter { settings.isVisible($0.kind) }
@@ -196,11 +201,13 @@ final class MonitorStore: ObservableObject {
         settings.$enabledMetrics
             .dropFirst()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] newMetrics in
                 guard let self else { return }
+                let changedKinds = self.changedMetricKinds(from: newMetrics)
+                guard !changedKinds.isEmpty else { return }
                 self.cancelSamplingTask()
-                self.refreshSchedule.reset()
-                self.advance(kinds: self.activeSamplingKinds)
+                self.refreshSchedule.reset(changedKinds)
+                self.advance(kinds: self.activeSamplingKinds.intersection(changedKinds))
             }
             .store(in: &cancellables)
         configureSamplingTimer()
@@ -211,7 +218,6 @@ final class MonitorStore: ObservableObject {
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
             .sink { [weak self] _ in
-                self?.settings.synchronizeBeforeTermination()
                 self?.displayController.prepareBuiltInDisplayForTermination()
             }
             .store(in: &cancellables)
@@ -225,6 +231,7 @@ final class MonitorStore: ObservableObject {
     deinit {
         samplingTasks.values.forEach { $0.cancel() }
         samplingTasks.removeAll()
+        samplerResidencyTask?.cancel()
         codexRefreshTask?.cancel()
         codexTaskProgressTask?.cancel()
         codexTaskProgressTimerCancellable?.cancel()
@@ -238,7 +245,6 @@ final class MonitorStore: ObservableObject {
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         source.setEventHandler { [weak self] in
-            self?.settings.synchronizeBeforeTermination()
             self?.displayController.prepareBuiltInDisplayForTermination()
             exit(EXIT_SUCCESS)
         }
@@ -396,9 +402,12 @@ final class MonitorStore: ObservableObject {
         else {
             return
         }
+        let previousLoad = combinedComputeLoad
         allModules[index] = module
         modules = visibleModules(from: allModules)
-        refreshMenuBarLoad()
+        if abs(previousLoad - combinedComputeLoad) >= 0.01 {
+            refreshMenuBarLoad()
+        }
     }
 
     private func advanceAnimation() {
@@ -554,9 +563,21 @@ final class MonitorStore: ObservableObject {
 
     private func syncSamplerResidency() {
         let activeKinds = activeSamplingKinds
-        Task { [samplingCoordinator] in
+        samplerResidencyTask?.cancel()
+        samplerResidencyTask = Task { [samplingCoordinator] in
             await samplingCoordinator.retainSamplers(for: activeKinds)
         }
+    }
+
+    private func changedMetricKinds(
+        from newMetrics: [MonitorKind: Set<MetricID>]
+    ) -> Set<MonitorKind> {
+        let allKinds = Set(lastEnabledMetricsSnapshot.keys).union(newMetrics.keys)
+        let changedKinds = Set(allKinds.filter {
+            lastEnabledMetricsSnapshot[$0] != newMetrics[$0]
+        })
+        lastEnabledMetricsSnapshot = newMetrics
+        return changedKinds
     }
 
     private func cancelSamplingTask() {

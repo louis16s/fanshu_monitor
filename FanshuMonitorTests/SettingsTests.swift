@@ -28,6 +28,7 @@ struct MouseHeaderPresentationTests {
     }
 }
 
+@MainActor
 struct SettingsTests {
     @Test func monitorModulesUseOneLogicalSettingsOrder() {
         #expect(MonitorKind.settingsOrder == [

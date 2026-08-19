@@ -28,7 +28,7 @@ nonisolated enum HaloRingSource: String, CaseIterable, Identifiable {
     }
 }
 
-nonisolated enum MemoryPressureLevel: Sendable {
+nonisolated enum MemoryPressureLevel: Equatable, Sendable {
     case normal
     case warning
     case critical
@@ -213,7 +213,7 @@ nonisolated struct MetricSwitch: Identifiable, Hashable {
     }
 }
 
-nonisolated struct MonitorMetric: Identifiable, Sendable {
+nonisolated struct MonitorMetric: Equatable, Identifiable, Sendable {
     let name: MetricID
     let value: String
 
@@ -235,7 +235,7 @@ nonisolated extension MonitorKind {
     }
 }
 
-nonisolated struct MonitorModule: Identifiable, Sendable {
+nonisolated struct MonitorModule: Equatable, Identifiable, Sendable {
     let kind: MonitorKind
     var context: String? = nil
     var value: Double

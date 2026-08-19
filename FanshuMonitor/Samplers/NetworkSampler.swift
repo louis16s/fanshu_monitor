@@ -11,6 +11,7 @@ nonisolated final class NetworkSampler: MonitorSampler {
     private var cachedSSID: (interface: String, value: String, isResolved: Bool, refreshedAt: Date)?
     private var cachedAddresses: (interface: String, ipv4: String, ipv6: String, refreshedAt: Date)?
     private var lastLoggedInterface: String?
+    private var didReportInterfaceFailure = false
     private let ssidRefreshInterval: TimeInterval = 30
     private let ssidFailureRetryInterval: TimeInterval = 3
     private let addressRefreshInterval: TimeInterval = 30
@@ -30,6 +31,9 @@ nonisolated final class NetworkSampler: MonitorSampler {
         let shouldCollectAddresses = context.panelVisible
             && (context.includes("ipv4") || context.includes("ipv6"))
         let bytes = networkBytes(includeAddresses: shouldCollectAddresses)
+        guard bytes.isValid else {
+            return previous ?? MonitorModule.placeholder(kind: .network)
+        }
         let addresses = shouldCollectAddresses
             ? addressSummary(for: bytes, at: now)
             : cachedAddressValues(from: previous)
@@ -111,16 +115,21 @@ nonisolated final class NetworkSampler: MonitorSampler {
         var ipv6ByInterface: [String: [String]] = [:]
 
         guard getifaddrs(&addressList) == 0, let firstAddress = addressList else {
-            AppLogger.sampler.error("getifaddrs failed, errno: \(errno)")
+            if !didReportInterfaceFailure {
+                AppLogger.sampler.error("getifaddrs failed, errno: \(errno)")
+                didReportInterfaceFailure = true
+            }
             return NetworkInterfaceSnapshot(
                 input: 0,
                 output: 0,
                 identifier: "network",
                 interface: "network",
                 ipv4Addresses: [],
-                ipv6Addresses: []
+                ipv6Addresses: [],
+                isValid: false
             )
         }
+        didReportInterfaceFailure = false
         defer { freeifaddrs(addressList) }
 
         for pointer in sequence(first: firstAddress, next: { $0.pointee.ifa_next }) {
@@ -333,6 +342,25 @@ nonisolated struct NetworkInterfaceSnapshot {
     let interface: String
     let ipv4Addresses: [String]
     let ipv6Addresses: [String]
+    let isValid: Bool
+
+    init(
+        input: UInt64,
+        output: UInt64,
+        identifier: String,
+        interface: String,
+        ipv4Addresses: [String],
+        ipv6Addresses: [String],
+        isValid: Bool = true
+    ) {
+        self.input = input
+        self.output = output
+        self.identifier = identifier
+        self.interface = interface
+        self.ipv4Addresses = ipv4Addresses
+        self.ipv6Addresses = ipv6Addresses
+        self.isValid = isValid
+    }
 }
 
 nonisolated func networkAddressSummary(_ addresses: [String]) -> String {
