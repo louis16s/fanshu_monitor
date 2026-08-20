@@ -80,6 +80,13 @@
 - [x] 锁屏系统通知、睡眠唤醒、电源源和 watchdog 拆为 `LockScreenSystemObserver`，策略判断仍由 `LockScreenPolicyController` 负责
 - [x] 删除退出时强制 `UserDefaults.synchronize()`，避免不必要的同步磁盘写入
 
+## 本轮阶段三改动
+
+- [x] DDC 故障熔断器支持注入时钟，冷却窗口和读写故障历史可在单元测试中确定性验证
+- [x] CI 不再只构建 UI 测试 bundle，新增真实 UI 启动冒烟测试
+- [x] UI 测试失败时保留 `.xcresult` 和日志，降低菜单栏应用启动问题的定位成本
+- [x] 新增 `docs/TESTING.md`，区分 CI、单元测试、真实硬件回归和 Instruments 性能验证
+
 ## 安全与发布
 
 - [x] 仓库不包含 SSH 私钥、令牌或发布凭据
@@ -95,4 +102,4 @@
 
 1. 为真实 DDC 显示器建立可选硬件回归测试台，覆盖不同 VCP 范围和超时设备
 2. 用 Instruments 定期记录面板打开与关闭时的 CPU、唤醒次数和常驻内存
-3. 在下一次 UI runner 环境稳定后补跑设置窗口启动与导航用例
+3. 在 UI runner 环境稳定后补跑设置窗口启动与导航用例

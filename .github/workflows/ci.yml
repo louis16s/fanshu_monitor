@@ -81,8 +81,34 @@ jobs:
             -scheme '番薯Monitor UI Tests' \
             -configuration Debug \
             -destination 'platform=macOS,arch=arm64' \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
             build-for-testing
+
+      - name: Run UI smoke tests
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project '番薯monitor.xcodeproj' \
+            -scheme '番薯Monitor UI Tests' \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -parallel-testing-enabled NO \
+            -resultBundlePath "$RUNNER_TEMP/FanshuMonitorUITests.xcresult" \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee "$RUNNER_TEMP/FanshuMonitorUITests.log"
+
+      - name: Upload UI test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ui-test-diagnostics
+          path: |
+            ${{ runner.temp }}/FanshuMonitorUITests.log
+            ${{ runner.temp }}/FanshuMonitorUITests.xcresult
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Analyze Direct app
         run: |

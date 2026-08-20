@@ -37,6 +37,36 @@ struct DDCFaultRegistryTests {
         #expect(registry.isDisabled(key))
     }
 
+    @Test func readCooldownExpiresWithoutClearingTheFaultHistory() {
+        let clock = DDCRegistryClock()
+        let registry = DDCFaultRegistry(now: clock.now)
+
+        for _ in 0..<5 {
+            registry.recordReadFailure(key)
+        }
+        #expect(registry.isDisabled(key))
+
+        clock.advance(by: DDCFaultRegistry.disableCooldown + 0.001)
+
+        #expect(!registry.isDisabled(key))
+        #expect(registry.shouldUseLongerDelay(key))
+    }
+
+    @Test func writeCooldownExpiresIndependentlyFromReadFaults() {
+        let clock = DDCRegistryClock()
+        let registry = DDCFaultRegistry(now: clock.now)
+
+        for _ in 0..<10 {
+            registry.recordWriteFailure(key)
+        }
+        #expect(registry.isDisabled(key))
+
+        clock.advance(by: DDCFaultRegistry.disableCooldown + 0.001)
+
+        #expect(!registry.isDisabled(key))
+        #expect(!registry.shouldUseLongerDelay(key))
+    }
+
     @Test func disablesAfterTenWriteFailures() {
         let registry = DDCFaultRegistry()
 

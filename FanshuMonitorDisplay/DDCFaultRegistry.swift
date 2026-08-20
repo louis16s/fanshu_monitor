@@ -15,6 +15,11 @@ nonisolated final class DDCFaultRegistry {
 
     private var states: [ControlKey: State] = [:]
     private let lock = NSLock()
+    private let now: @Sendable () -> Date
+
+    init(now: @escaping @Sendable () -> Date = { Date() }) {
+        self.now = now
+    }
 
     func recordReadFailure(_ key: ControlKey) {
         lock.lock()
@@ -22,7 +27,7 @@ nonisolated final class DDCFaultRegistry {
         var state = states[key] ?? State()
         state.readFaults += 1
         if state.readFaults >= Self.readFaultDisableThreshold {
-            state.disabledUntil = Date().addingTimeInterval(Self.disableCooldown)
+            state.disabledUntil = now().addingTimeInterval(Self.disableCooldown)
         }
         states[key] = state
     }
@@ -42,7 +47,7 @@ nonisolated final class DDCFaultRegistry {
         var state = states[key] ?? State()
         state.writeFaults += 1
         if state.writeFaults >= Self.writeFaultDisableThreshold {
-            state.disabledUntil = Date().addingTimeInterval(Self.disableCooldown)
+            state.disabledUntil = now().addingTimeInterval(Self.disableCooldown)
         }
         states[key] = state
     }
@@ -62,7 +67,7 @@ nonisolated final class DDCFaultRegistry {
         guard let disabledUntil = states[key]?.disabledUntil else {
             return false
         }
-        return Date() < disabledUntil
+        return now() < disabledUntil
     }
 
     func shouldUseLongerDelay(_ key: ControlKey) -> Bool {
