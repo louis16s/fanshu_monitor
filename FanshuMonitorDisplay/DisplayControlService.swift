@@ -17,6 +17,7 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
     private let ddcRangeStore: DisplayDDCRangeStore
     private let configurationLock = NSLock()
     private var storedSoftwareDimmingEnabled = true
+    private var shouldResetDDCServiceCache = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -26,6 +27,12 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
     var softwareDimmingEnabled: Bool {
         get { configurationLock.withLock { storedSoftwareDimmingEnabled } }
         set { configurationLock.withLock { storedSoftwareDimmingEnabled = newValue } }
+    }
+
+    func invalidateDDCServiceCache() {
+        configurationLock.withLock {
+            shouldResetDDCServiceCache = true
+        }
     }
 
     func displays(reading activeControls: Set<DisplayControlKind> = Set(DisplayControlKind.allCases)) -> [ControlledDisplay] {
@@ -38,8 +45,17 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
 
         let displayIDs = Array(ids.prefix(Int(count)))
         AppLogger.ui.info("Detected \(displayIDs.count) online displays")
+        let forceDDCReset: Bool
+        if activeControls.isEmpty {
+            forceDDCReset = false
+        } else {
+            forceDDCReset = configurationLock.withLock {
+                defer { shouldResetDDCServiceCache = false }
+                return shouldResetDDCServiceCache
+            }
+        }
         if !activeControls.isEmpty {
-            ddc.refresh(displayIDs: displayIDs)
+            ddc.refresh(displayIDs: displayIDs, forceReset: forceDDCReset)
         }
 
         return displayIDs.map { id in

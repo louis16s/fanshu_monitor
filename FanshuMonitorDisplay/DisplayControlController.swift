@@ -34,7 +34,6 @@ final class DisplayControlController: ObservableObject {
     private var nativeBrightnessSyncGeneration = 0
     private var nativeBrightnessReadsInFlight: Set<CGDirectDisplayID> = []
     private var cachedBuiltInDisplay: ControlledDisplay?
-    private var lastKnownExternalDisplayIDs: Set<CGDirectDisplayID> = []
     private var builtInDisconnectRecoveryPending = false
     private var builtInBlackoutSuspendedForMissingExternal = false
     private var builtInDisconnectWatchdogTask: Task<Void, Never>?
@@ -118,12 +117,6 @@ final class DisplayControlController: ObservableObject {
                 if let builtInDisplay = detectedDisplays.first(where: \.isBuiltIn) {
                     self.cachedBuiltInDisplay = builtInDisplay
                 }
-                let detectedExternalDisplayIDs = Set(
-                    detectedDisplays.lazy.filter { !$0.isBuiltIn }.map(\.id)
-                )
-                if !detectedExternalDisplayIDs.isEmpty {
-                    self.lastKnownExternalDisplayIDs = detectedExternalDisplayIDs
-                }
                 let restoredBuiltInDisplayIDs = self.service.reconcileRestoredBuiltInDisplays(
                     candidates: self.builtInBlackoutDisplayIDs
                 )
@@ -176,7 +169,7 @@ final class DisplayControlController: ObservableObject {
 
     func refreshNow() {
         refreshWorkItem?.cancel()
-        worker.invalidateDiscoveryCache()
+        invalidateDisplayDiscovery(resetDDC: true)
         refreshAsync()
     }
 
@@ -381,7 +374,7 @@ final class DisplayControlController: ObservableObject {
 
     func scheduleRefresh(delay: TimeInterval = 0.45) {
         refreshWorkItem?.cancel()
-        worker.invalidateDiscoveryCache()
+        invalidateDisplayDiscovery()
         let item = DispatchWorkItem { [weak self] in
             Task { @MainActor in
                 self?.refreshAsync()
@@ -399,24 +392,21 @@ final class DisplayControlController: ObservableObject {
             "Display reconfiguration for ID \(displayID), flags: \(flags.rawValue, privacy: .public)"
         )
         let isRemoval = flags.contains(.removeFlag) || flags.contains(.disabledFlag)
-        let visibleExternalDisplayIDs = Set(displays.lazy.filter { !$0.isBuiltIn }.map(\.id))
-        let knownExternalDisplayIDs = visibleExternalDisplayIDs.isEmpty
-            ? lastKnownExternalDisplayIDs
-            : visibleExternalDisplayIDs
-        let isLastKnownExternalRemoval = DisplayDisconnectRecoveryPolicy.shouldForceRestore(
-            isRemoval: isRemoval,
-            removedDisplayID: displayID,
-            cachedBuiltInDisplayID: cachedBuiltInDisplay?.id,
-            knownExternalDisplayIDs: knownExternalDisplayIDs
-        )
         scheduleRefresh(delay: isRemoval ? 0.12 : 0.45)
         if isRemoval, displayID == cachedBuiltInDisplay?.id {
+            return
+        }
+        // CoreGraphics reports a removal while an external monitor is
+        // restarting. The hardware topology monitor performs the confirmed
+        // disconnect check; do not let this transient callback force the
+        // built-in panel back on during a monitor power-cycle.
+        if isRemoval, hardwareTopologyMonitor != nil {
             return
         }
         guard needsBuiltInDisconnectRecovery else { return }
         recoverBuiltInDisplayAfterExternalDisconnect(
             triggerDisplayID: displayID,
-            forceRestore: isLastKnownExternalRemoval
+            forceRestore: false
         )
     }
 
@@ -432,6 +422,12 @@ final class DisplayControlController: ObservableObject {
         ) else {
             return
         }
+        guard !service.hasUsableExternalDisplay() else {
+            AppLogger.ui.debug(
+                "Skipped external disconnect recovery because an active external display remains"
+            )
+            return
+        }
         scheduleRefresh(delay: 0.15)
         guard requiresPhysicalBuiltInRestore else { return }
         recoverBuiltInDisplayAfterExternalDisconnect(
@@ -443,23 +439,25 @@ final class DisplayControlController: ObservableObject {
     private func handleHardwareTopologyEvent(_ event: DisplayHardwareTopologyEvent) {
         switch event {
         case .externalServiceAdded:
+            invalidateDisplayDiscovery(resetDDC: true)
             scheduleRefresh(delay: DisplayExternalConnectionPolicy.discoveryDelay)
             scheduleExternalConnectionMaintenance()
         case .externalServiceRemoved, .displayServiceChanged:
+            invalidateDisplayDiscovery(resetDDC: true)
             scheduleRefresh(delay: 0.15)
         }
     }
 
     private func scheduleExternalConnectionMaintenance() {
         guard isBuiltInBlackoutDesired else { return }
-        worker.invalidateDiscoveryCache()
+        invalidateDisplayDiscovery()
         builtInBlackoutSuspendedForMissingExternal = false
         topologyMaintenanceCoordinator.requestExternalConnectionMaintenance()
     }
 
     func scheduleWakeDiscoveryRefreshes(early: Bool = false) {
         AppLogger.ui.notice("Display wake detected; refreshing display inventory")
-        worker.invalidateDiscoveryCache()
+        invalidateDisplayDiscovery(resetDDC: true)
         if isBuiltInBlackoutDesired {
             // NSWorkspace wake notifications are a fallback for power events
             // that WindowServer can omit after repeated dark-wake cycles.
@@ -475,7 +473,7 @@ final class DisplayControlController: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 Task { @MainActor in
                     guard let self, generation == self.wakeRefreshGeneration else { return }
-                    self.worker.invalidateDiscoveryCache()
+                    self.invalidateDisplayDiscovery(resetDDC: true)
                     self.refreshAsync()
                 }
             }
@@ -1109,6 +1107,13 @@ final class DisplayControlController: ObservableObject {
             if self?.builtInDisconnectWatchdogGeneration == generation {
                 self?.builtInDisconnectWatchdogTask = nil
             }
+        }
+    }
+
+    private func invalidateDisplayDiscovery(resetDDC: Bool = false) {
+        worker.invalidateDiscoveryCache()
+        if resetDDC {
+            service.invalidateDDCServiceCache()
         }
     }
 

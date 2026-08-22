@@ -20,13 +20,24 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
     private let registry = DDCFaultRegistry()
     private let stateLock = NSLock()
 
-    func refresh(displayIDs: [CGDirectDisplayID]) {
+    func refresh(displayIDs: [CGDirectDisplayID], forceReset: Bool = false) {
         let matchedServices = Arm64DDCMatcher().matchedServices(for: displayIDs)
         let (knownDisplayIDs, changedDisplayIDs) = stateLock.withLock {
             let previousServices = servicesByDisplayID
-            let changedDisplayIDs = Set(displayIDs.filter {
-                previousServices[$0]?.serviceLocation != matchedServices[$0]?.serviceLocation
-            })
+            let changedDisplayIDs: Set<CGDirectDisplayID>
+            if forceReset {
+                changedDisplayIDs = Set(displayIDs).union(previousServices.keys)
+            } else {
+                changedDisplayIDs = Set(displayIDs.filter {
+                    guard let previous = previousServices[$0],
+                          let matched = matchedServices[$0]
+                    else {
+                        return previousServices[$0] != nil || matchedServices[$0] != nil
+                    }
+                    return previous.serviceLocation != matched.serviceLocation
+                        || previous.serviceIdentity != matched.serviceIdentity
+                })
+            }
             return (Set(previousServices.keys), changedDisplayIDs)
         }
         for displayID in knownDisplayIDs.subtracting(displayIDs) {
@@ -36,6 +47,9 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
         for displayID in changedDisplayIDs {
             registry.reset(displayID: displayID)
             DDCTransport.reset(displayID: displayID)
+            displayDDCLog.notice(
+                "Reset DDC transport after display service replacement for display \(displayID, privacy: .public)"
+            )
         }
         stateLock.withLock {
             servicesByDisplayID = matchedServices
@@ -631,6 +645,7 @@ nonisolated private final class Arm64DDCMatcher {
                     displayID: displayID,
                     service: service,
                     serviceLocation: registryService.serviceLocation,
+                    serviceIdentity: registryService.identity,
                     matchScore: score
                 )
                 candidatesByScore[score, default: []].append(candidate)
@@ -673,6 +688,7 @@ nonisolated private final class Arm64DDCMatcher {
                 displayID: unmatchedDisplayIDs[0],
                 service: service,
                 serviceLocation: unusedServices[0].serviceLocation,
+                serviceIdentity: unusedServices[0].identity,
                 matchScore: 0
             )
             matched[fallback.displayID] = fallback
@@ -885,6 +901,7 @@ nonisolated private struct DDCService {
     let displayID: CGDirectDisplayID
     let service: IOAVService
     let serviceLocation: Int
+    let serviceIdentity: String
     let matchScore: Int
 }
 
@@ -895,4 +912,10 @@ nonisolated private struct RegistryService {
     var ioDisplayLocation = ""
     var service: IOAVService?
     var serviceLocation = 0
+
+    var identity: String {
+        let parts = [edidUUID, ioDisplayLocation, productName, String(serialNumber)]
+            .filter { !$0.isEmpty && $0 != "0" }
+        return parts.isEmpty ? "registry-location-\(serviceLocation)" : parts.joined(separator: "|")
+    }
 }
