@@ -58,6 +58,8 @@ UI runner 需要当前用户允许 Xcode 或 `FanshuMonitorUITests-Runner` 使�
 
 Gamma 回归还应记录：显示器原始亮度范围、截图是否仍能看到低于 DDC 下限的调光效果、切换到 100% 后颜色是否恢复、睡眠唤醒和拔插后是否重新捕获基线
 
+自动化测试覆盖 Gamma 基线只读取一次、临时漏报在线屏幕、断开重连后重新采集、内建屏排除以及 ColorSync 恢复回退。真实硬件仍需验证 Night Shift、睡眠唤醒、应用退出和第三方色彩工具同时运行时的最终显示结果
+
 ## 性能验证
 
 使用 Instruments 的 Time Profiler、Energy Log 和 Allocations 分别记录：

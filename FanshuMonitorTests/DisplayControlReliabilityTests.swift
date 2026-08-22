@@ -282,6 +282,114 @@ struct DisplaySoftwareDimmingWindowPolicyTests {
     }
 }
 
+struct DisplayGammaServiceTests {
+    private let displayID: CGDirectDisplayID = 42
+
+    @Test func scalesTheOriginalBaselineInsteadOfThePreviouslyDimmedTable() {
+        let hardware = FakeDisplayGammaHardware(displayID: displayID)
+        let service = DisplayGammaService(hardware: hardware)
+
+        #expect(service.apply(factor: 0.5, displayID: displayID))
+        #expect(service.apply(factor: 0.4, displayID: displayID))
+
+        #expect(hardware.readCounts[displayID] == 1)
+        #expect(abs(Double(hardware.tables[displayID]?.red.last ?? 0) - 0.4) < 0.0001)
+    }
+
+    @Test func transientlyMissingOnlineDisplayKeepsItsBaseline() {
+        let hardware = FakeDisplayGammaHardware(displayID: displayID)
+        let service = DisplayGammaService(hardware: hardware)
+
+        #expect(service.apply(factor: 0.5, displayID: displayID))
+        service.removeMissingDisplays(keeping: [])
+        #expect(service.apply(factor: 0.4, displayID: displayID))
+
+        #expect(hardware.readCounts[displayID] == 1)
+        #expect(abs(Double(hardware.tables[displayID]?.red.last ?? 0) - 0.4) < 0.0001)
+    }
+
+    @Test func disconnectedDisplayRecapturesItsBaselineAfterReconnect() {
+        let hardware = FakeDisplayGammaHardware(displayID: displayID)
+        let service = DisplayGammaService(hardware: hardware)
+
+        #expect(service.apply(factor: 0.5, displayID: displayID))
+        hardware.onlineDisplayIDs.remove(displayID)
+        service.removeMissingDisplays(keeping: [])
+        hardware.tables[displayID] = FakeDisplayGammaHardware.identityTable
+        hardware.onlineDisplayIDs.insert(displayID)
+        #expect(service.apply(factor: 0.4, displayID: displayID))
+
+        #expect(hardware.readCounts[displayID] == 2)
+        #expect(abs(Double(hardware.tables[displayID]?.red.last ?? 0) - 0.4) < 0.0001)
+    }
+
+    @Test func restoreAllFallsBackToTheColorSyncProfileWhenAWriteFails() {
+        let hardware = FakeDisplayGammaHardware(displayID: displayID)
+        let service = DisplayGammaService(hardware: hardware)
+
+        #expect(service.apply(factor: 0.5, displayID: displayID))
+        hardware.writeShouldFail = true
+        service.restoreAll()
+
+        #expect(hardware.restoreColorSyncCallCount == 1)
+    }
+
+    @Test func builtInDisplayNeverUsesGammaDimming() {
+        let hardware = FakeDisplayGammaHardware(displayID: displayID)
+        hardware.builtInDisplayIDs.insert(displayID)
+        let service = DisplayGammaService(hardware: hardware)
+
+        #expect(!service.apply(factor: 0.5, displayID: displayID))
+        #expect(hardware.readCounts[displayID] == nil)
+    }
+}
+
+nonisolated private final class FakeDisplayGammaHardware: DisplayGammaHardware, @unchecked Sendable {
+    static let identityTable = DisplayGammaTable(
+        red: [0, 0.5, 1],
+        green: [0, 0.5, 1],
+        blue: [0, 0.5, 1]
+    )
+
+    var onlineDisplayIDs: Set<CGDirectDisplayID>
+    var builtInDisplayIDs: Set<CGDirectDisplayID> = []
+    var tables: [CGDirectDisplayID: DisplayGammaTable]
+    var readCounts: [CGDirectDisplayID: Int] = [:]
+    var writeShouldFail = false
+    private(set) var restoreColorSyncCallCount = 0
+
+    init(displayID: CGDirectDisplayID) {
+        onlineDisplayIDs = [displayID]
+        tables = [displayID: Self.identityTable]
+    }
+
+    func isBuiltIn(displayID: CGDirectDisplayID) -> Bool {
+        builtInDisplayIDs.contains(displayID)
+    }
+
+    func isOnline(displayID: CGDirectDisplayID) -> Bool {
+        onlineDisplayIDs.contains(displayID)
+    }
+
+    func readTable(displayID: CGDirectDisplayID) -> DisplayGammaTable? {
+        readCounts[displayID, default: 0] += 1
+        return tables[displayID]
+    }
+
+    func writeTable(_ table: DisplayGammaTable, displayID: CGDirectDisplayID) -> Bool {
+        guard !writeShouldFail else { return false }
+        tables[displayID] = table
+        return true
+    }
+
+    func restoreColorSyncSettings() {
+        restoreColorSyncCallCount += 1
+        for displayID in onlineDisplayIDs {
+            tables[displayID] = Self.identityTable
+        }
+    }
+}
+
 struct DisplayValueChangePolicyTests {
     @Test func unchangedNativeBrightnessDoesNotRepublishDisplayState() {
         #expect(!DisplayValueChangePolicy.shouldPublish(current: 50, next: 50))

@@ -218,6 +218,10 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         softwareDimming.clearAll()
     }
 
+    func suspendSoftwareDimmingForDisplaySleep() {
+        softwareDimming.suspendForDisplaySleep()
+    }
+
     func setBuiltInBlackout(_ enabled: Bool, display: ControlledDisplay, displays: [ControlledDisplay]) -> Bool {
         guard display.isBuiltIn else {
             return false

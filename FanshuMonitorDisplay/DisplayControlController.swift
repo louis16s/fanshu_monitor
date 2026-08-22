@@ -360,8 +360,12 @@ final class DisplayControlController: ObservableObject {
         stopNativeBrightnessSync()
     }
 
-    func prepareBuiltInDisplayForTermination() {
+    func prepareForTermination() {
         wakeRefreshGeneration &+= 1
+        refreshWorkItem?.cancel()
+        builtInDisconnectWatchdogTask?.cancel()
+        topologyMaintenanceCoordinator.cancel()
+        service.clearSoftwareDimming()
         // Restore the physical topology without clearing the user's next-launch preference.
         service.clearBuiltInBlackouts()
         builtInBlackoutDisplayIDs.removeAll()
@@ -483,17 +487,16 @@ final class DisplayControlController: ObservableObject {
         case .willSleep:
             isSystemSleeping = true
             hardwareTopologyMonitor?.setSystemSleeping(true)
+            service.suspendSoftwareDimmingForDisplaySleep()
             guard isBuiltInBlackoutDesired else { return }
             AppLogger.ui.notice("Preparing isolated built-in display for sleep")
         case .willPowerOn:
             isSystemSleeping = false
             hardwareTopologyMonitor?.setSystemSleeping(false)
-            guard isBuiltInBlackoutDesired else { return }
             scheduleWakeDiscoveryRefreshes(early: true)
         case .hasPoweredOn:
             isSystemSleeping = false
             hardwareTopologyMonitor?.setSystemSleeping(false)
-            guard isBuiltInBlackoutDesired else { return }
             scheduleWakeDiscoveryRefreshes()
         }
     }

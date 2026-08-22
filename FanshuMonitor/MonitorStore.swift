@@ -218,7 +218,7 @@ final class MonitorStore: ObservableObject {
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
             .sink { [weak self] _ in
-                self?.displayController.prepareBuiltInDisplayForTermination()
+                self?.displayController.prepareForTermination()
             }
             .store(in: &cancellables)
         animationTimerCancellable = Timer.publish(every: MonitorConstants.animationInterval, on: .main, in: .common)
@@ -245,7 +245,7 @@ final class MonitorStore: ObservableObject {
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         source.setEventHandler { [weak self] in
-            self?.displayController.prepareBuiltInDisplayForTermination()
+            self?.displayController.prepareForTermination()
             exit(EXIT_SUCCESS)
         }
         terminationSignalSource = source
