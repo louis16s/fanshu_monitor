@@ -400,6 +400,27 @@ struct FanshuMonitorTests {
         }
     }
 
+    @Test func gammaFactorOnlyDimsBelowTheHardwareFloor() {
+        #expect(DisplayDimmingCalibration.gammaFactor(forUserBrightness: 100) == 1)
+        #expect(DisplayDimmingCalibration.gammaFactor(forUserBrightness: 15) == 1)
+        #expect(abs(DisplayDimmingCalibration.gammaFactor(forUserBrightness: 0) - 0.3) < 0.0001)
+        #expect(
+            DisplayDimmingCalibration.gammaFactor(forUserBrightness: 5)
+                < DisplayDimmingCalibration.gammaFactor(forUserBrightness: 10)
+        )
+    }
+
+    @Test func gammaFactorIncludesDDCQuantizationCorrection() {
+        let base = DisplayDimmingCalibration.gammaFactor(forUserBrightness: 10)
+        let corrected = DisplayDimmingCalibration.gammaFactor(
+            forUserBrightness: 10,
+            additionalOverlayOpacity: 0.2
+        )
+
+        #expect(corrected < base)
+        #expect(corrected >= 0)
+    }
+
     @Test func everyDefaultBrightnessLevelChangesEvenOnLowResolutionDDC() {
         let range = DDCValueRange(min: 0, max: 10)
         let levels = Array(stride(from: 0.0, through: 100.0, by: 5.0))

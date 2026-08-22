@@ -19,17 +19,28 @@ nonisolated enum DisplayDimmingCalibration {
         let clamped = min(hardwareZeroUserBrightness, max(0, userBrightness))
         return (1 - clamped / hardwareZeroUserBrightness) * maximumOverlayOpacity
     }
+
+    static func gammaFactor(
+        forUserBrightness userBrightness: Double,
+        additionalOverlayOpacity: Double = 0
+    ) -> Double {
+        let baseFactor = 1 - overlayOpacity(forUserBrightness: userBrightness)
+        let quantizationFactor = 1 - min(1, max(0, additionalOverlayOpacity))
+        return min(1, max(0, baseFactor * quantizationFactor))
+    }
 }
 
 enum DisplaySoftwareDimmingWindowPolicy {
     // A later-created screen saver window can cover windows at the same level.
     static let level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+    static let sharingType: NSWindow.SharingType = .none
 }
 
 nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
     private let dimmingThreshold: Double = DisplayDimmingCalibration.hardwareZeroUserBrightness
     private let maximumOverlayOpacity: Double = DisplayDimmingCalibration.maximumOverlayOpacity
     private let lock = NSLock()
+    private let gamma = DisplayGammaService()
     private var requestedBrightness: [CGDirectDisplayID: Double] = [:]
     private var quantizationOverlayOpacity: [CGDirectDisplayID: Double] = [:]
     @MainActor private var overlayWindows: [CGDirectDisplayID: NSWindow] = [:]
@@ -96,6 +107,10 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         let additionalOpacities = quantizationOverlayOpacity
         lock.unlock()
 
+        gamma.removeMissingDisplays(
+            keeping: Set(values.keys.filter { CGDisplayIsBuiltin($0) == 0 })
+        )
+
         Task { @MainActor [weak self] in
             guard let self else { return }
             for (displayID, brightness) in values {
@@ -115,6 +130,8 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         quantizationOverlayOpacity[displayID] = nil
         lock.unlock()
 
+        _ = gamma.restore(displayID: displayID)
+
         Task { @MainActor [weak self] in
             self?.removeWindow(for: displayID)
         }
@@ -125,6 +142,8 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         requestedBrightness.removeAll()
         quantizationOverlayOpacity.removeAll()
         lock.unlock()
+
+        gamma.restoreAll()
 
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -147,6 +166,15 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         for displayID: CGDirectDisplayID
     ) {
         guard CGDisplayIsBuiltin(displayID) == 0 else {
+            removeWindow(for: displayID)
+            return
+        }
+
+        let gammaFactor = DisplayDimmingCalibration.gammaFactor(
+            forUserBrightness: userBrightness,
+            additionalOverlayOpacity: additionalOverlayOpacity
+        )
+        if gamma.apply(factor: gammaFactor, displayID: displayID) {
             removeWindow(for: displayID)
             return
         }
@@ -189,6 +217,7 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         window.isOpaque = false
         window.hasShadow = false
         window.ignoresMouseEvents = true
+        window.sharingType = DisplaySoftwareDimmingWindowPolicy.sharingType
         window.level = DisplaySoftwareDimmingWindowPolicy.level
         window.animationBehavior = .none
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]

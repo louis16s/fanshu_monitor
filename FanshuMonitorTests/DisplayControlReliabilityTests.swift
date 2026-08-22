@@ -276,6 +276,10 @@ struct DisplaySoftwareDimmingWindowPolicyTests {
     @Test func overlayStaysAboveScreenSaverWindows() {
         #expect(DisplaySoftwareDimmingWindowPolicy.level.rawValue > NSWindow.Level.screenSaver.rawValue)
     }
+
+    @Test func fallbackOverlayIsExcludedFromWindowSharing() {
+        #expect(DisplaySoftwareDimmingWindowPolicy.sharingType == .none)
+    }
 }
 
 struct DisplayValueChangePolicyTests {
