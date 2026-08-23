@@ -45,6 +45,7 @@ private final class PanelWindowVisibilityTrackingView: NSView {
     private weak var trackedWindow: NSWindow?
     private var visibilityObservation: NSKeyValueObservation?
     private var lastReportedVisibility: Bool?
+    private var reportTask: Task<Void, Never>?
 
     init(onVisibilityChanged: @escaping (Bool) -> Void) {
         self.onVisibilityChanged = onVisibilityChanged
@@ -73,7 +74,8 @@ private final class PanelWindowVisibilityTrackingView: NSView {
         let tracker = WeakPanelWindowVisibilityTracker(self)
         visibilityObservation = window.observe(\.isVisible, options: [.initial, .new]) { _, change in
             Task { @MainActor in
-                tracker.value?.report(visible: change.newValue == true)
+                await Task.yield()
+                tracker.value?.scheduleReport(visible: change.newValue == true)
             }
         }
         NotificationCenter.default.addObserver(
@@ -82,11 +84,10 @@ private final class PanelWindowVisibilityTrackingView: NSView {
             name: NSWindow.willCloseNotification,
             object: window
         )
-        reportCurrentVisibility()
     }
 
     func reportCurrentVisibility() {
-        report(visible: trackedWindow?.isVisible == true)
+        scheduleReport(visible: trackedWindow?.isVisible == true)
     }
 
     func stopTracking(reportHidden: Bool) {
@@ -101,12 +102,21 @@ private final class PanelWindowVisibilityTrackingView: NSView {
         }
         trackedWindow = nil
         if reportHidden {
-            report(visible: false)
+            scheduleReport(visible: false)
         }
     }
 
     @objc private func windowDidOrderOffScreen(_ notification: Notification) {
-        report(visible: false)
+        scheduleReport(visible: false)
+    }
+
+    private func scheduleReport(visible: Bool) {
+        reportTask?.cancel()
+        reportTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            self?.report(visible: visible)
+        }
     }
 
     private func report(visible: Bool) {
@@ -128,23 +138,35 @@ private final class TransparentBackgroundView: NSView {
     private weak var configuredWindow: NSWindow?
     private var appliedAppearanceName: NSAppearance.Name?
     private var currentColorSchemeOverride: ColorScheme?
+    private var applyTask: Task<Void, Never>?
+
+    deinit {
+        applyTask?.cancel()
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
 
-        guard let window else { return }
-        configure(window)
-
-        apply(colorSchemeOverride: currentColorSchemeOverride)
+        scheduleApply()
     }
 
     func apply(colorSchemeOverride: ColorScheme?) {
         currentColorSchemeOverride = colorSchemeOverride
+        scheduleApply()
+    }
 
-        guard let window else { return }
-        configure(window)
+    private func scheduleApply() {
+        applyTask?.cancel()
+        applyTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled, let self, let window = self.window else { return }
+            self.configure(window)
+            self.applyAppearance(to: window)
+        }
+    }
 
-        guard let colorSchemeOverride else {
+    private func applyAppearance(to window: NSWindow) {
+        guard let currentColorSchemeOverride else {
             guard appliedAppearanceName != nil else { return }
             appliedAppearanceName = nil
             window.appearance = nil
@@ -152,7 +174,7 @@ private final class TransparentBackgroundView: NSView {
             return
         }
 
-        let appearanceName: NSAppearance.Name = colorSchemeOverride == .dark ? .darkAqua : .aqua
+        let appearanceName: NSAppearance.Name = currentColorSchemeOverride == .dark ? .darkAqua : .aqua
         guard appliedAppearanceName != appearanceName else { return }
 
         appliedAppearanceName = appearanceName

@@ -760,10 +760,10 @@ nonisolated private final class Arm64DDCMatcher {
 
         while true {
             let entry = IOIteratorNext(iterator)
-            guard entry != IO_OBJECT_NULL,
-                  IORegistryEntryGetName(entry, namePointer) == KERN_SUCCESS
-            else {
-                return nil
+            guard entry != IO_OBJECT_NULL else { return nil }
+            guard IORegistryEntryGetName(entry, namePointer) == KERN_SUCCESS else {
+                IOObjectRelease(entry)
+                continue
             }
 
             let name = String(cString: namePointer)

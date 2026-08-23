@@ -178,7 +178,7 @@ nonisolated enum DiskHealthReader {
             return status(fromPropertyList: data)
         } catch {
             AppLogger.sampler.error(
-                "Unable to read disk health: \(error.localizedDescription, privacy: .public)"
+                "Unable to read disk health: \(error.localizedDescription, privacy: .private(mask: .hash))"
             )
             return nil
         }

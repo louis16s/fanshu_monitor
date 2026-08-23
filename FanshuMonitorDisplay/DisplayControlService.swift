@@ -374,7 +374,9 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
 
     func hasOfflineCachedBuiltInDisplay() -> Bool {
         guard let displayID = cachedOrDiscoverableBuiltInDisplayID() else { return false }
-        return CGDisplayIsOnline(displayID) != 1 || CGDisplayIsActive(displayID) == 0
+        return BuiltInDisplayAvailabilityPolicy.isUnavailable(
+            isOnline: CGDisplayIsOnline(displayID) == 1
+        )
     }
 
     func reconcileRestoredBuiltInDisplays(

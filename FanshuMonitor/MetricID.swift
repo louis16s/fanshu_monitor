@@ -27,7 +27,6 @@ nonisolated struct MetricID: RawRepresentable, Hashable, Sendable, Codable,
 
 nonisolated extension MetricID {
     static let activeTasks: Self = "active-tasks"
-    static let batteryType: Self = "type"
     static let batteryStatus: Self = "status"
     static let plan: Self = "plan"
     static let fiveHour: Self = "five-hour"

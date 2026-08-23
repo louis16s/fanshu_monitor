@@ -11,7 +11,7 @@ nonisolated enum PreferencesCodec {
             return try JSONDecoder().decode(type, from: data)
         } catch {
             AppLogger.settings.error(
-                "Unable to decode preference \(key, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                "Unable to decode preference \(key, privacy: .public): \(error.localizedDescription, privacy: .private(mask: .hash))"
             )
             return nil
         }
@@ -22,7 +22,7 @@ nonisolated enum PreferencesCodec {
             return try JSONEncoder().encode(value)
         } catch {
             AppLogger.settings.error(
-                "Unable to encode preference \(key, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                "Unable to encode preference \(key, privacy: .public): \(error.localizedDescription, privacy: .private(mask: .hash))"
             )
             return nil
         }

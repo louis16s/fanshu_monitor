@@ -22,6 +22,8 @@ nonisolated struct CodexTaskProgress: Equatable, Identifiable, Sendable {
 actor CodexTaskProgressReader {
     private struct RolloutState {
         var offset: UInt64 = 0
+        var remainder = Data()
+        var isDroppingLeadingPartialLine = false
         var currentTurnID: String?
         var isTaskActive = false
         var completedSteps = 0
@@ -137,18 +139,17 @@ actor CodexTaskProgressReader {
         let readOffset = initialRead
             ? initialReadOffset(url: candidate.url, fileSize: fileSize)
             : state.offset
+        if initialRead && readOffset > 0 {
+            state.isDroppingLeadingPartialLine = true
+        }
         guard let handle = try? FileHandle(forReadingFrom: candidate.url) else { return }
         defer { try? handle.close() }
 
         do {
             try handle.seek(toOffset: readOffset)
             let data = try handle.readToEnd() ?? Data()
-            state.offset = fileSize
-            process(
-                data: data,
-                dropsLeadingPartialLine: readOffset > 0 && initialRead,
-                state: &state
-            )
+            state.offset = try handle.offset()
+            process(data: data, state: &state)
         } catch {
             return
         }
@@ -181,14 +182,26 @@ actor CodexTaskProgressReader {
         return lowerBound
     }
 
-    private func process(data: Data, dropsLeadingPartialLine: Bool, state: inout RolloutState) {
-        guard var text = String(data: data, encoding: .utf8) else { return }
-        if dropsLeadingPartialLine, let firstNewline = text.firstIndex(of: "\n") {
-            text = String(text[text.index(after: firstNewline)...])
+    private func process(data: Data, state: inout RolloutState) {
+        var appendedData = data
+        if state.isDroppingLeadingPartialLine {
+            guard let newline = appendedData.firstIndex(of: 0x0A) else { return }
+            appendedData = Data(appendedData[appendedData.index(after: newline)...])
+            state.isDroppingLeadingPartialLine = false
         }
-        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
-            process(line: String(line), state: &state)
+
+        var bufferedData = state.remainder
+        bufferedData.append(appendedData)
+        var lineStart = bufferedData.startIndex
+
+        while let lineEnd = bufferedData[lineStart...].firstIndex(of: 0x0A) {
+            let line = bufferedData[lineStart..<lineEnd]
+            if !line.isEmpty, let text = String(data: line, encoding: .utf8) {
+                process(line: text, state: &state)
+            }
+            lineStart = bufferedData.index(after: lineEnd)
         }
+        state.remainder = Data(bufferedData[lineStart...])
     }
 
     private func process(line: String, state: inout RolloutState) {
@@ -219,24 +232,49 @@ actor CodexTaskProgressReader {
 
         guard state.isTaskActive,
               root["type"] as? String == "response_item",
-              payloadType == "custom_tool_call",
-              let input = payload["input"] as? String,
-              input.contains("update_plan")
-        else {
+              let input = planInput(payload: payload, payloadType: payloadType) else {
             return
         }
         applyPlan(from: input, state: &state)
     }
 
+    private func planInput(payload: [String: Any], payloadType: String) -> String? {
+        if payloadType == "function_call",
+           payload["name"] as? String == "update_plan" {
+            return payload["arguments"] as? String
+        }
+        if payloadType == "custom_tool_call",
+           let input = payload["input"] as? String,
+           payload["name"] as? String == "update_plan" || input.contains("update_plan") {
+            return input
+        }
+        return nil
+    }
+
     private func applyPlan(from input: String, state: inout RolloutState) {
+        if let data = input.data(using: .utf8),
+           let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let plan = root["plan"] as? [[String: Any]] {
+            let entries = plan.compactMap { item -> (step: String, status: String)? in
+                guard let step = item["step"] as? String,
+                      let status = item["status"] as? String else {
+                    return nil
+                }
+                return (step, status)
+            }
+            if !entries.isEmpty {
+                applyPlanEntries(entries, state: &state)
+                return
+            }
+        }
+
         let pattern = #"step\s*:\s*\"((?:\\.|[^\"])*)\"\s*,\s*status\s*:\s*\"(pending|in_progress|completed)\""#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
         let range = NSRange(input.startIndex..., in: input)
         let matches = regex.matches(in: input, range: range)
         guard !matches.isEmpty else { return }
 
-        var completed = 0
-        var active: String?
+        var entries: [(step: String, status: String)] = []
         for match in matches {
             guard let stepRange = Range(match.range(at: 1), in: input),
                   let statusRange = Range(match.range(at: 2), in: input)
@@ -244,15 +282,19 @@ actor CodexTaskProgressReader {
                 continue
             }
             let step = String(input[stepRange]).replacingOccurrences(of: #"\""#, with: "\"")
-            switch input[statusRange] {
-            case "completed": completed += 1
-            case "in_progress": active = step
-            default: break
-            }
+            entries.append((step, String(input[statusRange])))
         }
-        state.totalSteps = matches.count
+        applyPlanEntries(entries, state: &state)
+    }
+
+    private func applyPlanEntries(
+        _ entries: [(step: String, status: String)],
+        state: inout RolloutState
+    ) {
+        state.totalSteps = entries.count
+        let completed = entries.lazy.filter { $0.status == "completed" }.count
         state.completedSteps = min(completed, state.totalSteps)
-        state.activeStep = active
+        state.activeStep = entries.first { $0.status == "in_progress" }?.step
     }
 
     private func updateSessionTitles() {
@@ -262,7 +304,7 @@ actor CodexTaskProgressReader {
             guard let size = (attributes[.size] as? NSNumber)?.uint64Value else { return }
             fileSize = size
         } catch {
-            AppLogger.codex.debug("Session index unavailable: \(error.localizedDescription, privacy: .public)")
+            AppLogger.codex.debug("Session index unavailable: \(error.localizedDescription, privacy: .private(mask: .hash))")
             return
         }
 
@@ -278,10 +320,10 @@ actor CodexTaskProgressReader {
             defer { try? handle.close() }
             try handle.seek(toOffset: sessionIndexOffset)
             let appendedData = try handle.readToEnd() ?? Data()
-            sessionIndexOffset = fileSize
+            sessionIndexOffset = try handle.offset()
             processSessionIndex(data: appendedData)
         } catch {
-            AppLogger.codex.error("Unable to update session index: \(error.localizedDescription, privacy: .public)")
+            AppLogger.codex.error("Unable to update session index: \(error.localizedDescription, privacy: .private(mask: .hash))")
         }
     }
 

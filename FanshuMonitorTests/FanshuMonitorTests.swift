@@ -43,18 +43,30 @@ struct FanshuMonitorTests {
         #expect(module.severity == .critical)
     }
 
-    @Test func batterySeverityUsesRawPowerTypeKey() {
-        let module = MonitorModule(
+    @Test func batterySeverityUsesProductionPowerStatus() {
+        let charging = MonitorModule(
             kind: .battery,
-            value: 100,
-            summary: "ac-power",
+            value: 5,
+            summary: "5%",
             metrics: [
-                MonitorMetric(name: "type", value: "ac-power")
+                MonitorMetric(name: "type", value: "battery"),
+                MonitorMetric(name: "status", value: "charging")
+            ],
+            samples: []
+        )
+        let discharging = MonitorModule(
+            kind: .battery,
+            value: 5,
+            summary: "5%",
+            metrics: [
+                MonitorMetric(name: "type", value: "battery"),
+                MonitorMetric(name: "status", value: "on-battery")
             ],
             samples: []
         )
 
-        #expect(module.severity == .calm)
+        #expect(charging.severity == .calm)
+        #expect(discharging.severity == .critical)
     }
 
     @Test func coreModulePlaceholdersMatchTheirPanelMetrics() {
@@ -218,6 +230,25 @@ struct FanshuMonitorTests {
         #expect(BatterySamplingPolicy.shouldCollectTelemetry(context: visible))
         #expect(!BatterySamplingPolicy.shouldCollectSmartDetails(context: visible))
         #expect(!BatterySamplingPolicy.shouldCollectTelemetry(context: hidden))
+    }
+
+    @Test func smartBatteryDetailsRequireAVisibleEnabledMetric() {
+        let disabled = MonitorSamplingContext(
+            enabledMetricIDs: [],
+            panelVisible: true
+        )
+        let enabled = MonitorSamplingContext(
+            enabledMetricIDs: ["health"],
+            panelVisible: true
+        )
+        let hidden = MonitorSamplingContext(
+            enabledMetricIDs: ["health"],
+            panelVisible: false
+        )
+
+        #expect(!BatterySamplingPolicy.shouldCollectSmartDetails(context: disabled))
+        #expect(BatterySamplingPolicy.shouldCollectSmartDetails(context: enabled))
+        #expect(!BatterySamplingPolicy.shouldCollectSmartDetails(context: hidden))
     }
 
     @Test func networkSamplerOnlyPublishesEnabledMetrics() {

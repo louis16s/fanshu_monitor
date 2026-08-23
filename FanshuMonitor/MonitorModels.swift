@@ -260,7 +260,8 @@ nonisolated struct MonitorModule: Equatable, Identifiable, Sendable {
             if value >= MonitorConstants.warningThreshold { return .warning }
             return .calm
         case .battery:
-            if metrics.first(where: { $0.name == .batteryType })?.value == "ac-power" {
+            let powerStatus = metrics.first(where: { $0.name == .batteryStatus })?.value
+            if powerStatus == "ac-power" || powerStatus == "charging" {
                 return .calm
             }
             if value <= MonitorConstants.batteryCriticalThreshold { return .critical }

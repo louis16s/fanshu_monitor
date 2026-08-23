@@ -581,6 +581,11 @@ struct BuiltInDisplayRestorePolicyTests {
         )
     }
 
+    @Test func anOnlineSleepingBuiltInDisplayDoesNotNeedTopologyRecovery() {
+        #expect(!BuiltInDisplayAvailabilityPolicy.isUnavailable(isOnline: true))
+        #expect(BuiltInDisplayAvailabilityPolicy.isUnavailable(isOnline: false))
+    }
+
     @Test func builtInIsolationAndSafetyRestoreSharePermanentScope() {
         #expect(
             BuiltInDisplayConfigurationPolicy.isolationOption.rawValue

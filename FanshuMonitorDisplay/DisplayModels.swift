@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-nonisolated struct ControlledDisplay: Identifiable, Sendable {
+nonisolated struct ControlledDisplay: Equatable, Identifiable, Sendable {
     let id: CGDirectDisplayID
     let storageID: String
     let name: String
@@ -346,6 +346,12 @@ nonisolated enum BuiltInDisplayTopologyResult {
         displayIsRestored: Bool
     ) -> Bool {
         targetBlackoutEnabled ? !displayIsRestored : displayIsRestored
+    }
+}
+
+nonisolated enum BuiltInDisplayAvailabilityPolicy {
+    static func isUnavailable(isOnline: Bool) -> Bool {
+        !isOnline
     }
 }
 

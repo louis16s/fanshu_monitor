@@ -156,7 +156,9 @@ final class DisplayControlController: ObservableObject {
                         "Merged isolated built-in display row with ID \(cachedBuiltInDisplay.id)"
                     )
                 }
-                self.displays = mergedDisplays
+                if self.displays != mergedDisplays {
+                    self.displays = mergedDisplays
+                }
                 for display in mergedDisplays {
                     self.seedFallbackValues(for: display)
                 }

@@ -5,12 +5,20 @@ import IOKit.ps
 import OSLog
 
 nonisolated enum BatterySamplingPolicy {
+    private static let smartDetailMetricIDs: Set<MetricID> = [
+        "health",
+        "cycle-count",
+        "temperature"
+    ]
+
     static func shouldCollectTelemetry(context: MonitorSamplingContext) -> Bool {
         context.panelVisible
     }
 
     static func shouldCollectSmartDetails(context: MonitorSamplingContext) -> Bool {
-        shouldCollectTelemetry(context: context) && !context.prioritizesFirstPaint
+        shouldCollectTelemetry(context: context)
+            && !context.prioritizesFirstPaint
+            && !context.enabledMetricIDs.isDisjoint(with: smartDetailMetricIDs)
     }
 }
 
@@ -53,7 +61,8 @@ nonisolated final class BatterySampler: MonitorSampler {
         let shouldCollectSmartDetails = BatterySamplingPolicy.shouldCollectSmartDetails(context: context)
         let smart = shouldCollectSmartDetails ? smartBatteryInfo(at: Date()) : nil
         let powerFlow = shouldCollectTelemetry ? powerTelemetry() : nil
-        let adapterWatts = smart?.adapterWatts ?? (shouldCollectTelemetry ? externalAdapterWatts() : nil)
+        let adapterWatts = smart?.adapterWatts
+            ?? (context.includes("adapter") && shouldCollectTelemetry ? externalAdapterWatts() : nil)
         let chargingPower = connected
             ? (isCharging ? powerFlow?.chargingWatts ?? smart?.chargingPowerWatts : 0)
             : nil
@@ -116,19 +125,19 @@ nonisolated final class BatterySampler: MonitorSampler {
                     "health",
                     freshValue: smart?.healthPercent.map(percent) ?? "--",
                     previous: previous,
-                    shouldCollect: shouldCollectTelemetry
+                    shouldCollect: shouldCollectSmartDetails
                 )),
                 MonitorMetric(name: "cycle-count", value: telemetryValue(
                     "cycle-count",
                     freshValue: smart?.cycleCount.map { "\($0)" } ?? "--",
                     previous: previous,
-                    shouldCollect: shouldCollectTelemetry
+                    shouldCollect: shouldCollectSmartDetails
                 )),
                 MonitorMetric(name: "temperature", value: telemetryValue(
                     "temperature",
                     freshValue: smart?.temperatureCelsius.map { "\(String(format: "%.0f", $0))°C" } ?? "--",
                     previous: previous,
-                    shouldCollect: shouldCollectTelemetry
+                    shouldCollect: shouldCollectSmartDetails
                 ))
             ],
             samples: seedSamples(percentage)

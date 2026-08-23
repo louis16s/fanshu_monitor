@@ -1,5 +1,24 @@
 import Foundation
 
+nonisolated private enum UpdateTransport {
+    static let requestTimeout: TimeInterval = 15
+
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.timeoutIntervalForRequest = requestTimeout
+        configuration.timeoutIntervalForResource = requestTimeout
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration)
+    }()
+
+    static func load(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        try await session.data(for: request)
+    }
+}
+
 @MainActor
 @Observable
 final class UpdateChecker {
@@ -29,7 +48,7 @@ final class UpdateChecker {
         defaults: UserDefaults = .standard,
         now: @escaping () -> Date = Date.init,
         dataLoader: @escaping DataLoader = { request in
-            try await URLSession.shared.data(for: request)
+            try await UpdateTransport.load(request)
         }
     ) {
         self.latestReleaseURL = latestReleaseURL
@@ -72,7 +91,7 @@ final class UpdateChecker {
         if let etag = defaults.string(forKey: Self.releaseETagKey), !etag.isEmpty {
             request.setValue(etag, forHTTPHeaderField: "If-None-Match")
         }
-        request.timeoutInterval = 15
+        request.timeoutInterval = UpdateTransport.requestTimeout
 
         do {
             let (data, response) = try await dataLoader(request)

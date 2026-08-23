@@ -256,7 +256,7 @@ extension MonitorSettings {
                 refreshLaunchAtLoginStatus()
             } catch {
                 AppLogger.settings.error(
-                    "Unable to update launch-at-login status: \(error.localizedDescription, privacy: .public)"
+                    "Unable to update launch-at-login status: \(error.localizedDescription, privacy: .private(mask: .hash))"
                 )
                 isUpdatingLaunchAtLogin = true
                 launchAtLogin = SMAppService.mainApp.status == .enabled

@@ -32,9 +32,7 @@ struct FanshuMonitorApp: App {
                 .environment(\.locale, effectiveLocale)
         } label: {
             Image(nsImage: monitorStore.menuBarIconImage)
-            .resizable()
-            .frame(width: 18, height: 18)
-            .help("番薯Monitor")
+                .help("番薯Monitor")
         }
         .menuBarExtraStyle(.window)
         .commands { AppMenuCommands() }

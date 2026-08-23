@@ -142,6 +142,16 @@ nonisolated final class BuiltInDisplayBlackoutService: @unchecked Sendable {
             return didMirror
         }
 
+        // Topology callbacks and the recovery watchdog can race with
+        // WindowServer's own restoration. Never submit another private display
+        // configuration after the panel is online and unmirrored, including
+        // while it is asleep; that request can wait indefinitely for a previous
+        // commit on some systems.
+        if isDisplayRestored(displayID) {
+            states.removeValue(forKey: displayID)
+            return true
+        }
+
         guard let state = states[displayID] else {
             // A restart loses the in-memory isolation mode. Clear either
             // possible fallback, enable the display, then verify the topology.
@@ -220,9 +230,10 @@ nonisolated final class BuiltInDisplayBlackoutService: @unchecked Sendable {
     }
 
     private func restoreDisconnectedDisplay(displayID: CGDirectDisplayID) -> Bool {
-        // Commit the enabled state even when macOS has already lit the panel.
-        // Otherwise a stale permanent isolation can disable it again at the
-        // next login-window transition.
+        guard !isDisplayRestored(displayID) else { return true }
+
+        // Use a persistent restore only while the panel is still isolated so
+        // the saved topology cannot disable it again at the next login window.
         let permanentRequestSucceeded = configureDisplay(
             displayID: displayID,
             enabled: true,
@@ -302,7 +313,7 @@ nonisolated final class BuiltInDisplayBlackoutService: @unchecked Sendable {
     }
 
     private func isDisplayRestored(_ displayID: CGDirectDisplayID) -> Bool {
-        CGDisplayIsActive(displayID) == 1
+        CGDisplayIsOnline(displayID) == 1
             && CGDisplayMirrorsDisplay(displayID) == kCGNullDirectDisplay
     }
 
