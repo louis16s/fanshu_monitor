@@ -398,12 +398,10 @@ final class MonitorStore: ObservableObject {
     }
 
     private func mergeSampledModule(_ module: MonitorModule) {
-        guard let index = allModules.firstIndex(where: { $0.kind == module.kind })
-        else {
-            return
-        }
+        let mergedModules = MonitorModuleMergePolicy.replacing(module, in: allModules)
+        guard mergedModules != allModules else { return }
         let previousLoad = combinedComputeLoad
-        allModules[index] = module
+        allModules = mergedModules
         modules = visibleModules(from: allModules)
         if abs(previousLoad - combinedComputeLoad) >= 0.01 {
             refreshMenuBarLoad()
@@ -593,7 +591,7 @@ final class MonitorStore: ObservableObject {
         let coordinator = samplingCoordinator
         codexRefreshTask?.cancel()
         codexRefreshTask = Task { [weak self] in
-            guard let snapshot = await coordinator.refreshCodex(
+            guard let module = await coordinator.refreshCodex(
                 previousModules: previousModules,
                 force: force
             ),
@@ -602,8 +600,7 @@ final class MonitorStore: ObservableObject {
             else {
                 return
             }
-            self.allModules = snapshot.modules
-            self.modules = self.visibleModules(from: snapshot.modules)
+            self.mergeSampledModule(module)
             self.refreshCodexTaskProgress()
         }
     }

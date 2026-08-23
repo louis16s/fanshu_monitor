@@ -85,6 +85,34 @@ struct FanshuMonitorTests {
         #expect(power.metrics.first { $0.name == "power" }?.value == "--")
     }
 
+    @Test func aLateCodexRefreshCannotReplaceFreshHardwareModules() {
+        var current = MonitorKind.allCases.map { MonitorModule.placeholder(kind: $0) }
+        let freshCPU = MonitorModule(
+            kind: .cpu,
+            value: 37,
+            summary: "37%",
+            metrics: [],
+            samples: seedSamples(37)
+        )
+        let freshMemory = MonitorModule(
+            kind: .memory,
+            value: 61,
+            summary: "61%",
+            metrics: [],
+            samples: seedSamples(61)
+        )
+        current = MonitorModuleMergePolicy.replacing(freshCPU, in: current)
+        current = MonitorModuleMergePolicy.replacing(freshMemory, in: current)
+
+        var refreshedCodex = MonitorModule.placeholder(kind: .codex)
+        refreshedCodex.summary = "Plus"
+        let merged = MonitorModuleMergePolicy.replacing(refreshedCodex, in: current)
+
+        #expect(merged.first { $0.kind == .cpu }?.value == 37)
+        #expect(merged.first { $0.kind == .memory }?.value == 61)
+        #expect(merged.first { $0.kind == .codex }?.summary == "Plus")
+    }
+
     @Test func displayIdentityRecoverySelectsOnlyABuiltInCandidate() {
         let recovered = DisplayControlService.firstBuiltInDisplayID(
             in: [3, 1, 7],

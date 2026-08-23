@@ -346,3 +346,17 @@ nonisolated struct MonitorModule: Equatable, Identifiable, Sendable {
         )
     }
 }
+
+nonisolated enum MonitorModuleMergePolicy {
+    static func replacing(
+        _ module: MonitorModule,
+        in modules: [MonitorModule]
+    ) -> [MonitorModule] {
+        guard let index = modules.firstIndex(where: { $0.kind == module.kind }) else {
+            return modules
+        }
+        var merged = modules
+        merged[index] = module
+        return merged
+    }
+}

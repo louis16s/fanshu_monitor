@@ -110,17 +110,12 @@ actor SamplingCoordinator {
     func refreshCodex(
         previousModules: [MonitorModule],
         force: Bool
-    ) async -> SystemMonitorSnapshot? {
+    ) async -> MonitorModule? {
         guard !Task.isCancelled else { return nil }
         let previous = previousModules.first { $0.kind == .codex }
         let module = await codexSampler.sample(previous: previous, force: force)
         guard !Task.isCancelled else { return nil }
-
-        var modulesByKind = Dictionary(uniqueKeysWithValues: previousModules.map { ($0.kind, $0) })
-        modulesByKind[.codex] = module
-        return SystemMonitorSnapshot(modules: MonitorKind.allCases.map { kind in
-            modulesByKind[kind] ?? MonitorModule.placeholder(kind: kind)
-        })
+        return module
     }
 
     private func worker(for kind: MonitorKind) -> MonitorModuleSamplerWorker {

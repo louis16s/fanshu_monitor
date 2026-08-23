@@ -51,6 +51,7 @@
 - [x] Codex rollout 增量读取保留未完成 JSONL 行，分段写入不会丢失任务结束或计划更新事件
 - [x] Codex 计划读取支持当前 `function_call/name/arguments` 事件结构，并以结构化 JSON 解析步骤
 - [x] Codex 活动任务变化只发布任务状态，不再重建整个模块指标数组
+- [x] Codex 额度刷新只合并 Codex 模块，迟到的网络结果不会用旧快照覆盖 CPU、GPU、UMA 和电源数据
 - [x] 电池 Smart Battery 详情只在面板可见且健康度、循环数或温度至少一项启用时读取
 - [x] 指标设置按稳定顺序落盘，避免 `Set` 顺序造成无意义写入差异
 
