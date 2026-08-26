@@ -7,8 +7,9 @@ import SwiftUI
 struct DisplayControlsSection: View {
     @ObservedObject var settings: MonitorSettings
     @ObservedObject var controller: DisplayControlController
+    let isExpanded: Bool
+    let toggleExpansion: () -> Void
     @Environment(\.colorScheme) private var colorScheme
-    @State private var isExpanded = true
 
     private let expansionAnimation = Animation.smooth(duration: 0.22)
 
@@ -71,7 +72,7 @@ struct DisplayControlsSection: View {
             .contentShape(Rectangle())
             .onTapGesture {
                 withAnimation(expansionAnimation) {
-                    isExpanded.toggle()
+                    toggleExpansion()
                 }
             }
 

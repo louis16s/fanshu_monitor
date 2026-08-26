@@ -32,6 +32,13 @@
 - 禁用模块的图标和文字要明显变灰并显示删除线
 - Display 模块保持紧凑，亮度滑杆保留清晰底轨和 DDC 0 数字刻度
 
+## 折叠状态
+
+- CPU、GPU、UMA、Power、Codex、Network、Storage 与 Display 共用 `PanelExpansionState`
+- 折叠状态跨面板关闭和应用重启保留，新安装默认展开
+- View 不得用独立 `@State` 保存长期折叠状态，避免视图重建后跳回默认值
+- Display 折叠时只保留标题所需的轻量拓扑，不主动探测 DDC 控制项或显示器能力
+
 ## 验证
 
 每次修改面板共享组件后至少执行：

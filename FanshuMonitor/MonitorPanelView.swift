@@ -7,7 +7,13 @@ struct MonitorPanelView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openSettings) private var openSettings
     @Namespace private var glassNamespace
-    @State private var expandedKinds: Set<MonitorKind> = Set(MonitorKind.allCases)
+    @ObservedObject private var panelExpansionState: PanelExpansionState
+
+    init(store: MonitorStore, settings: MonitorSettings) {
+        self.store = store
+        self.settings = settings
+        panelExpansionState = store.panelExpansionState
+    }
 
     var body: some View {
         let theme = MonitorPanelTheme(
@@ -28,7 +34,13 @@ struct MonitorPanelView: View {
                 }
 
                 if settings.displayModuleVisible {
-                    DisplayControlsSection(settings: settings, controller: store.displayController)
+                    DisplayControlsSection(
+                        settings: settings,
+                        controller: store.displayController,
+                        isExpanded: panelExpansionState.isExpanded(.display)
+                    ) {
+                        panelExpansionState.toggle(.display)
+                    }
                         .glassEffectID("display-controls", in: glassNamespace)
                 }
             }
@@ -123,7 +135,7 @@ struct MonitorPanelView: View {
                 detail: module.summary,
                 samples: module.samples,
                 details: enabledMetrics(for: module),
-                isExpanded: expandedKinds.contains(module.kind)
+                isExpanded: panelExpansionState.isExpanded(.module(module.kind))
             ) {
                 toggleExpansion(for: module.kind)
             }
@@ -134,7 +146,7 @@ struct MonitorPanelView: View {
                 detail: module.summary,
                 samples: module.samples,
                 details: enabledMetrics(for: module),
-                isExpanded: expandedKinds.contains(module.kind)
+                isExpanded: panelExpansionState.isExpanded(.module(module.kind))
             ) {
                 toggleExpansion(for: module.kind)
             }
@@ -144,7 +156,7 @@ struct MonitorPanelView: View {
                 theme: theme,
                 detail: module.summary,
                 details: enabledMetrics(for: module),
-                isExpanded: expandedKinds.contains(module.kind)
+                isExpanded: panelExpansionState.isExpanded(.module(module.kind))
             ) {
                 toggleExpansion(for: module.kind)
             }
@@ -154,7 +166,7 @@ struct MonitorPanelView: View {
                 theme: theme,
                 detail: module.summary,
                 details: enabledMetrics(for: module),
-                isExpanded: expandedKinds.contains(module.kind)
+                isExpanded: panelExpansionState.isExpanded(.module(module.kind))
             ) {
                 toggleExpansion(for: module.kind)
             }
@@ -163,7 +175,7 @@ struct MonitorPanelView: View {
                 module: module,
                 theme: theme,
                 details: enabledMetrics(for: module),
-                isExpanded: expandedKinds.contains(module.kind)
+                isExpanded: panelExpansionState.isExpanded(.module(module.kind))
             ) {
                 toggleExpansion(for: module.kind)
             }
@@ -173,7 +185,7 @@ struct MonitorPanelView: View {
                 theme: theme,
                 details: enabledMetrics(for: module),
                 isPanelVisible: store.isPanelVisible,
-                isExpanded: expandedKinds.contains(module.kind)
+                isExpanded: panelExpansionState.isExpanded(.module(module.kind))
             ) {
                 toggleExpansion(for: module.kind)
             }
@@ -186,7 +198,7 @@ struct MonitorPanelView: View {
                 codexTasks: settings.isMetricEnabled(.activeTasks, for: .codex)
                     ? store.codexTasks
                     : [],
-                isExpanded: expandedKinds.contains(module.kind)
+                isExpanded: panelExpansionState.isExpanded(.module(module.kind))
             ) {
                 toggleExpansion(for: module.kind)
             }
@@ -219,11 +231,7 @@ struct MonitorPanelView: View {
 
     private func toggleExpansion(for kind: MonitorKind) {
         withAnimation(.smooth(duration: 0.18)) {
-            if expandedKinds.contains(kind) {
-                expandedKinds.remove(kind)
-            } else {
-                expandedKinds.insert(kind)
-            }
+            panelExpansionState.toggle(.module(kind))
         }
     }
 

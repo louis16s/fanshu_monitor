@@ -9,13 +9,13 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
     private static let cachedBuiltInBrightnessKey = "displayControl.cachedBuiltInBrightness"
     private static let builtInRecoverySnapshotKey = "displayControl.builtInRecoverySnapshot.v1"
     private let displayServices = DisplayServicesBridge()
-    private let ddc = DisplayDDCBridge()
     private let defaults: UserDefaults
     private let softwareDimming = DisplaySoftwareDimmingService()
     private let builtInBlackout = BuiltInDisplayBlackoutService()
     private let displayClassifier = DisplayClassifier()
     private let ddcRangeStore: DisplayDDCRangeStore
     private let configurationLock = NSLock()
+    private var storedDDCBridge: DisplayDDCBridge?
     private var storedSoftwareDimmingEnabled = true
     private var shouldResetDDCServiceCache = false
 
@@ -35,6 +35,16 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         }
     }
 
+    private func ddcBridge(loadIfNeeded: Bool) -> DisplayDDCBridge? {
+        configurationLock.withLock {
+            if storedDDCBridge == nil, loadIfNeeded {
+                storedDDCBridge = DisplayDDCBridge()
+                AppLogger.ddc.notice("Loaded external display DDC bridge on demand")
+            }
+            return storedDDCBridge
+        }
+    }
+
     func displays(reading activeControls: Set<DisplayControlKind> = Set(DisplayControlKind.allCases)) -> [ControlledDisplay] {
         var ids = [CGDirectDisplayID](repeating: 0, count: 16)
         var count: UInt32 = 0
@@ -45,6 +55,7 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
 
         let displayIDs = Array(ids.prefix(Int(count)))
         AppLogger.ui.info("Detected \(displayIDs.count) online displays")
+        let ddc = ddcBridge(loadIfNeeded: !activeControls.isEmpty)
         let forceDDCReset: Bool
         if activeControls.isEmpty {
             forceDDCReset = false
@@ -55,7 +66,7 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             }
         }
         if !activeControls.isEmpty {
-            ddc.refresh(displayIDs: displayIDs, forceReset: forceDDCReset)
+            ddc?.refresh(displayIDs: displayIDs, forceReset: forceDDCReset)
         }
 
         return displayIDs.map { id in
@@ -66,7 +77,7 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             let name = displayName(for: id, isBuiltIn: isBuiltIn)
             let storageID = displayStorageID(for: id, name: name, isBuiltIn: isBuiltIn)
             if usesDDC, let storedRange = ddcRangeStore.range(displayStorageID: storageID) {
-                ddc.setValueRange(storedRange, for: .brightness, displayID: id)
+                ddc?.setValueRange(storedRange, for: .brightness, displayID: id)
             }
             let appleBrightness = usesNativeBrightness && activeControls.contains(.brightness)
                 ? displayServices.getBrightness(displayID: id)
@@ -74,44 +85,52 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             if isBuiltIn {
                 cacheBuiltInDisplay(displayID: id, brightness: appleBrightness)
             }
-            let hasDDCService = usesDDC && ddc.hasService(for: id)
-            let brightnessTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.brightness, displayID: id)
-            let volumeTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.volume, displayID: id)
-            let contrastTemporarilyDisabled = usesDDC && ddc.isTemporarilyDisabled(.contrast, displayID: id)
+            let hasDDCService = usesDDC && (ddc?.hasService(for: id) == true)
+            let brightnessTemporarilyDisabled = usesDDC && (ddc?.isTemporarilyDisabled(.brightness, displayID: id) == true)
+            let volumeTemporarilyDisabled = usesDDC && (ddc?.isTemporarilyDisabled(.volume, displayID: id) == true)
+            let contrastTemporarilyDisabled = usesDDC && (ddc?.isTemporarilyDisabled(.contrast, displayID: id) == true)
             let ddcBrightness = usesDDC && activeControls.contains(.brightness)
-                ? ddc.read(.brightness, displayID: id)
+                ? ddc?.read(.brightness, displayID: id)
                 : nil
             let ddcVolume = usesDDC && activeControls.contains(.volume)
-                ? ddc.read(.volume, displayID: id)
+                ? ddc?.read(.volume, displayID: id)
                 : nil
             let ddcContrast = usesDDC && activeControls.contains(.contrast)
-                ? ddc.read(.contrast, displayID: id)
+                ? ddc?.read(.contrast, displayID: id)
                 : nil
             let storedBrightness = storedValue(for: .brightness, displayStorageID: storageID)
             let storedVolume = storedValue(for: .volume, displayStorageID: storageID)
             let storedContrast = storedValue(for: .contrast, displayStorageID: storageID)
-            let hasVerifiedDDCBrightness = usesDDC && ddc.hasVerifiedControl(.brightness, displayID: id)
-            let supportsBrightness = Self.supportsBrightness(
+            let hasVerifiedDDCBrightness = usesDDC && (ddc?.hasVerifiedControl(.brightness, displayID: id) == true)
+            let supportsBrightness = activeControls.contains(.brightness) && Self.supportsBrightness(
                 displayKind: displayKind,
                 nativeBrightnessAvailable: appleBrightness != nil,
                 ddcBrightnessAvailable: ddcBrightness != nil,
                 ddcBrightnessPreviouslyVerified: hasVerifiedDDCBrightness,
                 isTemporarilyDisabled: brightnessTemporarilyDisabled
             )
-            let supportsVolume = usesDDC && !volumeTemporarilyDisabled && (ddcVolume != nil || storedVolume != nil)
-            let supportsContrast = usesDDC && !contrastTemporarilyDisabled && (ddcContrast != nil || storedContrast != nil)
+            let supportsVolume = activeControls.contains(.volume)
+                && usesDDC
+                && hasDDCService
+                && !volumeTemporarilyDisabled
+                && (ddcVolume != nil || storedVolume != nil)
+            let supportsContrast = activeControls.contains(.contrast)
+                && usesDDC
+                && hasDDCService
+                && !contrastTemporarilyDisabled
+                && (ddcContrast != nil || storedContrast != nil)
             if usesDDC,
                ddcBrightness != nil,
-               let learnedRange = ddc.valueRange(for: .brightness, displayID: id) {
+               let learnedRange = ddc?.valueRange(for: .brightness, displayID: id) {
                 ddcRangeStore.save(learnedRange, displayStorageID: storageID)
             }
             let restoredQuantizationOpacity: Double
             if usesDDC, let storedBrightness {
                 let mappedHardware = softwareDimming.hardwareBrightness(forUserBrightness: storedBrightness)
-                restoredQuantizationOpacity = ddc.brightnessWritePlan(
+                restoredQuantizationOpacity = ddc?.brightnessWritePlan(
                     for: mappedHardware,
                     displayID: id
-                ).overlayOpacity
+                ).overlayOpacity ?? 0
             } else {
                 restoredQuantizationOpacity = 0
             }
@@ -187,6 +206,7 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             }
         }
 
+        guard let ddc = ddcBridge(loadIfNeeded: true) else { return false }
         let outcome = ddc.write(writeValue, for: control, displayID: display.id)
         if outcome.success {
             if control == .brightness, softwareDimmingEnabled {

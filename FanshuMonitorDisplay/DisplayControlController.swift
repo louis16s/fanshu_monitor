@@ -4,6 +4,55 @@ import CoreGraphics
 import Foundation
 import OSLog
 
+nonisolated struct DisplayControlDemand: Equatable {
+    let controllerRequired: Bool
+    let activeControls: Set<DisplayControlKind>
+    let capabilitiesRequested: Bool
+    let panelControlsActive: Bool
+
+    static let inactive = DisplayControlDemand(
+        controllerRequired: false,
+        activeControls: [],
+        capabilitiesRequested: false,
+        panelControlsActive: false
+    )
+}
+
+nonisolated enum DisplayControlDemandPolicy {
+    static func resolve(
+        panelVisible: Bool,
+        displaySectionExpanded: Bool,
+        displayModuleVisible: Bool,
+        brightnessControlEnabled: Bool,
+        volumeControlEnabled: Bool,
+        contrastControlEnabled: Bool,
+        capabilitiesEnabled: Bool,
+        brightnessKeyInterceptionEnabled: Bool,
+        needsBuiltInBlackoutMaintenance: Bool
+    ) -> DisplayControlDemand {
+        let panelControlsActive = panelVisible && displayModuleVisible && displaySectionExpanded
+        var activeControls: Set<DisplayControlKind> = []
+        if brightnessKeyInterceptionEnabled || (panelControlsActive && brightnessControlEnabled) {
+            activeControls.insert(.brightness)
+        }
+        if panelControlsActive && volumeControlEnabled {
+            activeControls.insert(.volume)
+        }
+        if panelControlsActive && contrastControlEnabled {
+            activeControls.insert(.contrast)
+        }
+
+        return DisplayControlDemand(
+            controllerRequired: brightnessKeyInterceptionEnabled
+                || needsBuiltInBlackoutMaintenance
+                || (panelVisible && displayModuleVisible),
+            activeControls: activeControls,
+            capabilitiesRequested: panelControlsActive && capabilitiesEnabled,
+            panelControlsActive: panelControlsActive
+        )
+    }
+}
+
 @MainActor
 final class DisplayControlController: ObservableObject {
     @Published private(set) var displays: [ControlledDisplay] = []
@@ -29,7 +78,6 @@ final class DisplayControlController: ObservableObject {
     private var refreshWorkItem: DispatchWorkItem?
     private var wakeRefreshGeneration = 0
     private var displayCallbackRegistered = false
-    private var isPanelVisible = false
     private var nativeBrightnessSyncTask: Task<Void, Never>?
     private var nativeBrightnessSyncGeneration = 0
     private var nativeBrightnessReadsInFlight: Set<CGDirectDisplayID> = []
@@ -39,6 +87,7 @@ final class DisplayControlController: ObservableObject {
     private var builtInDisconnectWatchdogTask: Task<Void, Never>?
     private var builtInDisconnectWatchdogGeneration = 0
     private var isSystemSleeping = false
+    private var controlDemand = DisplayControlDemand.inactive
     private lazy var blackoutIntentState = DisplayBlackoutIntentState(
         desired: defaults.bool(forKey: Self.builtInBlackoutPreferenceKey)
     )
@@ -128,7 +177,7 @@ final class DisplayControlController: ObservableObject {
                 }
                 var mergedDisplays = detectedDisplays.map { detectedDisplay in
                     var display = self.mergedDisplayValues(for: detectedDisplay)
-                    if self.settings?.displayCapabilitiesEnabled == true {
+                    if self.controlDemand.capabilitiesRequested {
                         display.capabilities = DisplayCapabilityProbe.snapshot(
                             displayID: display.id,
                             kind: display.kind
@@ -368,10 +417,12 @@ final class DisplayControlController: ObservableObject {
         builtInBlackoutActionFailed = false
     }
 
-    func setPanelVisible(_ isVisible: Bool) {
-        guard isPanelVisible != isVisible else { return }
-        isPanelVisible = isVisible
+    @discardableResult
+    func applyDemand(_ demand: DisplayControlDemand) -> Bool {
+        guard controlDemand != demand else { return false }
+        controlDemand = demand
         configureNativeBrightnessSync()
+        return true
     }
 
     func scheduleRefresh(delay: TimeInterval = 0.45) {
@@ -769,29 +820,15 @@ final class DisplayControlController: ObservableObject {
     }
 
     private var activeControls: Set<DisplayControlKind> {
-        guard let settings else {
-            return Set(DisplayControlKind.allCases)
-        }
-
-        var controls: Set<DisplayControlKind> = []
-        if settings.displayBrightnessControlEnabled || settings.brightnessKeyInterceptionEnabled {
-            controls.insert(.brightness)
-        }
-        if settings.displayVolumeControlEnabled {
-            controls.insert(.volume)
-        }
-        if settings.displayContrastControlEnabled {
-            controls.insert(.contrast)
-        }
-        return controls
+        controlDemand.activeControls
     }
 
     private func configureNativeBrightnessSync() {
         stopNativeBrightnessSync()
         guard DisplayNativeBrightnessSyncPolicy.shouldRun(
-            panelVisible: isPanelVisible,
-            moduleVisible: settings?.displayModuleVisible == true,
-            brightnessControlEnabled: settings?.displayBrightnessControlEnabled == true,
+            panelVisible: controlDemand.panelControlsActive,
+            moduleVisible: true,
+            brightnessControlEnabled: controlDemand.activeControls.contains(.brightness),
             hasNativeBrightnessDisplay: displays.contains {
                 $0.usesNativeBrightness && $0.supportsBrightness
             }

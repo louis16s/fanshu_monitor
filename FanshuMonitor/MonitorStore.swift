@@ -21,6 +21,7 @@ final class MonitorStore: ObservableObject {
         loadLevel: .idle
     )
     @Published var isPanelVisible = false
+    let panelExpansionState: PanelExpansionState
     let displayController = DisplayControlController()
     private var brightnessKeyEventTap: BrightnessKeyEventTap?
     let mouseController = MouseControlController()
@@ -58,6 +59,7 @@ final class MonitorStore: ObservableObject {
             return MonitorModule.placeholder(kind: kind)
         }
         self.settings = settings
+        panelExpansionState = PanelExpansionState(defaults: settings.defaults)
         lastEnabledMetricsSnapshot = settings.enabledMetrics
         refreshSchedule.setInterval(settings.codexRefreshIntervalMinutes * 60, for: .codex)
         allModules = initialModules
@@ -105,6 +107,15 @@ final class MonitorStore: ObservableObject {
             self?.configureDisplayControlServices()
         }
         .store(in: &cancellables)
+
+        panelExpansionState.$collapsedStorageIDs
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.configureDisplayControlServices()
+            }
+            .store(in: &cancellables)
 
         settings.$displaySoftwareDimmingEnabled
             .dropFirst()
@@ -438,12 +449,24 @@ final class MonitorStore: ObservableObject {
 
     private func configureDisplayControlServices() {
         displayController.settings = settings
+        let demand = DisplayControlDemandPolicy.resolve(
+            panelVisible: isPanelVisible,
+            displaySectionExpanded: panelExpansionState.isExpanded(.display),
+            displayModuleVisible: settings.displayModuleVisible,
+            brightnessControlEnabled: settings.displayBrightnessControlEnabled,
+            volumeControlEnabled: settings.displayVolumeControlEnabled,
+            contrastControlEnabled: settings.displayContrastControlEnabled,
+            capabilitiesEnabled: settings.displayCapabilitiesEnabled,
+            brightnessKeyInterceptionEnabled: settings.brightnessKeyInterceptionEnabled,
+            needsBuiltInBlackoutMaintenance: displayController.needsBuiltInBlackoutMaintenance
+        )
+        let demandChanged = displayController.applyDemand(demand)
 
-        if needsDisplayController {
+        if demand.controllerRequired {
             displayController.startAutomaticRefresh()
             if displayController.displays.isEmpty {
                 displayController.refreshAsync()
-            } else {
+            } else if demandChanged {
                 displayController.refreshNow()
             }
         } else {
@@ -455,20 +478,6 @@ final class MonitorStore: ObservableObject {
         } else {
             brightnessKeyEventTap?.stop()
         }
-    }
-
-    private var needsDisplayController: Bool {
-        settings.brightnessKeyInterceptionEnabled
-            || displayController.needsBuiltInBlackoutMaintenance
-            || (
-                settings.displayModuleVisible
-                && (
-                    settings.displayBrightnessControlEnabled
-                    || settings.displayVolumeControlEnabled
-                    || settings.displayContrastControlEnabled
-                    || settings.displayCapabilitiesEnabled
-                )
-            )
     }
 
     private func updateMenuBarTargetComputeLoadIfNeeded(force: Bool = false) {
@@ -523,7 +532,7 @@ final class MonitorStore: ObservableObject {
         isPanelVisible = true
         requestWiFiAuthorizationIfNeeded(activateApp: true)
         cancelSamplingTask()
-        displayController.setPanelVisible(true)
+        configureDisplayControlServices()
         syncSamplerResidency()
         configureSamplingTimer()
         let visibleKinds = settings.visibleKinds
@@ -545,7 +554,7 @@ final class MonitorStore: ObservableObject {
         guard isPanelVisible else { return }
         isPanelVisible = false
         cancelSamplingTask()
-        displayController.setPanelVisible(false)
+        configureDisplayControlServices()
         syncSamplerResidency()
         configureSamplingTimer()
         configureCodexTaskProgressMonitoring()
