@@ -139,8 +139,6 @@ struct MonitorPalette {
             Color(hex: 0x5D8CF0)
         case .memory:
             Color(hex: 0x42A39A)
-        case .storage:
-            Color(hex: 0xB8872E)
         case .network:
             Color(hex: 0x8B5CF6)
         case .battery:
@@ -158,8 +156,6 @@ struct MonitorPalette {
             Color(hex: 0x475569)
         case .memory:
             Color(hex: 0x0D9488)
-        case .storage:
-            Color(hex: 0xA16207)
         case .network:
             Color(hex: 0x4338CA)
         case .battery:
@@ -177,8 +173,6 @@ struct MonitorPalette {
             Color(hex: 0x7C3AED)
         case .memory:
             Color(hex: 0x0891B2)
-        case .storage:
-            Color(hex: 0xD97706)
         case .network:
             Color(hex: 0x2563EB)
         case .battery:
@@ -196,8 +190,6 @@ struct MonitorPalette {
             Color(hex: 0x06B6D4)
         case .memory:
             Color(hex: 0x22C55E)
-        case .storage:
-            Color(hex: 0xEAB308)
         case .network:
             Color(hex: 0xA855F7)
         case .battery:

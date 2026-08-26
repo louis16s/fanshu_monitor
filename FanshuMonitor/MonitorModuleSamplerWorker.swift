@@ -37,8 +37,6 @@ actor MonitorModuleSamplerWorker {
             GPUSampler()
         case .memory:
             MemorySampler()
-        case .storage:
-            StorageSampler()
         case .network:
             NetworkSampler()
         case .battery:

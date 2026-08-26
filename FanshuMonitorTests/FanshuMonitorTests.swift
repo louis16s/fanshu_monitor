@@ -241,25 +241,6 @@ struct FanshuMonitorTests {
         #expect(!disabled.shouldCollectExpensiveMetric("temperature"))
     }
 
-    @Test func firstPaintSamplingOnlyAppliesToAVisiblePanel() {
-        let visible = MonitorSamplingContext(
-            enabledMetricIDs: [],
-            panelVisible: true,
-            mode: .firstPaint
-        )
-        let hidden = MonitorSamplingContext(
-            enabledMetricIDs: [],
-            panelVisible: false,
-            mode: .firstPaint
-        )
-
-        #expect(visible.prioritizesFirstPaint)
-        #expect(!hidden.prioritizesFirstPaint)
-        #expect(BatterySamplingPolicy.shouldCollectTelemetry(context: visible))
-        #expect(!BatterySamplingPolicy.shouldCollectSmartDetails(context: visible))
-        #expect(!BatterySamplingPolicy.shouldCollectTelemetry(context: hidden))
-    }
-
     @Test func smartBatteryDetailsRequireAVisibleEnabledMetric() {
         let disabled = MonitorSamplingContext(
             enabledMetricIDs: [],
@@ -290,59 +271,6 @@ struct FanshuMonitorTests {
         #expect(module.metrics.map(\.name) == ["upload"])
     }
 
-    @Test func diskHealthIsOnDemandAndCached() {
-        let reads = ThreadSafeCounter()
-        let sampler = StorageSampler(healthReader: {
-            reads.increment()
-            return "normal"
-        })
-        let hiddenContext = MonitorSamplingContext(
-            enabledMetricIDs: ["health"],
-            panelVisible: false
-        )
-        let visibleContext = MonitorSamplingContext(
-            enabledMetricIDs: ["health"],
-            panelVisible: true
-        )
-
-        let hidden = sampler.sample(previous: nil, context: hiddenContext)
-        #expect(reads.value == 0)
-        #expect(hidden.metrics.first { $0.name == "health" }?.value == "--")
-
-        let firstVisible = sampler.sample(previous: hidden, context: visibleContext)
-        let secondVisible = sampler.sample(previous: firstVisible, context: visibleContext)
-        #expect(reads.value == 1)
-        #expect(secondVisible.metrics.first { $0.name == "health" }?.value == "normal")
-    }
-
-    @Test func storageFirstPaintDoesNotWaitForHealth() {
-        let reads = ThreadSafeCounter()
-        let sampler = StorageSampler(healthReader: {
-            reads.increment()
-            return "normal"
-        })
-        let context = MonitorSamplingContext(
-            enabledMetricIDs: ["health"],
-            panelVisible: true,
-            mode: .firstPaint
-        )
-
-        let module = sampler.sample(previous: nil, context: context)
-
-        #expect(reads.value == 0)
-        #expect(module.summary != "--")
-        #expect(module.metrics.first { $0.name == "health" }?.value == "--")
-    }
-
-    @Test func storageBootstrapPublishesCapacityImmediately() {
-        let module = StorageSampler.bootstrapModule()
-
-        #expect(module.summary != "--")
-        #expect(module.summary != "无法读取")
-        #expect(module.value > 0)
-        #expect(module.metrics.first { $0.name == "total" }?.value != nil)
-    }
-
     @Test func networkSSIDUsesSelectedInterfaceAndRetriesFailures() {
         let reads = ThreadSafeCounter()
         let sampler = NetworkSampler(
@@ -364,16 +292,6 @@ struct FanshuMonitorTests {
         let second = sampler.sample(previous: first, context: context)
         #expect(second.metrics.first { $0.name == "ssid" }?.value == "Fanshu Wi-Fi")
         #expect(reads.value == 2)
-    }
-
-    @Test func diskHealthParsesSMARTStatus() throws {
-        let data = try PropertyListSerialization.data(
-            fromPropertyList: ["SMARTStatus": "Verified"],
-            format: .xml,
-            options: 0
-        )
-
-        #expect(DiskHealthReader.status(fromPropertyList: data) == "normal")
     }
 
     @Test func codexRefreshScheduleUsesConfiguredInterval() {
@@ -766,7 +684,7 @@ struct FanshuMonitorTests {
 
     @Test func hiddenPanelOnlyKeepsMenuBarRingDependenciesActive() {
         let visibleKinds: Set<MonitorKind> = [
-            .cpu, .gpu, .memory, .storage, .network, .battery, .codex
+            .cpu, .gpu, .memory, .network, .battery, .codex
         ]
         #expect(MonitorSamplingPolicy.activeKinds(
             visibleKinds: visibleKinds,
@@ -788,6 +706,11 @@ struct FanshuMonitorTests {
             panelVisible: true,
             ringSource: .combined
         ) == visibleKinds)
+        #expect(MonitorSamplingPolicy.activeKinds(
+            visibleKinds: visibleKinds.subtracting([.network]),
+            panelVisible: false,
+            ringSource: .network
+        ).isEmpty)
     }
 
     @Test func logitechDeviceMatchingRejectsNonMouseProducts() {

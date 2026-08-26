@@ -11,7 +11,7 @@
 - Keep the menu bar minimal: one clear status icon.
 - Keep the popover compact: unified hardware metrics and display controls.
 - Prioritize readability over raw density.
-- Treat CPU, GPU, memory, storage, network, and battery as the core metric set.
+- Treat CPU, GPU, memory, network, and battery as the core metric set.
 - Treat display controls as a Direct-build capability.
 - Group display controls by display so multiple external monitors remain understandable.
 - Show built-in display controls by default in Direct builds, with a setting to hide built-in displays and show only external displays.

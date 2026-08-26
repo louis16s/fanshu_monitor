@@ -23,6 +23,13 @@ nonisolated final class WiFiAuthorizationState: @unchecked Sendable {
         return status == .authorizedAlways
     }
 
+    var needsAuthorizationRequest: Bool {
+        lock.lock()
+        let status = CLAuthorizationStatus(rawValue: rawStatus)
+        lock.unlock()
+        return status == .notDetermined
+    }
+
     var unavailableMetricValue: String? {
         lock.lock()
         let status = CLAuthorizationStatus(rawValue: rawStatus)
@@ -39,6 +46,7 @@ nonisolated final class WiFiAuthorizationState: @unchecked Sendable {
 
 final class WiFiLocationAuthorizationController: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
+    private var requestPending = false
     var authorizationDidChange: ((CLAuthorizationStatus) -> Void)?
 
     override init() {
@@ -47,8 +55,11 @@ final class WiFiLocationAuthorizationController: NSObject, CLLocationManagerDele
         WiFiAuthorizationState.shared.update(manager.authorizationStatus)
     }
 
-    func requestIfNeeded(activateApp: Bool = false) {
-        guard manager.authorizationStatus == .notDetermined else { return }
+    @discardableResult
+    func requestIfNeeded(activateApp: Bool = false) -> Bool {
+        guard manager.authorizationStatus == .notDetermined else { return false }
+        guard !requestPending else { return true }
+        requestPending = true
         if activateApp, !NSApp.isActive {
             NSApp.activate()
         }
@@ -58,9 +69,11 @@ final class WiFiLocationAuthorizationController: NSObject, CLLocationManagerDele
             // CoreWLAN requires that privilege before exposing an SSID.
             self?.manager.requestAlwaysAuthorization()
         }
+        return true
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        requestPending = false
         WiFiAuthorizationState.shared.update(manager.authorizationStatus)
         authorizationDidChange?(manager.authorizationStatus)
     }

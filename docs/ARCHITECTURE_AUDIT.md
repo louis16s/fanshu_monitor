@@ -26,7 +26,7 @@
 - 系统能力：私有锁屏与显示器隔离符号统一登记到 `SystemCapabilityRegistry`，缺失时保留明确的降级状态
 - 持久化：`MonitorSettings` 只声明设置行为，JSON 编解码由 `PreferencesCodec` 统一处理和记录错误
 - 设置持久化：`MonitorSettingsPersistence` 集中管理 Combine 绑定、UserDefaults 写入和登录项更新，保留原有 key 与迁移行为
-- 面板 View：通用、存储、网络和电源行分文件维护，共享 `PanelModuleHeader` 与详情网格
+- 面板 View：通用、网络和电源行分文件维护，共享 `PanelModuleHeader` 与详情网格
 - 发布层：tag、Release workflow、SHA-256 清单和 release manifest
 
 ## 性能清单

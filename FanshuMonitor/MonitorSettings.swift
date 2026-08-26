@@ -242,7 +242,7 @@ final class MonitorSettings: ObservableObject {
             }
             visibleKinds = migratedKinds
         } else {
-            visibleKinds = Set(MonitorKind.allCases).subtracting([.storage, .network])
+            visibleKinds = Set(MonitorKind.allCases).subtracting([.network])
             defaults.set(true, forKey: Keys.codexVisibilityMigrated)
         }
 
@@ -257,10 +257,6 @@ final class MonitorSettings: ObservableObject {
         if !defaults.bool(forKey: Keys.codexActiveTasksMetricMigrated) {
             loadedMetrics[.codex, default: defaultMetricIds(for: .codex)].insert(.activeTasks)
             defaults.set(true, forKey: Keys.codexActiveTasksMetricMigrated)
-        }
-        if !defaults.bool(forKey: Keys.storageDiskHealthMetricMigrated) {
-            loadedMetrics[.storage, default: defaultMetricIds(for: .storage)].insert("health")
-            defaults.set(true, forKey: Keys.storageDiskHealthMetricMigrated)
         }
         enabledMetrics = loadedMetrics
 
@@ -463,8 +459,6 @@ final class MonitorSettings: ObservableObject {
                 return ["GPU内存": "gpu-memory", "已分配": "allocated", "渲染": "render", "分块": "tiler", "温度": "temperature"]
             case .memory:
                 return ["已用": "used", "压力": "pressure", "总量": "total", "App 占用": "app-memory", "缓存": "cached", "已压缩": "compressed"]
-            case .storage:
-                return ["已用": "used", "可用": "free", "总量": "total", "健康度": "health", "磁盘健康度": "health"]
             case .network:
                 return ["IP 地址": "ipv4", "上传": "upload", "下载": "download", "SSID": "ssid", "IPv4": "ipv4", "IPv6": "ipv6"]
             case .battery:
@@ -559,7 +553,7 @@ final class MonitorSettings: ObservableObject {
         mouseCustomShortcuts = [:]
         lockScreenPoliciesEnabled = false
         lockScreenPolicies = []
-        visibleKinds = Set(MonitorKind.allCases).subtracting([.storage, .network])
+        visibleKinds = Set(MonitorKind.allCases).subtracting([.network])
         for kind in MonitorKind.allCases {
             defaults.removeObject(forKey: Keys.enabledMetricsPrefix + kind.rawValue)
         }
@@ -601,6 +595,5 @@ enum Keys {
     static let visibleKinds = "settings.visibleKinds"
     static let codexVisibilityMigrated = "settings.codexVisibilityMigrated"
     static let codexActiveTasksMetricMigrated = "settings.codex.activeTasksMetricMigrated"
-    static let storageDiskHealthMetricMigrated = "settings.storage.diskHealthMetricMigrated"
     static let enabledMetricsPrefix = "settings.enabledMetrics."
 }

@@ -9,40 +9,47 @@ nonisolated struct SystemMonitorSnapshot: Sendable {
 /// sample concurrently.
 actor SamplingCoordinator {
     private var workers: [MonitorKind: MonitorModuleSamplerWorker] = [:]
-    private let codexSampler = CodexQuotaSampler()
+    private var codexSampler: CodexQuotaSampler?
+    private var codexRefreshInterval: TimeInterval = 300
     private var samplerResidencyGeneration: UInt64 = 0
 
     func setCodexRefreshInterval(_ interval: TimeInterval) async {
-        await codexSampler.setRefreshInterval(interval)
+        codexRefreshInterval = min(3600, max(60, interval))
+        if let codexSampler {
+            await codexSampler.setRefreshInterval(codexRefreshInterval)
+        }
     }
 
     func retainSamplers(for visibleKinds: Set<MonitorKind>) async {
         samplerResidencyGeneration &+= 1
         let generation = samplerResidencyGeneration
         workers = workers.filter { visibleKinds.contains($0.key) }
-        if !visibleKinds.contains(.codex) {
+        if !visibleKinds.contains(.codex), let codexSampler {
             await codexSampler.release()
+            self.codexSampler = nil
         }
         guard generation == samplerResidencyGeneration else { return }
     }
 
     func loadedSamplerKinds() -> Set<MonitorKind> {
-        Set(workers.keys)
+        var kinds = Set(workers.keys)
+        if codexSampler != nil {
+            kinds.insert(.codex)
+        }
+        return kinds
     }
 
     func sampleModule(
         kind: MonitorKind,
         previous: MonitorModule?,
         enabledMetricIDs: Set<MetricID>,
-        panelVisible: Bool,
-        mode: MonitorSamplingMode = .routine
+        panelVisible: Bool
     ) async -> MonitorModule? {
         guard kind != .codex, !Task.isCancelled else { return nil }
         let worker = worker(for: kind)
         let context = MonitorSamplingContext(
             enabledMetricIDs: enabledMetricIDs,
-            panelVisible: panelVisible,
-            mode: mode
+            panelVisible: panelVisible
         )
         let module = await worker.sample(previous: previous, context: context)
         return Task.isCancelled ? nil : module
@@ -113,6 +120,7 @@ actor SamplingCoordinator {
     ) async -> MonitorModule? {
         guard !Task.isCancelled else { return nil }
         let previous = previousModules.first { $0.kind == .codex }
+        let codexSampler = await activeCodexSampler()
         let module = await codexSampler.sample(previous: previous, force: force)
         guard !Task.isCancelled else { return nil }
         return module
@@ -125,5 +133,15 @@ actor SamplingCoordinator {
         let worker = MonitorModuleSamplerWorker(kind: kind)
         workers[kind] = worker
         return worker
+    }
+
+    private func activeCodexSampler() async -> CodexQuotaSampler {
+        if let codexSampler {
+            return codexSampler
+        }
+        let sampler = CodexQuotaSampler()
+        await sampler.setRefreshInterval(codexRefreshInterval)
+        codexSampler = sampler
+        return sampler
     }
 }

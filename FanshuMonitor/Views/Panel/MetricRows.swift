@@ -29,9 +29,7 @@ struct MetricGlassRow: View {
 
             if isExpanded, hasExpandedDetails {
                 Group {
-                    if let storageVolumes {
-                        StorageVolumeDetailList(volumes: storageVolumes, kind: module.kind, tint: tint, theme: theme)
-                    } else if module.kind == .codex {
+                    if module.kind == .codex {
                         CodexMetricDetailGrid(
                             metrics: details,
                             tasks: codexTasks,
@@ -70,7 +68,7 @@ struct MetricGlassRow: View {
                 SparklineChart(samples: samples, tint: tint)
                     .frame(width: 56, height: 18)
             }
-        case .memory, .storage:
+        case .memory:
             ProgressMeter(value: module.value, tint: tint, theme: theme)
                 .frame(width: 56, height: 3)
         case .network, .battery:
@@ -85,35 +83,6 @@ struct MetricGlassRow: View {
         }
     }
 
-    private var storageVolumes: [StorageVolumeInfo]? {
-        guard module.kind == .storage else {
-            return nil
-        }
-
-        let externalVolumes = parseExternalVolumes(module.context)
-        guard !externalVolumes.isEmpty else {
-            return nil
-        }
-
-        return [systemVolumeInfo] + externalVolumes
-    }
-
-    private var systemVolumeInfo: StorageVolumeInfo {
-        StorageVolumeInfo(
-            id: "system",
-            name: String(localized: "panel.system-volume"),
-            used: metricValue("used"),
-            free: metricValue("free"),
-            total: metricValue("total"),
-            health: details.first { $0.name == "health" }.map { localizedDiskHealth($0.value) },
-            percentage: Int(module.value.rounded()),
-            isExternal: false
-        )
-    }
-
-    private func metricValue(_ name: MetricID) -> String {
-        details.first { $0.name == name }?.value ?? "--"
-    }
 }
 
 // MARK: - Detail Grid
@@ -234,8 +203,6 @@ private func localizedMetricValue(kind: MonitorKind, metric: MonitorMetric) -> S
         return localizedMemoryPressure(metric.value)
     case (.battery, "adapter"):
         return localizedBatteryState(metric.value)
-    case (.storage, "health"):
-        return localizedDiskHealth(metric.value)
     default:
         return metric.value
     }
@@ -249,12 +216,6 @@ private func localizedMemoryPressure(_ id: String) -> String {
 
 func localizedBatteryState(_ id: String) -> String {
     let key = "battery-state.\(id)"
-    let localized = String(localized: String.LocalizationValue(key))
-    return localized == key ? id : localized
-}
-
-func localizedDiskHealth(_ id: String) -> String {
-    let key = "disk-health.\(id)"
     let localized = String(localized: String.LocalizationValue(key))
     return localized == key ? id : localized
 }

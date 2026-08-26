@@ -36,7 +36,6 @@ struct SettingsTests {
             .gpu,
             .memory,
             .battery,
-            .storage,
             .network,
             .codex,
         ])
@@ -180,6 +179,18 @@ struct SettingsTests {
         #expect(settings.isVisible(.codex))
     }
 
+    @Test func removedStorageModuleIsIgnoredInPersistedVisibility() {
+        let suite = "removedStorageModuleIsIgnoredInPersistedVisibility"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(["cpu", "storage"], forKey: "settings.visibleKinds")
+        defaults.set(true, forKey: "settings.codexVisibilityMigrated")
+
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(settings.visibleKinds == [.cpu])
+    }
+
     @Test func visibilityToggle() {
         let settings = MonitorSettings()
         settings.setVisible(false, for: .cpu)
@@ -304,41 +315,18 @@ struct SettingsTests {
         #expect(settings.isMetricEnabled("plan", for: .codex))
     }
 
-    @Test func storageDefaultsIncludeDiskHealth() {
-        let suite = "storageDefaultsIncludeDiskHealth"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        let settings = MonitorSettings(defaults: defaults)
-
-        #expect(settings.isMetricEnabled("health", for: .storage))
-    }
-
-    @Test func storageDiskHealthMigrationRunsOnlyOnce() {
-        let suite = "storageDiskHealthMigrationRunsOnlyOnce"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        defaults.set(["used", "free", "total"], forKey: "settings.enabledMetrics.storage")
-
-        let migrated = MonitorSettings(defaults: defaults)
-        #expect(migrated.isMetricEnabled("health", for: .storage))
-        migrated.setMetric("health", enabled: false, for: .storage)
-
-        let reloaded = MonitorSettings(defaults: defaults)
-        #expect(!reloaded.isMetricEnabled("health", for: .storage))
-    }
-
     @Test func resetAllRemovesPersistedMetricSelections() {
         let suite = "resetAllRemovesPersistedMetricSelections"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
-        defaults.set(["used"], forKey: "settings.enabledMetrics.storage")
+        defaults.set(["used"], forKey: "settings.enabledMetrics.memory")
 
         let settings = MonitorSettings(defaults: defaults)
         settings.resetAll()
 
-        #expect(defaults.object(forKey: "settings.enabledMetrics.storage") == nil)
+        #expect(defaults.object(forKey: "settings.enabledMetrics.memory") == nil)
         let reloaded = MonitorSettings(defaults: defaults)
-        #expect(reloaded.isMetricEnabled("health", for: .storage))
+        #expect(reloaded.isMetricEnabled("compressed", for: .memory))
     }
 
     @Test func mouseControlDefaultsAreLowOverhead() {

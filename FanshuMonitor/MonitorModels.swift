@@ -5,7 +5,6 @@ nonisolated enum HaloRingSource: String, CaseIterable, Identifiable {
     case cpu
     case gpu
     case memory
-    case storage
     case network
     case battery
     case codex
@@ -19,7 +18,6 @@ nonisolated enum HaloRingSource: String, CaseIterable, Identifiable {
         case .cpu: "CPU"
         case .gpu: "GPU"
         case .memory: String(localized: "ring-source.memory")
-        case .storage: String(localized: "kind.storage")
         case .network: String(localized: "kind.network")
         case .battery: String(localized: "kind.battery")
         case .codex: "Codex 5H"
@@ -56,7 +54,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
     case cpu
     case gpu
     case memory
-    case storage
     case network
     case battery
     case codex
@@ -68,7 +65,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
         .gpu,
         .memory,
         .battery,
-        .storage,
         .network,
         .codex,
     ]
@@ -81,8 +77,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
             "GPU"
         case .memory:
             String(localized: "kind.memory")
-        case .storage:
-            String(localized: "kind.storage")
         case .network:
             String(localized: "kind.network")
         case .battery:
@@ -100,8 +94,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
             "GPU"
         case .memory:
             "UMA"
-        case .storage:
-            "Storage"
         case .network:
             "Network"
         case .battery:
@@ -119,8 +111,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
             "display"
         case .memory:
             "memorychip"
-        case .storage:
-            "internaldrive"
         case .network:
             "network"
         case .battery:
@@ -160,13 +150,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
                 MetricSwitch(id: "app-memory", title: "应用占用", isDefault: true),
                 MetricSwitch(id: "cached", title: "缓存", isDefault: false),
                 MetricSwitch(id: "total", title: String(localized: "metric.memory.total"), isDefault: false),
-            ]
-        case .storage:
-            return [
-                MetricSwitch(id: "used", title: String(localized: "metric.storage.used"), isDefault: true),
-                MetricSwitch(id: "free", title: String(localized: "metric.storage.free"), isDefault: true),
-                MetricSwitch(id: "total", title: String(localized: "metric.storage.total"), isDefault: true),
-                MetricSwitch(id: "health", title: String(localized: "metric.storage.health"), isDefault: true),
             ]
         case .network:
             return [
@@ -248,7 +231,7 @@ nonisolated struct MonitorModule: Equatable, Identifiable, Sendable {
 
     var severity: MonitorSeverity {
         switch kind {
-        case .cpu, .gpu, .memory, .storage:
+        case .cpu, .gpu, .memory:
             if value >= MonitorConstants.criticalThreshold { return .critical }
             if value >= MonitorConstants.warningThreshold { return .warning }
             return .calm
@@ -325,7 +308,7 @@ nonisolated struct MonitorModule: Equatable, Identifiable, Sendable {
                 MonitorMetric(name: "temperature", value: "--")
             ]
             pressure = nil
-        case .storage, .network, .codex:
+        case .network, .codex:
             summary = "--"
             metrics = [
                 MonitorMetric(name: "current", value: "--"),

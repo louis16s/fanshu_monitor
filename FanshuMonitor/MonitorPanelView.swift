@@ -160,16 +160,6 @@ struct MonitorPanelView: View {
             ) {
                 toggleExpansion(for: module.kind)
             }
-        case .storage:
-            MetricGlassRow(
-                module: module,
-                theme: theme,
-                detail: module.summary,
-                details: enabledMetrics(for: module),
-                isExpanded: panelExpansionState.isExpanded(.module(module.kind))
-            ) {
-                toggleExpansion(for: module.kind)
-            }
         case .network:
             NetworkGlassRow(
                 module: module,

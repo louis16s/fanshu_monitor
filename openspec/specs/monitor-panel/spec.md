@@ -5,7 +5,7 @@
 
 #### Scenario: 系统语言为英文
 - **WHEN** 用户系统首选语言为英文
-- **THEN** 菜单栏面板所有模块标题显示英文（CPU / GPU / Memory / Storage / Network / Battery）
+- **THEN** 菜单栏面板所有模块标题显示英文（CPU / GPU / Memory / Network / Battery）
 - **AND** 设置页面侧栏导航项显示英文（General / Modules / Display / About）
 - **AND** 设置页面所有分组标题和控件标签显示英文
 - **AND** 错误提示和状态文本显示英文
@@ -32,11 +32,6 @@
 - **WHEN** MemorySampler 执行采样
 - **THEN** 返回的指标 name 为英文 key（"used", "pressure", "swap-used", "total"）
 - **AND** 展示层通过 `String(localized: "metric.memory.used")` 翻译为 "已用" 或 "Used"
-
-#### Scenario: Storage 模块采样
-- **WHEN** StorageSampler 执行采样
-- **THEN** 返回的指标 name 为英文 key（"used", "free", "total"）
-- **AND** 展示层通过 `String(localized: "metric.storage.used")` 翻译为 "已用" 或 "Used"
 
 #### Scenario: Network 模块采样
 - **WHEN** NetworkSampler 执行采样
@@ -115,10 +110,10 @@ Metric labels SHALL be accurate and localized.
 - **THEN** only upload and download are shown as secondary metrics.
 
 ### Requirement: Expandable Resource Details
-CPU, GPU, memory, and storage rows SHALL reveal additional details below the primary row without changing the default collapsed layout.
+CPU, GPU, and memory rows SHALL reveal additional details below the primary row without changing the default collapsed layout.
 
 #### Scenario: Resource row expands
-- **WHEN** the user clicks the CPU, GPU, memory, or storage row
+- **WHEN** the user clicks the CPU, GPU, or memory row
 - **THEN** a compact secondary details area is shown below that row
 - **AND** the primary row keeps the same icon, title, summary, and chart placement
 - **AND** only metrics enabled in settings are displayed
@@ -128,7 +123,6 @@ CPU, GPU, memory, and storage rows SHALL reveal additional details below the pri
 - **THEN** CPU shows only enabled metrics from: system, user, idle, uptime, temperature
 - **AND** GPU shows only enabled metrics from: gpu-memory, allocated, render, tiler, temperature
 - **AND** memory shows only enabled metrics from: used, pressure, swap-used, total
-- **AND** storage shows only enabled metrics from: used, free, total
 
 ### Requirement: Configurable Expanded Metrics
 Each module's expanded metrics SHALL be configurable through settings.
@@ -148,11 +142,6 @@ Each module's expanded metrics SHALL be configurable through settings.
 #### Scenario: Memory metrics configuration
 - **WHEN** the user opens memory module settings
 - **THEN** the following metrics are available for selection: used, pressure, swap-used, total
-- **AND** metrics with `isDefault == true` are checked by default
-
-#### Scenario: Storage metrics configuration
-- **WHEN** the user opens storage module settings
-- **THEN** the following metrics are available for selection: used, free, total
 - **AND** metrics with `isDefault == true` are checked by default
 
 #### Scenario: Network metrics configuration

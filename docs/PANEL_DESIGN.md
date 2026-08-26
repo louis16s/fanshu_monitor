@@ -1,6 +1,6 @@
 # 番薯Monitor 面板设计规范
 
-本文件是面板 UI 的长期约束。新增或修改 CPU、GPU、UMA、Power、Codex、Network、Storage、Display 等模块时必须遵守，避免各模块形成独立样式。
+本文件是面板 UI 的长期约束。新增或修改 CPU、GPU、UMA、Power、Codex、Network、Display 等模块时必须遵守，避免各模块形成独立样式。
 
 ## 标题行
 
@@ -34,7 +34,7 @@
 
 ## 折叠状态
 
-- CPU、GPU、UMA、Power、Codex、Network、Storage 与 Display 共用 `PanelExpansionState`
+- CPU、GPU、UMA、Power、Codex、Network 与 Display 共用 `PanelExpansionState`
 - 折叠状态跨面板关闭和应用重启保留，新安装默认展开
 - View 不得用独立 `@State` 保存长期折叠状态，避免视图重建后跳回默认值
 - Display 折叠时只保留标题所需的轻量拓扑，不主动探测 DDC 控制项或显示器能力

@@ -67,11 +67,6 @@
 - **AND** "适配器" 显示为 "Adapter"
 - **AND** "功耗" 显示为 "Power"
 
-#### Scenario: 存储卷名称
-- **WHEN** 存储模块展开显示卷详情
-- **THEN** "系统盘" 显示为 "System"
-- **AND** "已用"/"可用"/"总量" 显示为 "Used"/"Free"/"Total"
-
 ## MODIFIED Requirements
 
 ### Requirement: 模块详情包含可见性开关与"检测项目"设置组

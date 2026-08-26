@@ -41,7 +41,14 @@ struct SamplingCoordinatorTests {
         let loadedKinds = await coordinator.loadedSamplerKinds()
         #expect(loadedKinds == [.cpu, .memory, .battery])
         #expect(!loadedKinds.contains(.network))
-        #expect(!loadedKinds.contains(.storage))
+    }
+
+    @Test func codexSamplerIsNotCreatedByConfigurationAlone() async {
+        let coordinator = SamplingCoordinator()
+
+        await coordinator.setCodexRefreshInterval(600)
+
+        #expect(await coordinator.loadedSamplerKinds().isEmpty)
     }
 
     @Test func brightnessInterceptionRequiresBothPermissions() {

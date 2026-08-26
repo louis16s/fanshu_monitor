@@ -26,8 +26,8 @@ final class MonitorStore: ObservableObject {
     private var brightnessKeyEventTap: BrightnessKeyEventTap?
     let mouseController = MouseControlController()
     let lockScreenController = LockScreenPolicyController()
-    let updateChecker = UpdateChecker()
-    private let wiFiLocationAuthorizationController = WiFiLocationAuthorizationController()
+    lazy var updateChecker = UpdateChecker()
+    private var wiFiLocationAuthorizationController: WiFiLocationAuthorizationController?
 
     private var allModules: [MonitorModule]
     private let refreshSchedule = MonitorRefreshSchedule()
@@ -39,7 +39,7 @@ final class MonitorStore: ObservableObject {
     private var codexRefreshTask: Task<Void, Never>?
     private var codexTaskProgressTask: Task<Void, Never>?
     private var codexTaskProgressTimerCancellable: AnyCancellable?
-    private let codexTaskProgressReader = CodexTaskProgressReader()
+    private lazy var codexTaskProgressReader = CodexTaskProgressReader()
     private var samplingGeneration = 0
     private var cancellables: Set<AnyCancellable> = []
     private var menuBarTargetComputeLoad = 0.0
@@ -50,11 +50,10 @@ final class MonitorStore: ObservableObject {
     init(settings: MonitorSettings? = nil) {
         let settings = settings ?? MonitorSettings()
         let initialModules = MonitorKind.allCases.map { kind in
-            if kind == .codex, let cachedModule = CodexQuotaCache.loadModule() {
+            if kind == .codex,
+               settings.isVisible(.codex),
+               let cachedModule = CodexQuotaCache.loadModule() {
                 return cachedModule
-            }
-            if kind == .storage, settings.isVisible(.storage) {
-                return StorageSampler.bootstrapModule()
             }
             return MonitorModule.placeholder(kind: kind)
         }
@@ -67,8 +66,10 @@ final class MonitorStore: ObservableObject {
         guard !AppRuntime.isRunningTests else {
             return
         }
-        Task { [updateChecker] in
-            await updateChecker.checkAutomaticallyIfNeeded(enabled: settings.updateChecksEnabled)
+        if settings.updateChecksEnabled {
+            Task { [updateChecker] in
+                await updateChecker.checkAutomaticallyIfNeeded(enabled: true)
+            }
         }
         let initialSamplingKinds = MonitorSamplingPolicy.activeKinds(
             visibleKinds: settings.visibleKinds,
@@ -88,10 +89,6 @@ final class MonitorStore: ObservableObject {
         configureDisplayControlServices()
         mouseController.configure(settings: settings)
         lockScreenController.configure(settings: settings)
-        wiFiLocationAuthorizationController.authorizationDidChange = { [weak self] status in
-            guard status == .authorizedAlways else { return }
-            self?.advance(kinds: [MonitorKind.network])
-        }
         configureTerminationSignalHandler()
         Publishers.MergeMany(
             settings.$displayModuleVisible.map { _ in () }.eraseToAnyPublisher(),
@@ -184,6 +181,10 @@ final class MonitorStore: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] visibleKinds in
                 guard let self else { return }
+                if !visibleKinds.contains(.codex) {
+                    self.codexRefreshTask?.cancel()
+                    self.codexRefreshTask = nil
+                }
                 self.requestWiFiAuthorizationIfNeeded()
                 let activeKinds = self.activeSamplingKinds
                 self.cancelSamplingTask()
@@ -288,8 +289,6 @@ final class MonitorStore: ObservableObject {
             return visibleModuleValue(for: .gpu)
         case .memory:
             return visibleModuleValue(for: .memory)
-        case .storage:
-            return visibleModuleValue(for: .storage)
         case .network:
             return visibleModuleValue(for: .network)
         case .battery:
@@ -303,7 +302,7 @@ final class MonitorStore: ObservableObject {
 
     var haloRingLoadLevel: MenuBarComputeLoadLevel {
         switch settings.ringSource {
-        case .combined, .cpu, .gpu, .storage, .network, .battery:
+        case .combined, .cpu, .gpu, .network, .battery:
             return ComputeLoadModel.loadLevel(for: combinedComputeLoad)
         case .codex, .codexWeekly:
             return ComputeLoadModel.quotaLevel(forRemaining: combinedComputeLoad)
@@ -355,10 +354,7 @@ final class MonitorStore: ObservableObject {
         advance(kinds: kinds)
     }
 
-    private func advance(
-        kinds: some Sequence<MonitorKind>,
-        firstPaintKinds: Set<MonitorKind> = []
-    ) {
+    private func advance(kinds: some Sequence<MonitorKind>) {
         var requestedKinds = Array(Set(kinds))
         if requestedKinds.contains(.codex) {
             requestedKinds.removeAll { $0 == .codex }
@@ -371,7 +367,7 @@ final class MonitorStore: ObservableObject {
         if panelVisible,
            requestedKinds.contains(.network),
            enabledMetrics[.network]?.contains("ssid") == true {
-            wiFiLocationAuthorizationController.requestIfNeeded()
+            requestWiFiAuthorizationIfNeeded()
         }
         let coordinator = samplingCoordinator
         let previousModules = allModules
@@ -380,17 +376,12 @@ final class MonitorStore: ObservableObject {
         for kind in requestedKinds where samplingTasks[kind] == nil {
             let previous = previousModules.first { $0.kind == kind }
             let metricIDs = enabledMetrics[kind] ?? []
-            let mode: MonitorSamplingMode = firstPaintKinds.contains(kind)
-                ? .firstPaint
-                : .routine
-
             samplingTasks[kind] = Task { [weak self] in
                 let module = await coordinator.sampleModule(
                     kind: kind,
                     previous: previous,
                     enabledMetricIDs: metricIDs,
-                    panelVisible: panelVisible,
-                    mode: mode
+                    panelVisible: panelVisible
                 )
                 guard let self else { return }
 
@@ -439,12 +430,42 @@ final class MonitorStore: ObservableObject {
 
     private func requestWiFiAuthorizationIfNeeded(activateApp: Bool = false) {
         guard settings.isVisible(.network),
-              settings.isMetricEnabled("ssid", for: .network) else { return }
-        wiFiLocationAuthorizationController.requestIfNeeded(activateApp: activateApp)
+              settings.isMetricEnabled("ssid", for: .network) else {
+            wiFiLocationAuthorizationController?.authorizationDidChange = nil
+            wiFiLocationAuthorizationController = nil
+            return
+        }
+        guard WiFiAuthorizationState.shared.needsAuthorizationRequest else {
+            wiFiLocationAuthorizationController?.authorizationDidChange = nil
+            wiFiLocationAuthorizationController = nil
+            return
+        }
+        let controller = activeWiFiLocationAuthorizationController()
+        if !controller.requestIfNeeded(activateApp: activateApp) {
+            controller.authorizationDidChange = nil
+            wiFiLocationAuthorizationController = nil
+        }
     }
 
     func requestWiFiAuthorizationFromForeground() {
         requestWiFiAuthorizationIfNeeded(activateApp: true)
+    }
+
+    private func activeWiFiLocationAuthorizationController() -> WiFiLocationAuthorizationController {
+        if let wiFiLocationAuthorizationController {
+            return wiFiLocationAuthorizationController
+        }
+        let controller = WiFiLocationAuthorizationController()
+        controller.authorizationDidChange = { [weak self, weak controller] status in
+            guard let self else { return }
+            if status == .authorizedAlways, self.settings.isVisible(.network) {
+                self.advance(kinds: [MonitorKind.network])
+            }
+            controller?.authorizationDidChange = nil
+            self.wiFiLocationAuthorizationController = nil
+        }
+        wiFiLocationAuthorizationController = controller
+        return controller
     }
 
     private func configureDisplayControlServices() {
@@ -541,12 +562,7 @@ final class MonitorStore: ObservableObject {
             refreshCodexUsage(force: true)
         }
         let immediatelyVisibleKinds = visibleKinds.filter { $0 != .codex }
-        // Root capacity is cheap, while disk health and external-volume scans
-        // can take seconds. Battery telemetry is also cheap and must run in the
-        // routine pass immediately so USB-PD input changes reach the animation
-        // without waiting for storage diagnostics.
-        let firstPaintKinds = visibleKinds.intersection([.storage])
-        advance(kinds: immediatelyVisibleKinds, firstPaintKinds: firstPaintKinds)
+        advance(kinds: immediatelyVisibleKinds)
         configureCodexTaskProgressMonitoring()
     }
 

@@ -17,7 +17,6 @@ nonisolated enum BatterySamplingPolicy {
 
     static func shouldCollectSmartDetails(context: MonitorSamplingContext) -> Bool {
         shouldCollectTelemetry(context: context)
-            && !context.prioritizesFirstPaint
             && !context.enabledMetricIDs.isDisjoint(with: smartDetailMetricIDs)
     }
 }
