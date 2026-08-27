@@ -11,7 +11,7 @@
 - Keep the menu bar minimal: one clear status icon.
 - Keep the popover compact: unified hardware metrics and display controls.
 - Prioritize readability over raw density.
-- Treat CPU, GPU, memory, network, and battery as the core metric set.
+- Treat CPU, GPU, memory, and battery as the core metric set.
 - Treat display controls as a Direct-build capability.
 - Group display controls by display so multiple external monitors remain understandable.
 - Show built-in display controls by default in Direct builds, with a setting to hide built-in displays and show only external displays.
@@ -21,7 +21,7 @@
 ## Technical Context
 - Platform: macOS SwiftUI menu bar app for Apple Silicon Macs only.
 - Visual system: SwiftUI Liquid Glass where available.
-- Data sources: Mach host stats, filesystem stats, network interfaces, IOKit power sources, IOKit registry/IOAccelerator for GPU.
+- Data sources: Mach host stats, IOKit power sources, and IOKit registry/IOAccelerator for GPU.
 - Current UI structure: `MenuBarExtra` label, `MonitorPanelView`, `DisplayControlsSection`, `SystemMonitorSampler`.
 - Distribution model: one main branch with separate App Store and Direct targets/schemes. Both app targets are arm64-only. The App Store target keeps `ENABLE_APP_SANDBOX = YES` and excludes display-control implementation files. The Direct target disables App Sandbox, uses Developer ID signing and notarization, and compiles display-control code behind build flags such as `DIRECT_DISTRIBUTION` and `DISPLAY_CONTROL`.
 - Display control uses native display enumeration, DisplayServices, OSD, and Apple Silicon external display DDC/CI through IOAVService/DCPAVServiceProxy.

@@ -40,7 +40,6 @@ struct SamplingCoordinatorTests {
         #expect(snapshot != nil)
         let loadedKinds = await coordinator.loadedSamplerKinds()
         #expect(loadedKinds == [.cpu, .memory, .battery])
-        #expect(!loadedKinds.contains(.network))
     }
 
     @Test func codexSamplerIsNotCreatedByConfigurationAlone() async {

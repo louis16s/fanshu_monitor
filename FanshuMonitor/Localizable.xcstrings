@@ -26,36 +26,6 @@
         "en": { "stringUnit": { "state": "translated", "value": "Compressed" } }
       }
     },
-    "metric.network.ssid": {
-      "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无线名称" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Wi-Fi Network" } }
-      }
-    },
-    "network.ssid.waiting-for-permission": {
-      "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "等待定位授权" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Awaiting Location Access" } }
-      }
-    },
-    "network.ssid.location-required": {
-      "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "需要定位权限" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Location Access Required" } }
-      }
-    },
-    "metric.network.ipv4": {
-      "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "IPv4 地址" } },
-        "en": { "stringUnit": { "state": "translated", "value": "IPv4 Address" } }
-      }
-    },
-    "metric.network.ipv6": {
-      "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "IPv6 地址" } },
-        "en": { "stringUnit": { "state": "translated", "value": "IPv6 Address" } }
-      }
-    },
     "metric.codex.five-hour": {
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "5H" } },
@@ -286,22 +256,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "UMA"
-          }
-        }
-      }
-    },
-    "kind.network": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "网络"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Network"
           }
         }
       }
@@ -942,70 +896,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Total"
-          }
-        }
-      }
-    },
-    "metric.network.public-ip": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "公网 IP"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Public IP"
-          }
-        }
-      }
-    },
-    "metric.network.ip-address": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "IP 地址"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "IP Address"
-          }
-        }
-      }
-    },
-    "metric.network.upload": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上传"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Upload"
-          }
-        }
-      }
-    },
-    "metric.network.download": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "下载"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Download"
           }
         }
       }
@@ -1768,6 +1658,24 @@
             "value": "Metrics"
           }
         }
+      }
+    },
+    "settings.power-flow": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功率分流" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Power Flow" } }
+      }
+    },
+    "settings.power-flow.show": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示功率分流指标" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show Power Flow" } }
+      }
+    },
+    "settings.power-flow.subtitle": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示输入、系统与电池之间的实时功率分配" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show live power distribution between input, system, and battery" } }
       }
     },
     "settings.metrics-limit": {

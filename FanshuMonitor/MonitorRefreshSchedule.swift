@@ -20,8 +20,6 @@ nonisolated enum MonitorSamplingPolicy {
             ringKinds = [.gpu]
         case .memory:
             ringKinds = [.memory]
-        case .network:
-            ringKinds = [.network]
         case .battery:
             ringKinds = [.battery]
         case .codex, .codexWeekly:
@@ -41,7 +39,7 @@ final class MonitorRefreshSchedule {
         tickInterval: TimeInterval = 0.8,
         intervals: [MonitorKind: TimeInterval] = [
             .cpu: 0.8, .gpu: 0.8, .memory: 0.8,
-            .network: 0.8, .battery: 0.8, .codex: 5
+            .battery: 0.8, .codex: 5
         ]
     ) {
         self.tickInterval = tickInterval
@@ -102,7 +100,7 @@ final class MonitorRefreshSchedule {
         switch kind {
         case .cpu, .memory:
             return max(base, 5)
-        case .gpu, .network, .battery:
+        case .gpu, .battery:
             return max(base, 15)
         case .codex:
             return max(base, 300)

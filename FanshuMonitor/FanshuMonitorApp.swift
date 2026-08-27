@@ -51,8 +51,7 @@ struct FanshuMonitorApp: App {
                 settings: settings,
                 mouseController: monitorStore.mouseController,
                 lockScreenController: monitorStore.lockScreenController,
-                updateChecker: monitorStore.updateChecker,
-                requestWiFiAuthorization: monitorStore.requestWiFiAuthorizationFromForeground
+                updateChecker: monitorStore.updateChecker
             )
                 .environment(\.locale, effectiveLocale)
                 // 设置窗口始终跟随系统外观

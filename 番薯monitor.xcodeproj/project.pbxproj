@@ -421,9 +421,6 @@
 				INFOPLIST_KEY_CFBundleShortVersionString = "$(MARKETING_VERSION)";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Fanshu Monitor contributors. MIT License.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "用于读取当前连接的无线网络名称";
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "仅在网络模块启用时读取当前无线网络名称";
-				INFOPLIST_KEY_NSLocationUsageDescription = "仅用于读取当前无线网络名称";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -463,9 +460,6 @@
 				INFOPLIST_KEY_CFBundleShortVersionString = "$(MARKETING_VERSION)";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Fanshu Monitor contributors. MIT License.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "用于读取当前连接的无线网络名称";
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "仅在网络模块启用时读取当前无线网络名称";
-				INFOPLIST_KEY_NSLocationUsageDescription = "仅用于读取当前无线网络名称";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

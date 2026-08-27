@@ -44,6 +44,22 @@ struct ModuleSettingsView: View {
                 }
             }
 
+            if kind == .battery {
+                SettingsGroup(String(localized: "settings.power-flow")) {
+                    SettingsRow(
+                        title: String(localized: "settings.power-flow.show"),
+                        subtitle: String(localized: "settings.power-flow.subtitle")
+                    ) {
+                        Toggle("", isOn: Binding(
+                            get: { settings.isMetricEnabled("power-flow", for: .battery) },
+                            set: { settings.setMetric("power-flow", enabled: $0, for: .battery) }
+                        ))
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                    }
+                }
+            }
+
             SettingsGroup(kind == .codex ? String(localized: "settings.codex-limits") : String(localized: "settings.metrics")) {
                 ForEach(Array(displayedMetrics.enumerated()), id: \.element.id) { index, metric in
                     let isSelected = settings.isMetricEnabled(metric.id, for: kind)
@@ -96,8 +112,7 @@ struct ModuleSettingsView: View {
     }
 
     private var displayedMetrics: [MetricSwitch] {
-        guard kind == .codex else { return kind.availableMetrics }
-        return kind.availableMetrics.filter { $0.id != "active-tasks" }
+        kind.primarySettingsMetrics
     }
 
     private func isLocked(_ metric: MetricSwitch) -> Bool {

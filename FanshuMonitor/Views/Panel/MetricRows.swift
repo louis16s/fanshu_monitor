@@ -71,7 +71,7 @@ struct MetricGlassRow: View {
         case .memory:
             ProgressMeter(value: module.value, tint: tint, theme: theme)
                 .frame(width: 56, height: 3)
-        case .network, .battery:
+        case .battery:
             EmptyView()
         case .codex:
             ProgressMeter(

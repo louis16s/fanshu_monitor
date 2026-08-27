@@ -168,7 +168,7 @@ struct FanshuMonitorTests {
     @Test func visiblePanelUsesFastModuleSpecificRefreshIntervals() {
         let schedule = MonitorRefreshSchedule()
         let start = Date(timeIntervalSinceReferenceDate: 1_000)
-        let kinds: Set<MonitorKind> = [.cpu, .gpu, .memory, .network, .battery]
+        let kinds: Set<MonitorKind> = [.cpu, .gpu, .memory, .battery]
 
         #expect(Set(schedule.dueKinds(
             at: start,
@@ -260,40 +260,6 @@ struct FanshuMonitorTests {
         #expect(!BatterySamplingPolicy.shouldCollectSmartDetails(context: hidden))
     }
 
-    @Test func networkSamplerOnlyPublishesEnabledMetrics() {
-        let context = MonitorSamplingContext(
-            enabledMetricIDs: ["upload"],
-            panelVisible: false
-        )
-
-        let module = NetworkSampler().sample(previous: nil, context: context)
-
-        #expect(module.metrics.map(\.name) == ["upload"])
-    }
-
-    @Test func networkSSIDUsesSelectedInterfaceAndRetriesFailures() {
-        let reads = ThreadSafeCounter()
-        let sampler = NetworkSampler(
-            ssidReader: { _ in
-                reads.increment()
-                return reads.value == 1 ? nil : "Fanshu Wi-Fi"
-            },
-            nowProvider: {
-                Date(timeIntervalSince1970: Double(reads.value * 4))
-            }
-        )
-        let context = MonitorSamplingContext(
-            enabledMetricIDs: ["ssid"],
-            panelVisible: true
-        )
-
-        let first = sampler.sample(previous: nil, context: context)
-        #expect(first.metrics.first { $0.name == "ssid" }?.value != "Fanshu Wi-Fi")
-        let second = sampler.sample(previous: first, context: context)
-        #expect(second.metrics.first { $0.name == "ssid" }?.value == "Fanshu Wi-Fi")
-        #expect(reads.value == 2)
-    }
-
     @Test func codexRefreshScheduleUsesConfiguredInterval() {
         let schedule = MonitorRefreshSchedule()
         let start = Date(timeIntervalSinceReferenceDate: 1_000)
@@ -308,12 +274,6 @@ struct FanshuMonitorTests {
             at: start.addingTimeInterval(600),
             visibleKinds: [.codex]
         ).contains(.codex))
-    }
-
-    @Test func networkAddressSummaryFormatsAddresses() {
-        #expect(networkAddressSummary(["192.168.1.8"]) == "192.168.1.8")
-        #expect(networkAddressSummary(["192.168.1.8", "2001:db8::8"]) == "192.168.1.8, 2001:db8::8")
-        #expect(networkAddressSummary([]) == "--")
     }
 
     @Test func ddcRangeMapsHardwareMinimumToZeroPercent() {
@@ -667,35 +627,15 @@ struct FanshuMonitorTests {
         ) == nil)
     }
 
-    @Test func networkCounterResetDoesNotCreateAnOverflowSpike() {
-        #expect(monotonicCounterDelta(current: 1_500, previous: 1_000) == 500)
-        #expect(monotonicCounterDelta(current: 100, previous: 9_000) == 0)
-    }
-
-    @Test func networkSamplerPrefersTheSystemPrimaryInterface() {
-        let totals: [String: (input: UInt64, output: UInt64)] = [
-            "en0": (100, 100),
-            "bridge0": (10_000, 10_000)
-        ]
-
-        #expect(selectedNetworkInterface(primary: "en0", totals: totals) == "en0")
-        #expect(selectedNetworkInterface(primary: "utun4", totals: totals) == "bridge0")
-    }
-
     @Test func hiddenPanelOnlyKeepsMenuBarRingDependenciesActive() {
         let visibleKinds: Set<MonitorKind> = [
-            .cpu, .gpu, .memory, .network, .battery, .codex
+            .cpu, .gpu, .memory, .battery, .codex
         ]
         #expect(MonitorSamplingPolicy.activeKinds(
             visibleKinds: visibleKinds,
             panelVisible: false,
             ringSource: .combined
         ) == [.cpu, .gpu, .memory])
-        #expect(MonitorSamplingPolicy.activeKinds(
-            visibleKinds: visibleKinds,
-            panelVisible: false,
-            ringSource: .network
-        ) == [.network])
         #expect(MonitorSamplingPolicy.activeKinds(
             visibleKinds: visibleKinds,
             panelVisible: false,
@@ -706,11 +646,6 @@ struct FanshuMonitorTests {
             panelVisible: true,
             ringSource: .combined
         ) == visibleKinds)
-        #expect(MonitorSamplingPolicy.activeKinds(
-            visibleKinds: visibleKinds.subtracting([.network]),
-            panelVisible: false,
-            ringSource: .network
-        ).isEmpty)
     }
 
     @Test func logitechDeviceMatchingRejectsNonMouseProducts() {
@@ -936,20 +871,5 @@ struct FanshuMonitorTests {
 
         let remainingTasks = await reader.load()
         #expect(remainingTasks.map(\.title) == ["构建 CF 博客"])
-    }
-}
-
-private final class ThreadSafeCounter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage = 0
-
-    var value: Int {
-        lock.withLock { storage }
-    }
-
-    func increment() {
-        lock.withLock {
-            storage += 1
-        }
     }
 }

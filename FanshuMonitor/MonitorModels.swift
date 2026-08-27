@@ -5,7 +5,6 @@ nonisolated enum HaloRingSource: String, CaseIterable, Identifiable {
     case cpu
     case gpu
     case memory
-    case network
     case battery
     case codex
     case codexWeekly
@@ -18,7 +17,6 @@ nonisolated enum HaloRingSource: String, CaseIterable, Identifiable {
         case .cpu: "CPU"
         case .gpu: "GPU"
         case .memory: String(localized: "ring-source.memory")
-        case .network: String(localized: "kind.network")
         case .battery: String(localized: "kind.battery")
         case .codex: "Codex 5H"
         case .codexWeekly: "Codex Week"
@@ -54,7 +52,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
     case cpu
     case gpu
     case memory
-    case network
     case battery
     case codex
 
@@ -65,7 +62,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
         .gpu,
         .memory,
         .battery,
-        .network,
         .codex,
     ]
 
@@ -77,8 +73,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
             "GPU"
         case .memory:
             String(localized: "kind.memory")
-        case .network:
-            String(localized: "kind.network")
         case .battery:
             String(localized: "kind.battery")
         case .codex:
@@ -94,8 +88,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
             "GPU"
         case .memory:
             "UMA"
-        case .network:
-            "Network"
         case .battery:
             "Power"
         case .codex:
@@ -111,8 +103,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
             "display"
         case .memory:
             "memorychip"
-        case .network:
-            "network"
         case .battery:
             "powerplug"
         case .codex:
@@ -151,14 +141,6 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
                 MetricSwitch(id: "cached", title: "缓存", isDefault: false),
                 MetricSwitch(id: "total", title: String(localized: "metric.memory.total"), isDefault: false),
             ]
-        case .network:
-            return [
-                MetricSwitch(id: "ssid", title: "无线名称", isDefault: true),
-                MetricSwitch(id: "ipv4", title: "IPv4 地址", isDefault: true),
-                MetricSwitch(id: "ipv6", title: "IPv6 地址", isDefault: true),
-                MetricSwitch(id: "upload", title: "上传", isDefault: true),
-                MetricSwitch(id: "download", title: "下载", isDefault: true),
-            ]
         case .battery:
             return [
                 MetricSwitch(id: "power-flow", title: String(localized: "metric.battery.power-flow"), isDefault: false),
@@ -179,6 +161,19 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
                 MetricSwitch(id: "reset-credits", title: String(localized: "metric.codex.reset-credits"), isDefault: false),
             ]
         }
+    }
+
+    var primarySettingsMetrics: [MetricSwitch] {
+        let separatelyConfiguredMetricIDs: Set<MetricID>
+        switch self {
+        case .battery:
+            separatelyConfiguredMetricIDs = ["power-flow"]
+        case .codex:
+            separatelyConfiguredMetricIDs = ["active-tasks"]
+        default:
+            separatelyConfiguredMetricIDs = []
+        }
+        return availableMetrics.filter { !separatelyConfiguredMetricIDs.contains($0.id) }
     }
 }
 
@@ -234,9 +229,6 @@ nonisolated struct MonitorModule: Equatable, Identifiable, Sendable {
         case .cpu, .gpu, .memory:
             if value >= MonitorConstants.criticalThreshold { return .critical }
             if value >= MonitorConstants.warningThreshold { return .warning }
-            return .calm
-        case .network:
-            if value >= MonitorConstants.networkWarningThreshold { return .warning }
             return .calm
         case .codex:
             if value >= MonitorConstants.criticalThreshold { return .critical }
@@ -308,7 +300,7 @@ nonisolated struct MonitorModule: Equatable, Identifiable, Sendable {
                 MonitorMetric(name: "temperature", value: "--")
             ]
             pressure = nil
-        case .network, .codex:
+        case .codex:
             summary = "--"
             metrics = [
                 MonitorMetric(name: "current", value: "--"),

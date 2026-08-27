@@ -5,7 +5,7 @@
 
 #### Scenario: 系统语言为英文
 - **WHEN** 用户系统首选语言为英文
-- **THEN** 菜单栏面板所有模块标题显示英文（CPU / GPU / Memory / Network / Battery）
+- **THEN** 菜单栏面板所有模块标题显示英文（CPU / GPU / Memory / Battery）
 - **AND** 设置页面侧栏导航项显示英文（General / Modules / Display / About）
 - **AND** 设置页面所有分组标题和控件标签显示英文
 - **AND** 错误提示和状态文本显示英文
@@ -32,11 +32,6 @@
 - **WHEN** MemorySampler 执行采样
 - **THEN** 返回的指标 name 为英文 key（"used", "pressure", "swap-used", "total"）
 - **AND** 展示层通过 `String(localized: "metric.memory.used")` 翻译为 "已用" 或 "Used"
-
-#### Scenario: Network 模块采样
-- **WHEN** NetworkSampler 执行采样
-- **THEN** 返回的指标 name 为英文 key（"ip-address", "upload", "download"）
-- **AND** 展示层通过 `String(localized: "metric.network.ip-address")` 翻译为 "IP 地址" 或 "IP Address"
 
 #### Scenario: Battery 模块采样
 - **WHEN** BatterySampler 执行采样
@@ -105,10 +100,6 @@ Metric labels SHALL be accurate and localized.
 - **AND** App and compressed memory are not shown
 - **AND** swap memory is shown.
 
-#### Scenario: Network row renders
-- **WHEN** network metrics are displayed
-- **THEN** only upload and download are shown as secondary metrics.
-
 ### Requirement: Expandable Resource Details
 CPU, GPU, and memory rows SHALL reveal additional details below the primary row without changing the default collapsed layout.
 
@@ -142,11 +133,6 @@ Each module's expanded metrics SHALL be configurable through settings.
 #### Scenario: Memory metrics configuration
 - **WHEN** the user opens memory module settings
 - **THEN** the following metrics are available for selection: used, pressure, swap-used, total
-- **AND** metrics with `isDefault == true` are checked by default
-
-#### Scenario: Network metrics configuration
-- **WHEN** the user opens network module settings
-- **THEN** the following metrics are available for selection: ip-address, upload, download
 - **AND** metrics with `isDefault == true` are checked by default
 
 #### Scenario: Battery metrics configuration

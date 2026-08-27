@@ -242,7 +242,7 @@ final class MonitorSettings: ObservableObject {
             }
             visibleKinds = migratedKinds
         } else {
-            visibleKinds = Set(MonitorKind.allCases).subtracting([.network])
+            visibleKinds = Set(MonitorKind.allCases)
             defaults.set(true, forKey: Keys.codexVisibilityMigrated)
         }
 
@@ -459,8 +459,6 @@ final class MonitorSettings: ObservableObject {
                 return ["GPU内存": "gpu-memory", "已分配": "allocated", "渲染": "render", "分块": "tiler", "温度": "temperature"]
             case .memory:
                 return ["已用": "used", "压力": "pressure", "总量": "total", "App 占用": "app-memory", "缓存": "cached", "已压缩": "compressed"]
-            case .network:
-                return ["IP 地址": "ipv4", "上传": "upload", "下载": "download", "SSID": "ssid", "IPv4": "ipv4", "IPv6": "ipv6"]
             case .battery:
                 return [
                     "输入": "power-flow",
@@ -553,7 +551,7 @@ final class MonitorSettings: ObservableObject {
         mouseCustomShortcuts = [:]
         lockScreenPoliciesEnabled = false
         lockScreenPolicies = []
-        visibleKinds = Set(MonitorKind.allCases).subtracting([.network])
+        visibleKinds = Set(MonitorKind.allCases)
         for kind in MonitorKind.allCases {
             defaults.removeObject(forKey: Keys.enabledMetricsPrefix + kind.rawValue)
         }

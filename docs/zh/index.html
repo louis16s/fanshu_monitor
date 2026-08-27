@@ -173,7 +173,7 @@
         <article class="feature-row reveal"><span class="feature-number">01</span><div><h3>系统监控</h3><p>CPU、GPU、内存、电源和温度，连同 App 自身内存占用一起呈现</p></div><span class="feature-accent orange"></span></article>
         <article class="feature-row reveal"><span class="feature-number">02</span><div><h3>外接显示器</h3><p>按鼠标位置分配 F1/F2，单屏时标题栏同步亮度，并显示 DDC 硬件零点与不可控原因</p></div><span class="feature-accent violet"></span></article>
         <article class="feature-row reveal"><span class="feature-number">03</span><div><h3>自动锁屏</h3><p>按日程切换闲置时长，直接进入锁定界面，支持跨天与单条暂停</p></div><span class="feature-accent green"></span></article>
-        <article class="feature-row reveal"><span class="feature-number">04</span><div><h3>按需加载</h3><p>网络、SSID、DDC、HID、电池重遥测和 Codex 只在需要时工作</p></div><span class="feature-accent blue"></span></article>
+        <article class="feature-row reveal"><span class="feature-number">04</span><div><h3>按需加载</h3><p>DDC、HID、电池重遥测和 Codex 只在需要时工作</p></div><span class="feature-accent blue"></span></article>
       </div>
     </section>
 
@@ -188,7 +188,7 @@
       <div class="faq-list reveal">
         <details><summary>为什么需要辅助功能权限？<span>＋</span></summary><p>F1/F2 接管和鼠标按键映射需要监听系统输入事件。番薯Monitor 只在相关功能开启时使用这项权限，不会记录键盘输入内容。</p></details>
         <details><summary>所有外接显示器都能控制亮度吗？<span>＋</span></summary><p>显示器、线缆和连接方式需要支持 DDC/CI。应用会逐台检测，并明确显示不可控原因；不可控时亮度键会交还 macOS。</p></details>
-        <details><summary>会不会一直占用很多 CPU？<span>＋</span></summary><p>隐藏模块停止对应采样，面板关闭后降低非必要刷新频率，SSID、DDC、HID 和电池重遥测等数据按需读取并缓存。</p></details>
+        <details><summary>会不会一直占用很多 CPU？<span>＋</span></summary><p>隐藏模块停止对应采样，面板关闭后降低非必要刷新频率，DDC、HID 和电池重遥测等数据按需读取并缓存。</p></details>
         <details><summary>自动锁屏会先进入屏幕保护吗？<span>＋</span></summary><p>不会。启用番薯Monitor 的时间策略后，到达闲置时间会直接请求系统锁定，登录后策略会继续运行。</p></details>
         <details><summary>支持哪些 Mac？<span>＋</span></summary><p>当前版本面向 Apple Silicon Mac，最低系统版本为 macOS 26.0。</p></details>
         <details><summary>软件收费吗？<span>＋</span></summary><p>番薯Monitor 以 MIT License 开源发布，可免费下载、使用和审查源码。</p></details>

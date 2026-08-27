@@ -56,11 +56,6 @@
 - **AND** "设置" 显示为 "Settings"
 - **AND** "SYSTEM · LIVE" 保持英文（已是英文）
 
-#### Scenario: 网络模块标题
-- **WHEN** 网络模块在面板中展示
-- **THEN** "网络:" 显示为 "Network:"
-- **AND** "上传"/"下载" 显示为 "Up"/"Down"
-
 #### Scenario: 电池模块标题
 - **WHEN** 电池模块在面板中展示
 - **THEN** "电源:" 显示为 "Power:"

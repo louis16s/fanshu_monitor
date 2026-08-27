@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import CoreLocation
 import Darwin
 import Foundation
 import OSLog
@@ -27,8 +26,6 @@ final class MonitorStore: ObservableObject {
     let mouseController = MouseControlController()
     let lockScreenController = LockScreenPolicyController()
     lazy var updateChecker = UpdateChecker()
-    private var wiFiLocationAuthorizationController: WiFiLocationAuthorizationController?
-
     private var allModules: [MonitorModule]
     private let refreshSchedule = MonitorRefreshSchedule()
     private var timerCancellable: AnyCancellable?
@@ -168,10 +165,6 @@ final class MonitorStore: ObservableObject {
                     guard let self else { return }
                     self.syncSamplerResidency()
                     self.configureSamplingTimer()
-                    if self.settings.ringSource == .network,
-                       self.settings.isVisible(.network) {
-                        self.advance(kinds: [MonitorKind.network])
-                    }
                     self.refreshMenuBarLoad()
                 }
             }
@@ -185,7 +178,6 @@ final class MonitorStore: ObservableObject {
                     self.codexRefreshTask?.cancel()
                     self.codexRefreshTask = nil
                 }
-                self.requestWiFiAuthorizationIfNeeded()
                 let activeKinds = self.activeSamplingKinds
                 self.cancelSamplingTask()
                 self.syncSamplerResidency()
@@ -195,19 +187,6 @@ final class MonitorStore: ObservableObject {
                 self.advance(kinds: activeKinds)
                 self.configureCodexTaskProgressMonitoring()
                 self.refreshMenuBarLoad()
-            }
-            .store(in: &cancellables)
-        settings.$enabledMetrics
-            .map { metrics in
-                (metrics[.network] ?? Set(
-                    MonitorKind.network.availableMetrics.filter(\.isDefault).map(\.id)
-                )).contains("ssid")
-            }
-            .removeDuplicates()
-            .dropFirst()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.requestWiFiAuthorizationIfNeeded()
             }
             .store(in: &cancellables)
         settings.$enabledMetrics
@@ -289,8 +268,6 @@ final class MonitorStore: ObservableObject {
             return visibleModuleValue(for: .gpu)
         case .memory:
             return visibleModuleValue(for: .memory)
-        case .network:
-            return visibleModuleValue(for: .network)
         case .battery:
             return visibleModuleValue(for: .battery)
         case .codex:
@@ -302,7 +279,7 @@ final class MonitorStore: ObservableObject {
 
     var haloRingLoadLevel: MenuBarComputeLoadLevel {
         switch settings.ringSource {
-        case .combined, .cpu, .gpu, .network, .battery:
+        case .combined, .cpu, .gpu, .battery:
             return ComputeLoadModel.loadLevel(for: combinedComputeLoad)
         case .codex, .codexWeekly:
             return ComputeLoadModel.quotaLevel(forRemaining: combinedComputeLoad)
@@ -364,11 +341,6 @@ final class MonitorStore: ObservableObject {
 
         let enabledMetrics = enabledSamplingMetrics(for: requestedKinds)
         let panelVisible = isPanelVisible
-        if panelVisible,
-           requestedKinds.contains(.network),
-           enabledMetrics[.network]?.contains("ssid") == true {
-            requestWiFiAuthorizationIfNeeded()
-        }
         let coordinator = samplingCoordinator
         let previousModules = allModules
         let requestGeneration = samplingGeneration
@@ -426,46 +398,6 @@ final class MonitorStore: ObservableObject {
     private func refreshInputServicesAfterActivation() {
         brightnessKeyEventTap?.refreshPermissionState()
         mouseController.refreshButtonTapIfPossible()
-    }
-
-    private func requestWiFiAuthorizationIfNeeded(activateApp: Bool = false) {
-        guard settings.isVisible(.network),
-              settings.isMetricEnabled("ssid", for: .network) else {
-            wiFiLocationAuthorizationController?.authorizationDidChange = nil
-            wiFiLocationAuthorizationController = nil
-            return
-        }
-        guard WiFiAuthorizationState.shared.needsAuthorizationRequest else {
-            wiFiLocationAuthorizationController?.authorizationDidChange = nil
-            wiFiLocationAuthorizationController = nil
-            return
-        }
-        let controller = activeWiFiLocationAuthorizationController()
-        if !controller.requestIfNeeded(activateApp: activateApp) {
-            controller.authorizationDidChange = nil
-            wiFiLocationAuthorizationController = nil
-        }
-    }
-
-    func requestWiFiAuthorizationFromForeground() {
-        requestWiFiAuthorizationIfNeeded(activateApp: true)
-    }
-
-    private func activeWiFiLocationAuthorizationController() -> WiFiLocationAuthorizationController {
-        if let wiFiLocationAuthorizationController {
-            return wiFiLocationAuthorizationController
-        }
-        let controller = WiFiLocationAuthorizationController()
-        controller.authorizationDidChange = { [weak self, weak controller] status in
-            guard let self else { return }
-            if status == .authorizedAlways, self.settings.isVisible(.network) {
-                self.advance(kinds: [MonitorKind.network])
-            }
-            controller?.authorizationDidChange = nil
-            self.wiFiLocationAuthorizationController = nil
-        }
-        wiFiLocationAuthorizationController = controller
-        return controller
     }
 
     private func configureDisplayControlServices() {
@@ -551,7 +483,6 @@ final class MonitorStore: ObservableObject {
     private func panelDidAppear() {
         guard !isPanelVisible else { return }
         isPanelVisible = true
-        requestWiFiAuthorizationIfNeeded(activateApp: true)
         cancelSamplingTask()
         configureDisplayControlServices()
         syncSamplerResidency()

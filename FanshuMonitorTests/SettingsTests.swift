@@ -36,7 +36,6 @@ struct SettingsTests {
             .gpu,
             .memory,
             .battery,
-            .network,
             .codex,
         ])
         #expect(Set(MonitorKind.settingsOrder) == Set(MonitorKind.allCases))
@@ -52,6 +51,12 @@ struct SettingsTests {
             "active-tasks",
             "reset-credits",
         ])
+    }
+
+    @Test func independentlyConfiguredMetricsStayOutOfThePrimaryGroup() {
+        #expect(!MonitorKind.battery.primarySettingsMetrics.contains { $0.id == "power-flow" })
+        #expect(!MonitorKind.codex.primarySettingsMetrics.contains { $0.id == "active-tasks" })
+        #expect(MonitorKind.battery.availableMetrics.contains { $0.id == "power-flow" })
     }
 
     @Test func gpuTemperatureIsLastAndExplainsM5Availability() {
@@ -179,16 +184,27 @@ struct SettingsTests {
         #expect(settings.isVisible(.codex))
     }
 
-    @Test func removedStorageModuleIsIgnoredInPersistedVisibility() {
-        let suite = "removedStorageModuleIsIgnoredInPersistedVisibility"
+    @Test func removedModulesAreIgnoredInPersistedVisibility() {
+        let suite = "removedModulesAreIgnoredInPersistedVisibility"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
-        defaults.set(["cpu", "storage"], forKey: "settings.visibleKinds")
+        defaults.set(["cpu", "storage", "network"], forKey: "settings.visibleKinds")
         defaults.set(true, forKey: "settings.codexVisibilityMigrated")
 
         let settings = MonitorSettings(defaults: defaults)
 
         #expect(settings.visibleKinds == [.cpu])
+    }
+
+    @Test func removedNetworkRingSourceFallsBackToCombined() {
+        let suite = "removedNetworkRingSourceFallsBackToCombined"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set("network", forKey: "settings.ringSource")
+
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(settings.ringSource == .combined)
     }
 
     @Test func visibilityToggle() {
