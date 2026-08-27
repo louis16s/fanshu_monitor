@@ -2,8 +2,14 @@ import AppKit
 import SwiftUI
 import OSLog
 
+enum SettingsTab: String {
+    case general
+    case lockScreen
+    case mouse
+    case about
+}
+
 enum SettingsWindowPresenter {
-    static let selectedTabDefaultsKey = "settings.selectedTab"
     static let routeChangeNotification = Notification.Name("SettingsWindowPresenter.routeChange")
     static let tabUserInfoKey = "tab"
 
@@ -18,7 +24,6 @@ enum SettingsWindowPresenter {
     static func open(_ openSettings: OpenSettingsAction, tab: SettingsTab? = nil) {
         AppLogger.settings.info("Opening settings window")
         if let tab {
-            UserDefaults.standard.set(tab.rawValue, forKey: selectedTabDefaultsKey)
             pendingTab = tab
         }
 

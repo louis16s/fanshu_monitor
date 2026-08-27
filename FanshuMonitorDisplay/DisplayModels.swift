@@ -244,23 +244,6 @@ nonisolated enum BuiltInDisplayConfigurationPolicy {
     static let fallbackRestorationOption = CGConfigureOption.forSession
 }
 
-nonisolated enum DisplayDisconnectRecoveryPolicy {
-    static func shouldForceRestore(
-        isRemoval: Bool,
-        removedDisplayID: CGDirectDisplayID,
-        cachedBuiltInDisplayID: CGDirectDisplayID?,
-        knownExternalDisplayIDs: Set<CGDirectDisplayID>
-    ) -> Bool {
-        guard isRemoval,
-              removedDisplayID != cachedBuiltInDisplayID,
-              knownExternalDisplayIDs.count == 1
-        else {
-            return false
-        }
-        return knownExternalDisplayIDs.contains(removedDisplayID)
-    }
-}
-
 nonisolated enum DisplayHardwareDisconnectRecoveryPolicy {
     static let confirmedRemovalDelay: TimeInterval = 0.06
     static let unknownChangeDelay: TimeInterval = 0.18

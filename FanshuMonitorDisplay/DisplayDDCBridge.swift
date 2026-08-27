@@ -405,9 +405,11 @@ nonisolated final class DDCTransportChannelRegistry: @unchecked Sendable {
         }
     }
 
+    #if DEBUG
     func isQuarantined(displayID: CGDirectDisplayID) -> Bool {
         lock.withLock { channels[displayID]?.quarantineUntil != nil }
     }
+    #endif
 
     private func makeChannel(
         displayID: CGDirectDisplayID,

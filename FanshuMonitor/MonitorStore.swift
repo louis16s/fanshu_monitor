@@ -9,9 +9,6 @@ final class MonitorStore: ObservableObject {
     let settings: MonitorSettings
 
     @Published private(set) var modules: [MonitorModule]
-    @Published var selectedKind: MonitorKind = .cpu
-    @Published private(set) var menuBarFrame = 0
-    @Published private(set) var displayedComputeLoad = 0.0
     @Published private(set) var codexTasks: [CodexTaskProgress] = []
     @Published private(set) var menuBarIconImage = MenuBarComputeRingIcon.image(
         load: 0,
@@ -27,6 +24,8 @@ final class MonitorStore: ObservableObject {
     let lockScreenController = LockScreenPolicyController()
     lazy var updateChecker = UpdateChecker()
     private var allModules: [MonitorModule]
+    private var menuBarFrame = 0
+    private var displayedComputeLoad = 0.0
     private let refreshSchedule = MonitorRefreshSchedule()
     private var timerCancellable: AnyCancellable?
     private var animationTimerCancellable: AnyCancellable?
@@ -241,12 +240,6 @@ final class MonitorStore: ObservableObject {
         }
         terminationSignalSource = source
         source.resume()
-    }
-
-    var selectedModule: MonitorModule {
-        allModules.first { $0.kind == selectedKind }
-            ?? allModules.first
-            ?? MonitorModule.placeholder(kind: selectedKind)
     }
 
     var combinedComputeLoad: Double {
@@ -644,11 +637,4 @@ final class MonitorStore: ObservableObject {
         }
     }
 
-    func moduleDetailsText() -> String {
-        modules.map { module in
-            let metrics = module.metrics.map { "\($0.name): \($0.value)" }.joined(separator: ", ")
-            return "\(module.kind.title): \(module.summary) \(metrics)"
-        }
-        .joined(separator: "\n")
-    }
 }

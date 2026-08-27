@@ -31,6 +31,7 @@ actor SamplingCoordinator {
         guard generation == samplerResidencyGeneration else { return }
     }
 
+    #if DEBUG
     func loadedSamplerKinds() -> Set<MonitorKind> {
         var kinds = Set(workers.keys)
         if codexSampler != nil {
@@ -38,6 +39,7 @@ actor SamplingCoordinator {
         }
         return kinds
     }
+    #endif
 
     func sampleModule(
         kind: MonitorKind,

@@ -8,10 +8,6 @@ final class MouseControlController: ObservableObject {
     @Published private(set) var statusText = "未启用"
     @Published private(set) var buttonStatusText = "未启用"
     @Published private(set) var isApplyingDPI = false
-    var deviceStatusLine: String {
-        let battery = device?.batteryPercent.map { " · 电量 \($0)%" } ?? ""
-        return "\(buttonStatusText)\(battery)"
-    }
     var combinedStatusLine: String {
         let battery = device?.batteryPercent.map { " · 电量 \($0)%" } ?? ""
         guard settings?.mouseControlEnabled == true else {

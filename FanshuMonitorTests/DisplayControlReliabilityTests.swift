@@ -676,38 +676,6 @@ struct BuiltInDisplayRestorePolicyTests {
     }
 }
 
-struct DisplayDisconnectRecoveryPolicyTests {
-    @Test func forcesRestoreOnlyWhenTheKnownLastExternalDisplayIsRemoved() {
-        #expect(DisplayDisconnectRecoveryPolicy.shouldForceRestore(
-            isRemoval: true,
-            removedDisplayID: 8,
-            cachedBuiltInDisplayID: 1,
-            knownExternalDisplayIDs: [8]
-        ))
-        #expect(!DisplayDisconnectRecoveryPolicy.shouldForceRestore(
-            isRemoval: true,
-            removedDisplayID: 8,
-            cachedBuiltInDisplayID: 1,
-            knownExternalDisplayIDs: [8, 9]
-        ))
-    }
-
-    @Test func neverTreatsTheBuiltInDisplayRemovalAsAnExternalDisconnect() {
-        #expect(!DisplayDisconnectRecoveryPolicy.shouldForceRestore(
-            isRemoval: true,
-            removedDisplayID: 1,
-            cachedBuiltInDisplayID: 1,
-            knownExternalDisplayIDs: [8]
-        ))
-        #expect(!DisplayDisconnectRecoveryPolicy.shouldForceRestore(
-            isRemoval: false,
-            removedDisplayID: 8,
-            cachedBuiltInDisplayID: 1,
-            knownExternalDisplayIDs: [8]
-        ))
-    }
-}
-
 struct DisplayHardwareTopologyTests {
     @Test func classifiesAppleSiliconDisplayServiceLocations() {
         #expect(DisplayHardwareServiceLocation(rawValue: "External") == .external)

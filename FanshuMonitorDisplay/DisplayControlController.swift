@@ -552,14 +552,6 @@ final class DisplayControlController: ObservableObject {
         }
     }
 
-    func displayUnderMouse() -> ControlledDisplay? {
-        guard let displayID = primaryDisplayIDUnderMouse() ?? displayIDsUnderMouse().first else { return nil }
-        if displays.isEmpty {
-            refreshNow()
-        }
-        return displays.first { $0.id == displayID }
-    }
-
     func brightnessDisplayUnderMouse() -> ControlledDisplay? {
         if let primaryDisplayID = primaryDisplayIDUnderMouse() {
             if displays.isEmpty {

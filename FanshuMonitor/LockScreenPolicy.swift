@@ -165,10 +165,6 @@ nonisolated struct LockScreenPolicy: Identifiable, Codable, Hashable, Sendable {
         self.idleMinutes = min(1_440, max(1, idleMinutes))
     }
 
-    var crossesMidnight: Bool {
-        effectiveEndMinutes > 24 * 60
-    }
-
     var hasValidTimeRange: Bool {
         effectiveEndMinutes > startMinutes
     }

@@ -146,8 +146,6 @@ extension SettingsTab {
             return .lockScreen
         case .mouse:
             return .mouse
-        case .modules:
-            return nil
         case .about:
             return .about
         }

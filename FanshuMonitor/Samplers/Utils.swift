@@ -43,23 +43,6 @@ nonisolated private func makeByteFormatter(style: ByteCountFormatter.CountStyle)
     return formatter
 }
 
-nonisolated func bytesPerSecond(_ value: Double) -> String {
-    let safeValue = max(0, value)
-    let units = ["B/s", "KB/s", "MB/s", "GB/s"]
-    var scaled = safeValue
-    var unitIndex = 0
-
-    while scaled >= 1024, unitIndex < units.count - 1 {
-        scaled /= 1024
-        unitIndex += 1
-    }
-
-    if unitIndex == 0 {
-        return "\(Int(scaled.rounded())) \(units[unitIndex])"
-    }
-    return "\(String(format: scaled >= 10 ? "%.0f" : "%.1f", scaled)) \(units[unitIndex])"
-}
-
 nonisolated func doubleValue(_ value: Any?) -> Double? {
     switch value {
     case let value as Double:
@@ -114,20 +97,6 @@ nonisolated func intValue(_ value: Any?) -> Int? {
     default:
         nil
     }
-}
-
-nonisolated func placeholderModule(_ kind: MonitorKind, summary: String) -> MonitorModule {
-    MonitorModule(
-        kind: kind,
-        value: 0,
-        summary: summary,
-        metrics: [
-            MonitorMetric(name: "status", value: "unknown"),
-            MonitorMetric(name: "data", value: "--"),
-            MonitorMetric(name: "update", value: "--")
-        ],
-        samples: seedSamples(0)
-    )
 }
 
 nonisolated func seedSamples(_ value: Double) -> [Double] {

@@ -58,17 +58,6 @@ struct MonitorPalette {
         }
     }
 
-    func severityTint(for severity: MonitorSeverity) -> Color {
-        switch severity {
-        case .calm:
-            Color(hex: 0x2F9E64)
-        case .warning:
-            Color(hex: 0xB8872E)
-        case .critical:
-            Color(hex: 0xD94848)
-        }
-    }
-
     func rowGlassTint(for kind: MonitorKind) -> Color {
         switch preference {
         case .systemBlue, .graphite:

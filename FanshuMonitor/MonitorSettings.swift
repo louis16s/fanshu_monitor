@@ -317,10 +317,6 @@ final class MonitorSettings: ObservableObject {
         enabledMetrics[kind] = current
     }
 
-    func resetMetrics(for kind: MonitorKind) {
-        enabledMetrics[kind] = defaultMetricIds(for: kind)
-    }
-
     func mouseAction(for slot: MouseButtonSlot) -> MouseButtonAction {
         switch slot {
         case .middle:
