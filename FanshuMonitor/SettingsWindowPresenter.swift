@@ -40,10 +40,13 @@ enum SettingsWindowPresenter {
 
     @MainActor
     static func register(_ window: NSWindow) {
-        AppLogger.settings.info("Registering settings window")
+        let isNewWindow = settingsWindow !== window
         settingsWindow = window
-        window.title = ""
-        window.minSize = SettingsWindowMetrics.contentSize
+        if isNewWindow {
+            AppLogger.settings.info("Registering settings window")
+            window.title = ""
+            window.minSize = SettingsWindowMetrics.contentSize
+        }
 
         if pendingFocus {
             pendingFocus = false

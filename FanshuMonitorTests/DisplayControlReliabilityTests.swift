@@ -151,6 +151,41 @@ struct DDCTransportChannelRegistryTests {
     }
 }
 
+struct DDCServiceRefreshPolicyTests {
+    @Test func forcedRediscoveryDoesNotReplaceAnUnchangedService() {
+        #expect(!DDCServiceRefreshPolicy.serviceWasReplaced(
+            previousLocation: 1,
+            previousIdentity: "service-a",
+            currentLocation: 1,
+            currentIdentity: "service-a"
+        ))
+    }
+
+    @Test func changedServiceIdentityAllowsTransportRecovery() {
+        #expect(DDCServiceRefreshPolicy.serviceWasReplaced(
+            previousLocation: 1,
+            previousIdentity: "service-a",
+            currentLocation: 1,
+            currentIdentity: "service-b"
+        ))
+    }
+
+    @Test func serviceRemovalAndAdditionAreReplacements() {
+        #expect(DDCServiceRefreshPolicy.serviceWasReplaced(
+            previousLocation: 1,
+            previousIdentity: "service-a",
+            currentLocation: nil,
+            currentIdentity: nil
+        ))
+        #expect(DDCServiceRefreshPolicy.serviceWasReplaced(
+            previousLocation: nil,
+            previousIdentity: nil,
+            currentLocation: 1,
+            currentIdentity: "service-a"
+        ))
+    }
+}
+
 struct DisplayClassifierTests {
     @Test func builtInDisplayWinsBeforeOtherSignals() {
         let classifier = makeClassifier(
@@ -1039,29 +1074,42 @@ struct BuiltInDisplayRecoverySnapshotTests {
 struct DisplayControlWorkerTests {
     private let key = ControlKey(displayID: 1, control: .brightness)
 
-    @Test func orderedKeyboardWritesPreserveEveryLevel() {
+    @Test func orderedKeyboardWritesKeepTheActiveAndLatestLevels() {
         let worker = DisplayControlWorker()
         let recorder = ThreadSafeValues()
-        let group = DispatchGroup()
-        let levels = [20.0, 25.0, 30.0, 35.0]
+        let firstStarted = DispatchSemaphore(value: 0)
+        let allowFirstToFinish = DispatchSemaphore(value: 0)
+        let latestFinished = DispatchSemaphore(value: 0)
+        let levels = (1...30).map(Double.init)
 
         for (sequence, level) in levels.enumerated() {
-            group.enter()
             worker.setValue(
                 level,
                 for: key,
                 sequence: UInt64(sequence + 1),
                 mode: .ordered,
                 performWrite: { value in
+                    if value == levels.first {
+                        firstStarted.signal()
+                        _ = allowFirstToFinish.wait(timeout: .now() + 2)
+                    }
                     recorder.append(value)
                     return true
                 },
-                completion: { _ in group.leave() }
+                completion: { result in
+                    if result.value == levels.last {
+                        latestFinished.signal()
+                    }
+                }
             )
+            if level == levels.first {
+                #expect(firstStarted.wait(timeout: .now() + 1) == .success)
+            }
         }
 
-        #expect(group.wait(timeout: .now() + 3) == .success)
-        #expect(recorder.values == levels)
+        allowFirstToFinish.signal()
+        #expect(latestFinished.wait(timeout: .now() + 3) == .success)
+        #expect(recorder.values == [levels.first, levels.last].compactMap { $0 })
     }
 
     @Test func coalescedSliderWritesOnlyTheLatestLevel() {

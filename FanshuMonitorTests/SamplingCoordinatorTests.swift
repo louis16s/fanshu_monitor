@@ -2,26 +2,35 @@ import Testing
 @testable import FanshuMonitor
 
 struct SamplingCoordinatorTests {
-    @Test func ignoresEmptySamplingRequests() async {
+    @Test func codexUsesItsDedicatedSamplingPath() async {
         let coordinator = SamplingCoordinator()
 
-        let snapshot = await coordinator.sample(kinds: [], previousModules: [])
+        let module = await coordinator.sampleModule(
+            kind: .codex,
+            previous: nil,
+            enabledMetricIDs: [],
+            panelVisible: true
+        )
 
-        #expect(snapshot == nil)
+        #expect(module == nil)
     }
 
-    @Test func samplingKeepsRequestedModuleOrdering() async {
+    @Test func samplingLoadsAndReleasesRequestedWorker() async {
         let coordinator = SamplingCoordinator()
-        let previous = MonitorKind.allCases.map(MonitorModule.placeholder)
 
-        let snapshot = await coordinator.sample(kinds: [.memory], previousModules: previous)
+        let module = await coordinator.sampleModule(
+            kind: .memory,
+            previous: MonitorModule.placeholder(kind: .memory),
+            enabledMetricIDs: Set(MonitorKind.memory.availableMetrics.map(\.id)),
+            panelVisible: true
+        )
 
-        #expect(snapshot?.modules.map(\.kind) == MonitorKind.allCases)
-        #expect(snapshot?.modules.first(where: { $0.kind == .memory })?.summary != "--")
+        #expect(module?.kind == .memory)
+        #expect(module?.summary != "--")
         let loadedKinds = await coordinator.loadedSamplerKinds()
         #expect(loadedKinds == [.memory])
 
-        await coordinator.retainSamplers(for: [])
+        await coordinator.retainSamplers(for: [], requestID: 1)
 
         let releasedKinds = await coordinator.loadedSamplerKinds()
         #expect(releasedKinds.isEmpty)
@@ -29,17 +38,43 @@ struct SamplingCoordinatorTests {
 
     @Test func samplingLoadsEveryRequestedWorkerAndNothingElse() async {
         let coordinator = SamplingCoordinator()
-        let previous = MonitorKind.allCases.map(MonitorModule.placeholder)
-
-        let snapshot = await coordinator.sample(
-            kinds: [.cpu, .memory, .battery],
-            previousModules: previous,
-            panelVisible: false
-        )
-
-        #expect(snapshot != nil)
+        for kind in [MonitorKind.cpu, .memory, .battery] {
+            _ = await coordinator.sampleModule(
+                kind: kind,
+                previous: MonitorModule.placeholder(kind: kind),
+                enabledMetricIDs: Set(kind.availableMetrics.map(\.id)),
+                panelVisible: false
+            )
+        }
         let loadedKinds = await coordinator.loadedSamplerKinds()
         #expect(loadedKinds == [.cpu, .memory, .battery])
+    }
+
+    @Test func staleResidencyRequestCannotUnloadCurrentWorkers() async {
+        let coordinator = SamplingCoordinator()
+        _ = await coordinator.sampleModule(
+            kind: .cpu,
+            previous: MonitorModule.placeholder(kind: .cpu),
+            enabledMetricIDs: Set(MonitorKind.cpu.availableMetrics.map(\.id)),
+            panelVisible: true
+        )
+
+        await coordinator.retainSamplers(for: [.cpu], requestID: 2)
+        await coordinator.retainSamplers(for: [], requestID: 1)
+
+        #expect(await coordinator.loadedSamplerKinds() == [.cpu])
+    }
+
+    @Test func staleResidencyRequestCannotReleaseCurrentCodexSampler() async {
+        let coordinator = SamplingCoordinator()
+        _ = await coordinator.refreshCodex(previousModules: [], force: false)
+
+        await coordinator.retainSamplers(for: [.codex], requestID: 2)
+        await coordinator.retainSamplers(for: [], requestID: 1)
+
+        #expect(await coordinator.loadedSamplerKinds() == [.codex])
+        await coordinator.retainSamplers(for: [], requestID: 3)
+        #expect(await coordinator.loadedSamplerKinds().isEmpty)
     }
 
     @Test func codexSamplerIsNotCreatedByConfigurationAlone() async {

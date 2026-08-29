@@ -7,11 +7,6 @@ import OSLog
 #error("Display DDC control is Apple Silicon only. Do not compile this Direct-only module for Intel Mac.")
 #endif
 
-nonisolated private let displayDDCLog = Logger(
-    subsystem: "com.fanshu.monitor.direct",
-    category: "DisplayDDC"
-)
-
 nonisolated final class DisplayDDCBridge: @unchecked Sendable {
     private var servicesByDisplayID: [CGDirectDisplayID: DDCService] = [:]
     private var valueRanges: [ControlKey: DDCValueRange] = [:]
@@ -22,23 +17,20 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
 
     func refresh(displayIDs: [CGDirectDisplayID], forceReset: Bool = false) {
         let matchedServices = Arm64DDCMatcher().matchedServices(for: displayIDs)
-        let (knownDisplayIDs, changedDisplayIDs) = stateLock.withLock {
+        let (knownDisplayIDs, changedDisplayIDs, invalidatedDisplayIDs) = stateLock.withLock {
             let previousServices = servicesByDisplayID
-            let changedDisplayIDs: Set<CGDirectDisplayID>
-            if forceReset {
-                changedDisplayIDs = Set(displayIDs).union(previousServices.keys)
-            } else {
-                changedDisplayIDs = Set(displayIDs.filter {
-                    guard let previous = previousServices[$0],
-                          let matched = matchedServices[$0]
-                    else {
-                        return previousServices[$0] != nil || matchedServices[$0] != nil
-                    }
-                    return previous.serviceLocation != matched.serviceLocation
-                        || previous.serviceIdentity != matched.serviceIdentity
-                })
-            }
-            return (Set(previousServices.keys), changedDisplayIDs)
+            let changedDisplayIDs = Set(displayIDs.filter { displayID in
+                DDCServiceRefreshPolicy.serviceWasReplaced(
+                    previousLocation: previousServices[displayID]?.serviceLocation,
+                    previousIdentity: previousServices[displayID]?.serviceIdentity,
+                    currentLocation: matchedServices[displayID]?.serviceLocation,
+                    currentIdentity: matchedServices[displayID]?.serviceIdentity
+                )
+            })
+            let invalidatedDisplayIDs = forceReset
+                ? Set(displayIDs).union(previousServices.keys)
+                : changedDisplayIDs
+            return (Set(previousServices.keys), changedDisplayIDs, invalidatedDisplayIDs)
         }
         for displayID in knownDisplayIDs.subtracting(displayIDs) {
             registry.reset(displayID: displayID)
@@ -47,17 +39,17 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
         for displayID in changedDisplayIDs {
             registry.reset(displayID: displayID)
             DDCTransport.reset(displayID: displayID)
-            displayDDCLog.notice(
+            AppLogger.ddc.notice(
                 "Reset DDC transport after display service replacement for display \(displayID, privacy: .public)"
             )
         }
         stateLock.withLock {
             servicesByDisplayID = matchedServices
             valueRanges = valueRanges.filter {
-                displayIDs.contains($0.key.displayID) && !changedDisplayIDs.contains($0.key.displayID)
+                displayIDs.contains($0.key.displayID) && !invalidatedDisplayIDs.contains($0.key.displayID)
             }
             controlCodes = controlCodes.filter {
-                displayIDs.contains($0.key.displayID) && !changedDisplayIDs.contains($0.key.displayID)
+                displayIDs.contains($0.key.displayID) && !invalidatedDisplayIDs.contains($0.key.displayID)
             }
         }
     }
@@ -96,13 +88,13 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
 
     func read(_ control: DisplayControlKind, displayID: CGDirectDisplayID, fastFail: Bool = false) -> Double? {
         guard let service = stateLock.withLock({ servicesByDisplayID[displayID] }) else {
-            displayDDCLog.debug("No DDC service for display \(displayID, privacy: .public)")
+            AppLogger.ddc.debug("No DDC service for display \(displayID, privacy: .public)")
             return nil
         }
 
         let key = ControlKey(displayID: displayID, control: control)
         guard !registry.isDisabled(key) else {
-            displayDDCLog.debug("DDC read skipped for display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public); temporarily disabled")
+            AppLogger.ddc.debug("DDC read skipped for display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public); temporarily disabled")
             return nil
         }
 
@@ -133,26 +125,26 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
             let percentage = range.percentage(from: values.current)
             registry.recordReadSuccess(key)
 
-            displayDDCLog.debug(
+            AppLogger.ddc.debug(
                 "Read DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public) code \(vcp.rawValue, privacy: .public) raw \(values.current, privacy: .public)/\(values.max, privacy: .public) range \(range.min, privacy: .public)-\(range.max, privacy: .public) mapped \(percentage, privacy: .public)"
             )
             return min(100, max(0, percentage))
         }
 
-        displayDDCLog.warning("Failed to read DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public)")
+        AppLogger.ddc.warning("Failed to read DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public)")
         registry.recordReadFailure(key)
         return nil
     }
 
     func write(_ value: Double, for control: DisplayControlKind, displayID: CGDirectDisplayID) -> DDCWriteOutcome {
         guard let service = stateLock.withLock({ servicesByDisplayID[displayID] }) else {
-            displayDDCLog.warning("No DDC service while writing display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public)")
+            AppLogger.ddc.warning("No DDC service while writing display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public)")
             return .failure
         }
 
         let key = ControlKey(displayID: displayID, control: control)
         guard !registry.isDisabled(key) else {
-            displayDDCLog.debug("DDC write skipped for display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public); temporarily disabled")
+            AppLogger.ddc.debug("DDC write skipped for display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public); temporarily disabled")
             return .failure
         }
 
@@ -178,7 +170,7 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
             )
             if value <= 0, muteSuccess {
                 registry.recordWriteSuccess(key)
-                displayDDCLog.debug("Wrote DDC mute display \(displayID, privacy: .public)")
+                AppLogger.ddc.debug("Wrote DDC mute display \(displayID, privacy: .public)")
                 return .success()
             }
         }
@@ -190,7 +182,7 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
                 vcpCode: vcp.rawValue,
                 value: ddcValue
             )
-            displayDDCLog.debug(
+            AppLogger.ddc.debug(
                 "Write DDC display \(displayID, privacy: .public) control \(String(describing: control), privacy: .public) code \(vcp.rawValue, privacy: .public) value \(ddcValue, privacy: .public) range \(range.min, privacy: .public)-\(range.max, privacy: .public) success \(success, privacy: .public)"
             )
             if success {
@@ -253,9 +245,24 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
         stateLock.withLock {
             valueRanges[key] = learnedRange
         }
-        displayDDCLog.notice(
+        AppLogger.ddc.notice(
             "Learned DDC minimum for display \(key.displayID, privacy: .public) brightness: \(returnedCurrent, privacy: .public), max \(detectedMax, privacy: .public)"
         )
+    }
+}
+
+nonisolated enum DDCServiceRefreshPolicy {
+    static func serviceWasReplaced(
+        previousLocation: Int?,
+        previousIdentity: String?,
+        currentLocation: Int?,
+        currentIdentity: String?
+    ) -> Bool {
+        let previousExists = previousLocation != nil || previousIdentity != nil
+        let currentExists = currentLocation != nil || currentIdentity != nil
+        guard previousExists == currentExists else { return true }
+        guard previousExists else { return false }
+        return previousLocation != currentLocation || previousIdentity != currentIdentity
     }
 }
 
@@ -541,7 +548,7 @@ nonisolated private enum DDCTransport {
 
         if semaphore.wait(timeout: .now() + .seconds(communicateTimeoutSeconds)) == .timedOut {
             channels.recordTimeout(displayID: displayID, generation: lease.generation)
-            displayDDCLog.error("DDC communicate timed out for display \(displayID, privacy: .public) after \(communicateTimeoutSeconds, privacy: .public)s; device channel quarantined")
+            AppLogger.ddc.error("DDC communicate timed out for display \(displayID, privacy: .public) after \(communicateTimeoutSeconds, privacy: .public)s; device channel quarantined")
             return false
         }
 
@@ -671,7 +678,7 @@ nonisolated private final class Arm64DDCMatcher {
                 matched[candidate.displayID] = candidate
                 usedDisplayIDs.insert(candidate.displayID)
                 usedLocations.insert(candidate.serviceLocation)
-                displayDDCLog.debug(
+                AppLogger.ddc.debug(
                     "Matched DDC service display \(candidate.displayID, privacy: .public) location \(candidate.serviceLocation, privacy: .public) score \(candidate.matchScore, privacy: .public)"
                 )
             }
@@ -694,12 +701,12 @@ nonisolated private final class Arm64DDCMatcher {
                 matchScore: 0
             )
             matched[fallback.displayID] = fallback
-            displayDDCLog.notice(
+            AppLogger.ddc.notice(
                 "Fallback matched single DDC service display \(fallback.displayID, privacy: .public) location \(fallback.serviceLocation, privacy: .public)"
             )
         }
 
-        displayDDCLog.debug("Matched \(matched.count, privacy: .public) DDC services from \(registryServices.count, privacy: .public) registry services")
+        AppLogger.ddc.debug("Matched \(matched.count, privacy: .public) DDC services from \(registryServices.count, privacy: .public) registry services")
         return matched
     }
 

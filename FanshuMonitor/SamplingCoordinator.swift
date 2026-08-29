@@ -1,9 +1,4 @@
 import Foundation
-import OSLog
-
-nonisolated struct SystemMonitorSnapshot: Sendable {
-    var modules: [MonitorModule]
-}
 
 /// Owns module workers away from the main actor and lets independent modules
 /// sample concurrently.
@@ -11,7 +6,7 @@ actor SamplingCoordinator {
     private var workers: [MonitorKind: MonitorModuleSamplerWorker] = [:]
     private var codexSampler: CodexQuotaSampler?
     private var codexRefreshInterval: TimeInterval = 300
-    private var samplerResidencyGeneration: UInt64 = 0
+    private var latestResidencyRequestID: UInt64 = 0
 
     func setCodexRefreshInterval(_ interval: TimeInterval) async {
         codexRefreshInterval = min(3600, max(60, interval))
@@ -20,15 +15,18 @@ actor SamplingCoordinator {
         }
     }
 
-    func retainSamplers(for visibleKinds: Set<MonitorKind>) async {
-        samplerResidencyGeneration &+= 1
-        let generation = samplerResidencyGeneration
+    func retainSamplers(
+        for visibleKinds: Set<MonitorKind>,
+        requestID: UInt64
+    ) async {
+        guard requestID >= latestResidencyRequestID else { return }
+        latestResidencyRequestID = requestID
         workers = workers.filter { visibleKinds.contains($0.key) }
-        if !visibleKinds.contains(.codex), let codexSampler {
-            await codexSampler.release()
-            self.codexSampler = nil
-        }
-        guard generation == samplerResidencyGeneration else { return }
+        guard !visibleKinds.contains(.codex), let sampler = codexSampler else { return }
+
+        // Detach before awaiting so a newer request can safely create a new sampler.
+        codexSampler = nil
+        await sampler.release()
     }
 
     #if DEBUG
@@ -55,65 +53,6 @@ actor SamplingCoordinator {
         )
         let module = await worker.sample(previous: previous, context: context)
         return Task.isCancelled ? nil : module
-    }
-
-    func sample(
-        kinds: [MonitorKind],
-        previousModules: [MonitorModule],
-        enabledMetrics: [MonitorKind: Set<MetricID>] = [:],
-        panelVisible: Bool = true
-    ) async -> SystemMonitorSnapshot? {
-        guard !kinds.isEmpty else { return nil }
-        guard !Task.isCancelled else { return nil }
-
-        let requestedKinds = Set(kinds).subtracting([.codex])
-        let requests = requestedKinds.map { kind in
-            (
-                kind: kind,
-                worker: worker(for: kind),
-                previous: previousModules.first { $0.kind == kind },
-                metricIDs: enabledMetrics[kind]
-                    ?? Set(kind.availableMetrics.filter(\.isDefault).map(\.id))
-            )
-        }
-
-        let sampledModules = await withTaskGroup(
-            of: MonitorModule?.self,
-            returning: [MonitorModule].self
-        ) { group in
-            for request in requests {
-                group.addTask {
-                    guard !Task.isCancelled else { return nil }
-                    let context = MonitorSamplingContext(
-                        enabledMetricIDs: request.metricIDs,
-                        panelVisible: panelVisible
-                    )
-                    return await request.worker.sample(
-                        previous: request.previous,
-                        context: context
-                    )
-                }
-            }
-
-            var modules: [MonitorModule] = []
-            for await module in group {
-                if let module {
-                    modules.append(module)
-                }
-            }
-            return modules
-        }
-        guard !Task.isCancelled else { return nil }
-
-        var modulesByKind = Dictionary(
-            uniqueKeysWithValues: previousModules.map { ($0.kind, $0) }
-        )
-        for module in sampledModules {
-            modulesByKind[module.kind] = module
-        }
-        return SystemMonitorSnapshot(modules: MonitorKind.allCases.map { kind in
-            modulesByKind[kind] ?? MonitorModule.placeholder(kind: kind)
-        })
     }
 
     func refreshCodex(

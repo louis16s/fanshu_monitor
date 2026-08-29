@@ -1,19 +1,42 @@
 import Foundation
 
 actor CodexQuotaSampler {
-    private let client = CodexUsageClient()
+    private struct LoadResult: Sendable {
+        let module: MonitorModule
+        let succeeded: Bool
+    }
+
+    private let client: CodexUsageClient
+    private let now: @Sendable () -> Date
     private var refreshInterval: TimeInterval = 300
     private var cachedModule: MonitorModule?
-    private var lastRefreshDate: Date?
-    private var inFlightRefresh: (id: UUID, task: Task<MonitorModule, Never>)?
+    private var lastPresentedModule: MonitorModule?
+    private var lastSuccessfulRefreshDate: Date?
+    private var retryNotBefore: Date?
+    private var consecutiveFailures = 0
+    private var inFlightRefresh: (id: UUID, task: Task<LoadResult, Never>)?
+
+    init(
+        client: CodexUsageClient = CodexUsageClient(),
+        now: @escaping @Sendable () -> Date = Date.init
+    ) {
+        self.client = client
+        self.now = now
+    }
 
     func sample(previous: MonitorModule?, force: Bool = false) async -> MonitorModule {
         if let inFlightRefresh {
-            return moduleWithHistory(await inFlightRefresh.task.value, previous: previous)
+            return moduleWithHistory(
+                await inFlightRefresh.task.value.module,
+                previous: previous
+            )
         }
 
         if !force, !shouldRefresh {
-            return cachedModule ?? previous ?? Self.placeholderModule
+            return moduleWithHistory(
+                lastPresentedModule ?? cachedModule ?? previous ?? Self.placeholderModule,
+                previous: previous
+            )
         }
 
         let refreshID = UUID()
@@ -24,13 +47,23 @@ actor CodexQuotaSampler {
         }
         inFlightRefresh = (refreshID, task)
 
-        let module = await task.value
+        let result = await task.value
         if inFlightRefresh?.id == refreshID {
-            self.cachedModule = module
-            lastRefreshDate = Date()
+            lastPresentedModule = result.module
+            if result.succeeded {
+                self.cachedModule = result.module
+                lastSuccessfulRefreshDate = now()
+                retryNotBefore = nil
+                consecutiveFailures = 0
+            } else {
+                consecutiveFailures += 1
+                retryNotBefore = now().addingTimeInterval(Self.retryDelay(
+                    consecutiveFailures: consecutiveFailures
+                ))
+            }
             inFlightRefresh = nil
         }
-        return moduleWithHistory(module, previous: previous)
+        return moduleWithHistory(result.module, previous: previous)
     }
 
     func setRefreshInterval(_ interval: TimeInterval) {
@@ -41,12 +74,19 @@ actor CodexQuotaSampler {
         inFlightRefresh?.task.cancel()
         inFlightRefresh = nil
         cachedModule = nil
-        lastRefreshDate = nil
+        lastPresentedModule = nil
+        lastSuccessfulRefreshDate = nil
+        retryNotBefore = nil
+        consecutiveFailures = 0
     }
 
     private var shouldRefresh: Bool {
-        guard let lastRefreshDate else { return true }
-        return Date().timeIntervalSince(lastRefreshDate) >= refreshInterval
+        let currentDate = now()
+        if consecutiveFailures > 0 {
+            return retryNotBefore.map { currentDate >= $0 } ?? true
+        }
+        guard let lastSuccessfulRefreshDate else { return true }
+        return currentDate.timeIntervalSince(lastSuccessfulRefreshDate) >= refreshInterval
     }
 
     private func moduleWithHistory(_ module: MonitorModule, previous: MonitorModule?) -> MonitorModule {
@@ -59,17 +99,24 @@ actor CodexQuotaSampler {
     private static func loadModule(
         client: CodexUsageClient,
         cachedModule: MonitorModule?
-    ) async -> MonitorModule {
+    ) async -> LoadResult {
         do {
             let report = try await client.load()
             CodexQuotaCache.save(report)
-            return Self.module(from: report)
+            return LoadResult(module: Self.module(from: report), succeeded: true)
         } catch {
-            return fallbackModule(
-                cachedModule: cachedModule,
-                errorDescription: error.localizedDescription
+            return LoadResult(
+                module: fallbackModule(
+                    cachedModule: cachedModule,
+                    errorDescription: error.localizedDescription
+                ),
+                succeeded: false
             )
         }
+    }
+
+    private static func retryDelay(consecutiveFailures: Int) -> TimeInterval {
+        min(60, 15 * pow(2, Double(max(0, consecutiveFailures - 1))))
     }
 
     static func fallbackModule(

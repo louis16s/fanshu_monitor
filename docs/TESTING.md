@@ -8,7 +8,7 @@
 2. Direct app Debug 构建
 3. UI 测试 bundle 构建
 4. UI 启动冒烟测试
-5. Direct app 静态分析
+5. Direct app Release 静态分析
 
 UI 测试失败时会保留 `.xcresult` 和日志，方便定位启动、权限提示或菜单栏应用退出问题
 

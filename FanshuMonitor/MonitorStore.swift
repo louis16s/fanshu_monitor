@@ -32,6 +32,7 @@ final class MonitorStore: ObservableObject {
     private let samplingCoordinator = SamplingCoordinator()
     private var samplingTasks: [MonitorKind: Task<Void, Never>] = [:]
     private var samplerResidencyTask: Task<Void, Never>?
+    private var samplerResidencyRequestID: UInt64 = 0
     private var codexRefreshTask: Task<Void, Never>?
     private var codexTaskProgressTask: Task<Void, Never>?
     private var codexTaskProgressTimerCancellable: AnyCancellable?
@@ -72,9 +73,14 @@ final class MonitorStore: ObservableObject {
             panelVisible: false,
             ringSource: settings.ringSource
         )
+        samplerResidencyRequestID &+= 1
+        let initialResidencyRequestID = samplerResidencyRequestID
         Task { [samplingCoordinator] in
             await samplingCoordinator.setCodexRefreshInterval(settings.codexRefreshIntervalMinutes * 60)
-            await samplingCoordinator.retainSamplers(for: initialSamplingKinds)
+            await samplingCoordinator.retainSamplers(
+                for: initialSamplingKinds,
+                requestID: initialResidencyRequestID
+            )
         }
         advance(kinds: initialSamplingKinds)
         updateMenuBarTargetComputeLoadIfNeeded(force: true)
@@ -510,9 +516,14 @@ final class MonitorStore: ObservableObject {
 
     private func syncSamplerResidency() {
         let activeKinds = activeSamplingKinds
+        samplerResidencyRequestID &+= 1
+        let requestID = samplerResidencyRequestID
         samplerResidencyTask?.cancel()
         samplerResidencyTask = Task { [samplingCoordinator] in
-            await samplingCoordinator.retainSamplers(for: activeKinds)
+            await samplingCoordinator.retainSamplers(
+                for: activeKinds,
+                requestID: requestID
+            )
         }
     }
 

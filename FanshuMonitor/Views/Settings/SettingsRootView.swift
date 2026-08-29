@@ -61,12 +61,6 @@ struct SettingsWindowTracker: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        guard let window = nsView.window else { return }
-        Task { @MainActor in
-            window.setStableSettingsSize()
-            SettingsWindowPresenter.register(window)
-        }
-
         if let view = nsView as? SettingsWindowTrackingView {
             view.onTabChanged = { tab in
                 Task { @MainActor in
@@ -75,6 +69,7 @@ struct SettingsWindowTracker: NSViewRepresentable {
                     }
                 }
             }
+            view.registerWindowIfNeeded()
         }
     }
 }
@@ -82,6 +77,7 @@ struct SettingsWindowTracker: NSViewRepresentable {
 @MainActor
 private final class SettingsWindowTrackingView: NSView {
     var onTabChanged: ((SettingsTab) -> Void)?
+    private weak var registeredWindow: NSWindow?
 
     init(frame frameRect: NSRect, onTabChanged: @escaping (SettingsTab) -> Void) {
         self.onTabChanged = onTabChanged
@@ -112,15 +108,14 @@ private final class SettingsWindowTrackingView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        registerWindowIfNeeded()
+    }
 
-        guard let window else {
-            return
-        }
-
-        Task { @MainActor in
-            window.setStableSettingsSize()
-            SettingsWindowPresenter.register(window)
-        }
+    func registerWindowIfNeeded() {
+        guard let window, registeredWindow !== window else { return }
+        registeredWindow = window
+        window.setStableSettingsSize()
+        SettingsWindowPresenter.register(window)
     }
 }
 

@@ -126,7 +126,8 @@ actor CodexTaskProgressReader {
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: candidate.url.path),
               let fileSize = (attributes[.size] as? NSNumber)?.uint64Value
         else {
-            state = RolloutState()
+            // Keep the last known task during transient filesystem failures. The
+            // next discovery pass removes files that are genuinely gone.
             return
         }
 

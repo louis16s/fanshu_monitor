@@ -11,6 +11,16 @@ final class MouseButtonEventTap {
         self.settings = settings
     }
 
+    deinit {
+        if let eventTap {
+            CGEvent.tapEnable(tap: eventTap, enable: false)
+            CFMachPortInvalidate(eventTap)
+        }
+        if let runLoopSource {
+            CFRunLoopSourceInvalidate(runLoopSource)
+        }
+    }
+
     @discardableResult
     func start() -> Bool {
         guard eventTap == nil else { return true }
@@ -51,6 +61,10 @@ final class MouseButtonEventTap {
         }
         if let runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+            CFRunLoopSourceInvalidate(runLoopSource)
+        }
+        if let eventTap {
+            CFMachPortInvalidate(eventTap)
         }
         runLoopSource = nil
         eventTap = nil

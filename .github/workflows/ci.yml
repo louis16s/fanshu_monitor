@@ -116,7 +116,7 @@ jobs:
           xcodebuild \
             -project '番薯monitor.xcodeproj' \
             -target FanshuMonitorDirect \
-            -configuration Debug \
+            -configuration Release \
             -destination 'platform=macOS,arch=arm64' \
             CODE_SIGNING_ALLOWED=NO \
             analyze

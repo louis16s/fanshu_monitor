@@ -27,6 +27,11 @@ final class MouseControlController: ObservableObject {
     private var isMousePresent = false
 
     func configure(settings: MonitorSettings) {
+        if self.settings === settings, eventTap != nil, hidButtonListener != nil {
+            syncEnabledState(settings.mouseControlEnabled)
+            return
+        }
+        tearDown()
         self.settings = settings
         eventTap = MouseButtonEventTap(settings: settings)
         hidButtonListener = LogitechHIDPPButtonListener()
@@ -56,6 +61,20 @@ final class MouseControlController: ObservableObject {
             .store(in: &cancellables)
 
         syncEnabledState(settings.mouseControlEnabled)
+    }
+
+    func tearDown() {
+        presenceSessionGeneration &+= 1
+        deviceRequestGeneration &+= 1
+        presenceMonitor.stop()
+        eventTap?.stop()
+        hidButtonListener?.stop()
+        eventTap = nil
+        hidButtonListener = nil
+        cancellables.removeAll()
+        isMousePresent = false
+        device = nil
+        isApplyingDPI = false
     }
 
     func refreshIfNeeded() {
