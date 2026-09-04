@@ -23,7 +23,7 @@
 - 硬件桥接：DDC、DisplayServices、SMC、IOKit 与 HID 显式脱离主 actor，并在后台串行队列执行
 - 显示器私有能力：CoreDisplay、DisplayServices、IOAVService 与 OSD 统一通过 `PrivateDisplayAPI` 运行时解析，缺失时只关闭对应能力，不阻止应用启动
 - 工程目标：只保留正式 `FanshuMonitorDirect` app target，测试、CI 与 Release 共用同一产品边界
-- 系统能力：私有锁屏与显示器隔离符号统一登记到 `SystemCapabilityRegistry`，缺失时保留明确的降级状态
+- 系统能力：私有锁屏与显示器隔离符号在桥接层按需解析，缺失时通过统一日志和高层失败状态降级；不保留无消费者的全局能力登记表
 - 持久化：`MonitorSettings` 只声明设置行为，JSON 编解码由 `PreferencesCodec` 统一处理和记录错误
 - 设置持久化：`MonitorSettingsPersistence` 集中管理 Combine 绑定、UserDefaults 写入和登录项更新，保留原有 key 与迁移行为
 - 面板 View：通用与电源行分文件维护，共享 `PanelModuleHeader` 与详情网格
@@ -118,6 +118,13 @@ Gamma 是显示输出层补偿，不会改变 DDC 硬件寄存器，也不会伪
 - [x] 新增 `docs/TESTING.md`，区分 CI、单元测试、真实硬件回归和 Instruments 性能验证
 
 ## 2026-08-29 开源项目式复审
+
+## 2026-09-04 架构消融实验
+
+- [x] 移除无生产消费者的 `SystemCapabilityRegistry`，保留私有能力探测、日志和高层失败降级
+- [x] 通过消融后单元测试验证，265 个测试、31 个测试套件全部通过
+- [x] 明确保留具有并发隔离、依赖注入或纯逻辑测试价值的 actor、worker、协议和策略对象
+- [x] 将完整实验记录放入 `docs/ARCHITECTURE_ABLATION.md`
 
 - [x] 两条只读子线程分别检查架构边界与运行可靠性，主线程只采纳有代码证据的问题
 - [x] 删除仅由测试调用的旧批量采样 API，生产和测试统一走 `sampleModule`

@@ -38,22 +38,6 @@ struct PreferencesCodecTests {
     }
 }
 
-struct SystemCapabilityRegistryTests {
-    @Test func tracksAvailabilityPerCapability() {
-        let registry = SystemCapabilityRegistry()
-        #expect(registry.status(for: .nativeScreenLock) == .unknown)
-
-        registry.reportAvailable(.nativeScreenLock)
-        registry.reportUnavailable(.displayIsolation, reason: "missing symbol")
-
-        #expect(registry.status(for: .nativeScreenLock) == .available)
-        #expect(
-            registry.status(for: .displayIsolation)
-                == .unavailable(reason: "missing symbol")
-        )
-    }
-}
-
 struct PowerFlowAnimationPolicyTests {
     @Test func usesASubtleCompositorAnimationCycle() {
         #expect(PowerFlowAnimationPolicy.cycleDuration >= 0.8)
