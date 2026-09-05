@@ -5,15 +5,7 @@ import Foundation
 actor SamplingCoordinator {
     private var workers: [MonitorKind: MonitorModuleSamplerWorker] = [:]
     private var codexSampler: CodexQuotaSampler?
-    private var codexRefreshInterval: TimeInterval = 300
     private var latestResidencyRequestID: UInt64 = 0
-
-    func setCodexRefreshInterval(_ interval: TimeInterval) async {
-        codexRefreshInterval = min(3600, max(60, interval))
-        if let codexSampler {
-            await codexSampler.setRefreshInterval(codexRefreshInterval)
-        }
-    }
 
     func retainSamplers(
         for visibleKinds: Set<MonitorKind>,
@@ -56,15 +48,20 @@ actor SamplingCoordinator {
     }
 
     func refreshCodex(
-        previousModules: [MonitorModule],
-        force: Bool
-    ) async -> MonitorModule? {
+        previous: MonitorModule?,
+        force: Bool,
+        refreshInterval: TimeInterval = 300
+    ) async -> CodexRefreshResult? {
         guard !Task.isCancelled else { return nil }
-        let previous = previousModules.first { $0.kind == .codex }
-        let codexSampler = await activeCodexSampler()
-        let module = await codexSampler.sample(previous: previous, force: force)
+        let codexSampler = activeCodexSampler()
+        let module = await codexSampler.sample(
+            previous: previous, force: force, refreshInterval: refreshInterval
+        )
         guard !Task.isCancelled else { return nil }
-        return module
+        return CodexRefreshResult(
+            module: module,
+            scheduledResetRefreshDate: await codexSampler.scheduledResetRefreshDate()
+        )
     }
 
     private func worker(for kind: MonitorKind) -> MonitorModuleSamplerWorker {
@@ -76,13 +73,17 @@ actor SamplingCoordinator {
         return worker
     }
 
-    private func activeCodexSampler() async -> CodexQuotaSampler {
+    private func activeCodexSampler() -> CodexQuotaSampler {
         if let codexSampler {
             return codexSampler
         }
         let sampler = CodexQuotaSampler()
-        await sampler.setRefreshInterval(codexRefreshInterval)
         codexSampler = sampler
         return sampler
     }
+}
+
+nonisolated struct CodexRefreshResult: Sendable {
+    let module: MonitorModule
+    let scheduledResetRefreshDate: Date?
 }

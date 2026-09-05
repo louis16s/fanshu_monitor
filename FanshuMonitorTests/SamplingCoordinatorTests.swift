@@ -67,7 +67,7 @@ struct SamplingCoordinatorTests {
 
     @Test func staleResidencyRequestCannotReleaseCurrentCodexSampler() async {
         let coordinator = SamplingCoordinator()
-        _ = await coordinator.refreshCodex(previousModules: [], force: false)
+        _ = await coordinator.refreshCodex(previous: nil, force: false)
 
         await coordinator.retainSamplers(for: [.codex], requestID: 2)
         await coordinator.retainSamplers(for: [], requestID: 1)
@@ -77,10 +77,10 @@ struct SamplingCoordinatorTests {
         #expect(await coordinator.loadedSamplerKinds().isEmpty)
     }
 
-    @Test func codexSamplerIsNotCreatedByConfigurationAlone() async {
+    @Test func residencyAloneDoesNotCreateCodexSampler() async {
         let coordinator = SamplingCoordinator()
 
-        await coordinator.setCodexRefreshInterval(600)
+        await coordinator.retainSamplers(for: [.codex], requestID: 1)
 
         #expect(await coordinator.loadedSamplerKinds().isEmpty)
     }

@@ -34,6 +34,7 @@ final class MonitorStore: ObservableObject {
     private var samplerResidencyTask: Task<Void, Never>?
     private var samplerResidencyRequestID: UInt64 = 0
     private var codexRefreshTask: Task<Void, Never>?
+    private var codexResetRefreshTask: Task<Void, Never>?
     private var codexTaskProgressTask: Task<Void, Never>?
     private var codexTaskProgressTimerCancellable: AnyCancellable?
     private lazy var codexTaskProgressReader = CodexTaskProgressReader()
@@ -76,7 +77,6 @@ final class MonitorStore: ObservableObject {
         samplerResidencyRequestID &+= 1
         let initialResidencyRequestID = samplerResidencyRequestID
         Task { [samplingCoordinator] in
-            await samplingCoordinator.setCodexRefreshInterval(settings.codexRefreshIntervalMinutes * 60)
             await samplingCoordinator.retainSamplers(
                 for: initialSamplingKinds,
                 requestID: initialResidencyRequestID
@@ -130,9 +130,6 @@ final class MonitorStore: ObservableObject {
             .sink { [weak self] minutes in
                 guard let self else { return }
                 self.refreshSchedule.setInterval(minutes * 60, for: .codex)
-                Task { [samplingCoordinator = self.samplingCoordinator] in
-                    await samplingCoordinator.setCodexRefreshInterval(minutes * 60)
-                }
             }
             .store(in: &cancellables)
         settings.$updateChecksEnabled
@@ -182,6 +179,8 @@ final class MonitorStore: ObservableObject {
                 if !visibleKinds.contains(.codex) {
                     self.codexRefreshTask?.cancel()
                     self.codexRefreshTask = nil
+                    self.codexResetRefreshTask?.cancel()
+                    self.codexResetRefreshTask = nil
                 }
                 let activeKinds = self.activeSamplingKinds
                 self.cancelSamplingTask()
@@ -229,6 +228,7 @@ final class MonitorStore: ObservableObject {
         samplingTasks.removeAll()
         samplerResidencyTask?.cancel()
         codexRefreshTask?.cancel()
+        codexResetRefreshTask?.cancel()
         codexTaskProgressTask?.cancel()
         codexTaskProgressTimerCancellable?.cancel()
         timerCancellable?.cancel()
@@ -547,21 +547,41 @@ final class MonitorStore: ObservableObject {
     private func refreshCodexUsage(force: Bool) {
         guard settings.isVisible(.codex) else { return }
         refreshSchedule.markRefreshed([MonitorKind.codex], at: Date())
-        let previousModules = allModules
+        let previous = allModules.first { $0.kind == .codex }
+        let refreshInterval = settings.codexRefreshIntervalMinutes * 60
         let coordinator = samplingCoordinator
         codexRefreshTask?.cancel()
         codexRefreshTask = Task { [weak self] in
-            guard let module = await coordinator.refreshCodex(
-                previousModules: previousModules,
-                force: force
+            guard let result = await coordinator.refreshCodex(
+                previous: previous,
+                force: force,
+                refreshInterval: refreshInterval
             ),
                   let self,
                   !Task.isCancelled
             else {
                 return
             }
-            self.mergeSampledModule(module)
+            self.mergeSampledModule(result.module)
+            self.scheduleCodexResetRefresh(at: result.scheduledResetRefreshDate)
             self.refreshCodexTaskProgress()
+        }
+    }
+
+    private func scheduleCodexResetRefresh(at date: Date?) {
+        codexResetRefreshTask?.cancel()
+        codexResetRefreshTask = nil
+        guard settings.isVisible(.codex), let date else { return }
+
+        codexResetRefreshTask = Task { [weak self] in
+            let delay = max(0, date.timeIntervalSinceNow)
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.refreshCodexUsage(force: true)
         }
     }
 

@@ -27,11 +27,6 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
     }
 
     private let stateQueue = DispatchQueue(label: "fanshu.display-control.state", qos: .userInitiated)
-    private let hardwareQueue = DispatchQueue(
-        label: "fanshu.display-control.hardware",
-        qos: .userInitiated,
-        attributes: .concurrent
-    )
     private let discoveryQueue = DispatchQueue(
         label: "fanshu.display-control.discovery",
         qos: .utility
@@ -159,9 +154,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         stateQueue.async {
             let readQueue = self.writeQueue(for: displayID)
             readQueue.async {
-                let value = self.hardwareQueue.sync {
-                    performRead()
-                }
+                let value = performRead()
                 completion(value)
             }
         }
@@ -420,9 +413,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
     private func performOrderedWrite(_ request: PendingWrite, for key: ControlKey) {
         let writeQueue = writeQueue(for: key.displayID)
         writeQueue.async {
-            let success = self.hardwareQueue.sync {
-                request.performWrite(request.value)
-            }
+            let success = request.performWrite(request.value)
             request.completion(
                 DisplayWriteResult(
                     key: key,
@@ -444,9 +435,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
     private func perform(_ request: PendingWrite, for key: ControlKey) {
         let writeQueue = writeQueue(for: key.displayID)
         writeQueue.async {
-            let success = self.hardwareQueue.sync {
-                request.performWrite(request.value)
-            }
+            let success = request.performWrite(request.value)
             request.completion(
                 DisplayWriteResult(
                     key: key,

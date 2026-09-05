@@ -1,20 +1,35 @@
 import Foundation
 
+nonisolated enum CodexQuotaRefreshSchedule {
+    static func nextRefreshDate(resetDates: [Date], now: Date) -> Date? {
+        resetDates
+            .filter { $0 > now }
+            .map(roundUpToNextMinute)
+            .min()
+    }
+
+    private static func roundUpToNextMinute(_ date: Date) -> Date {
+        let minute = floor(date.timeIntervalSince1970 / 60) + 1
+        return Date(timeIntervalSince1970: minute * 60)
+    }
+}
+
 actor CodexQuotaSampler {
     private struct LoadResult: Sendable {
         let module: MonitorModule
         let succeeded: Bool
+        let resetDates: [Date]
     }
 
     private let client: CodexUsageClient
     private let now: @Sendable () -> Date
-    private var refreshInterval: TimeInterval = 300
     private var cachedModule: MonitorModule?
     private var lastPresentedModule: MonitorModule?
     private var lastSuccessfulRefreshDate: Date?
     private var retryNotBefore: Date?
     private var consecutiveFailures = 0
     private var inFlightRefresh: (id: UUID, task: Task<LoadResult, Never>)?
+    private var nextResetRefreshDate: Date?
 
     init(
         client: CodexUsageClient = CodexUsageClient(),
@@ -24,7 +39,11 @@ actor CodexQuotaSampler {
         self.now = now
     }
 
-    func sample(previous: MonitorModule?, force: Bool = false) async -> MonitorModule {
+    func sample(
+        previous: MonitorModule?,
+        force: Bool = false,
+        refreshInterval: TimeInterval = 300
+    ) async -> MonitorModule {
         if let inFlightRefresh {
             return moduleWithHistory(
                 await inFlightRefresh.task.value.module,
@@ -32,7 +51,7 @@ actor CodexQuotaSampler {
             )
         }
 
-        if !force, !shouldRefresh {
+        if !force, !shouldRefresh(interval: refreshInterval) {
             return moduleWithHistory(
                 lastPresentedModule ?? cachedModule ?? previous ?? Self.placeholderModule,
                 previous: previous
@@ -53,6 +72,10 @@ actor CodexQuotaSampler {
             if result.succeeded {
                 self.cachedModule = result.module
                 lastSuccessfulRefreshDate = now()
+                nextResetRefreshDate = CodexQuotaRefreshSchedule.nextRefreshDate(
+                    resetDates: result.resetDates,
+                    now: now()
+                )
                 retryNotBefore = nil
                 consecutiveFailures = 0
             } else {
@@ -66,8 +89,8 @@ actor CodexQuotaSampler {
         return moduleWithHistory(result.module, previous: previous)
     }
 
-    func setRefreshInterval(_ interval: TimeInterval) {
-        refreshInterval = min(3600, max(60, interval))
+    func scheduledResetRefreshDate() -> Date? {
+        nextResetRefreshDate
     }
 
     func release() {
@@ -78,15 +101,16 @@ actor CodexQuotaSampler {
         lastSuccessfulRefreshDate = nil
         retryNotBefore = nil
         consecutiveFailures = 0
+        nextResetRefreshDate = nil
     }
 
-    private var shouldRefresh: Bool {
+    private func shouldRefresh(interval: TimeInterval) -> Bool {
         let currentDate = now()
         if consecutiveFailures > 0 {
             return retryNotBefore.map { currentDate >= $0 } ?? true
         }
         guard let lastSuccessfulRefreshDate else { return true }
-        return currentDate.timeIntervalSince(lastSuccessfulRefreshDate) >= refreshInterval
+        return currentDate.timeIntervalSince(lastSuccessfulRefreshDate) >= min(3600, max(60, interval))
     }
 
     private func moduleWithHistory(_ module: MonitorModule, previous: MonitorModule?) -> MonitorModule {
@@ -103,14 +127,19 @@ actor CodexQuotaSampler {
         do {
             let report = try await client.load()
             CodexQuotaCache.save(report)
-            return LoadResult(module: Self.module(from: report), succeeded: true)
+            return LoadResult(
+                module: Self.module(from: report),
+                succeeded: true,
+                resetDates: report.periods.compactMap(\.resetAt)
+            )
         } catch {
             return LoadResult(
                 module: fallbackModule(
                     cachedModule: cachedModule,
                     errorDescription: error.localizedDescription
                 ),
-                succeeded: false
+                succeeded: false,
+                resetDates: []
             )
         }
     }

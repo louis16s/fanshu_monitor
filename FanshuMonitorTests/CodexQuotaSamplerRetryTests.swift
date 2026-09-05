@@ -3,6 +3,25 @@ import Testing
 @testable import FanshuMonitor
 
 struct CodexQuotaSamplerRetryTests {
+    @Test func schedulesTheEarlierQuotaResetAtTheNextMinute() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let fiveHourReset = Date(timeIntervalSince1970: 1_055)
+        let weeklyReset = Date(timeIntervalSince1970: 1_181)
+
+        #expect(
+            CodexQuotaRefreshSchedule.nextRefreshDate(
+                resetDates: [weeklyReset, fiveHourReset],
+                now: now
+            ) == Date(timeIntervalSince1970: 1_080)
+        )
+        #expect(
+            CodexQuotaRefreshSchedule.nextRefreshDate(
+                resetDates: [Date(timeIntervalSince1970: 999)],
+                now: now
+            ) == nil
+        )
+    }
+
     @Test func failedRefreshRetriesBeforeTheNormalRefreshInterval() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -46,6 +65,17 @@ struct CodexQuotaSamplerRetryTests {
         let recovered = await sampler.sample(previous: failure)
         #expect(counter.value == 2)
         #expect(recovered.summary == "Plus")
+
+        clock.advance(by: 61)
+        _ = await sampler.sample(previous: recovered, refreshInterval: 600)
+        #expect(counter.value == 2)
+
+        // A changed interval takes effect on the next request, without a setter task.
+        _ = await sampler.sample(previous: recovered, refreshInterval: 60)
+        #expect(counter.value == 3)
+
+        _ = await sampler.sample(previous: recovered, force: true, refreshInterval: 600)
+        #expect(counter.value == 4)
     }
 }
 
