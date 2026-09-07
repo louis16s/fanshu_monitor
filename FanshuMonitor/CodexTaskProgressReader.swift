@@ -20,6 +20,11 @@ nonisolated struct CodexTaskProgress: Equatable, Identifiable, Sendable {
 }
 
 actor CodexTaskProgressReader {
+    // A rollout can survive an interrupted Codex process without receiving a
+    // terminal event. Keep the fallback long enough for quiet tool calls, but
+    // never let an abandoned task remain visible indefinitely.
+    static let staleTaskTimeout: TimeInterval = 120
+
     private struct RolloutState {
         var offset: UInt64 = 0
         var remainder = Data()
@@ -29,6 +34,7 @@ actor CodexTaskProgressReader {
         var completedSteps = 0
         var totalSteps = 0
         var activeStep: String?
+        var lastActivityAt: Date?
 
         mutating func resetTask() {
             currentTurnID = nil
@@ -36,6 +42,7 @@ actor CodexTaskProgressReader {
             completedSteps = 0
             totalSteps = 0
             activeStep = nil
+            lastActivityAt = nil
         }
     }
 
@@ -72,7 +79,7 @@ actor CodexTaskProgressReader {
         var result: [CodexTaskProgress] = []
         for candidate in candidates {
             var state = statesByURL[candidate.url] ?? RolloutState()
-            update(candidate: candidate, state: &state)
+            update(candidate: candidate, state: &state, now: now)
             statesByURL[candidate.url] = state
             guard state.isTaskActive else { continue }
 
@@ -122,19 +129,30 @@ actor CodexTaskProgressReader {
         statesByURL = statesByURL.filter { retainedURLs.contains($0.key) }
     }
 
-    private func update(candidate: RolloutCandidate, state: inout RolloutState) {
+    private func update(candidate: RolloutCandidate, state: inout RolloutState, now: Date) {
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: candidate.url.path),
               let fileSize = (attributes[.size] as? NSNumber)?.uint64Value
         else {
             // Keep the last known task during transient filesystem failures. The
             // next discovery pass removes files that are genuinely gone.
+            expireIfStale(state: &state, now: now)
+            return
+        }
+
+        if let modifiedAt = attributes[.modificationDate] as? Date,
+           state.isTaskActive,
+           now.timeIntervalSince(modifiedAt) >= Self.staleTaskTimeout {
+            state.resetTask()
             return
         }
 
         if fileSize < state.offset {
             state = RolloutState()
         }
-        guard fileSize > state.offset else { return }
+        guard fileSize > state.offset else {
+            expireIfStale(state: &state, now: now)
+            return
+        }
 
         let initialRead = state.offset == 0
         let readOffset = initialRead
@@ -150,10 +168,13 @@ actor CodexTaskProgressReader {
             try handle.seek(toOffset: readOffset)
             let data = try handle.readToEnd() ?? Data()
             state.offset = try handle.offset()
-            process(data: data, state: &state)
+            process(data: data, state: &state, now: now)
         } catch {
+            expireIfStale(state: &state, now: now)
             return
         }
+
+        expireIfStale(state: &state, now: now)
     }
 
     private func initialReadOffset(url: URL, fileSize: UInt64) -> UInt64 {
@@ -171,8 +192,9 @@ actor CodexTaskProgressReader {
             do {
                 try handle.seek(toOffset: chunkStart)
                 let data = try handle.read(upToCount: Int(chunkEnd - chunkStart)) ?? Data()
-                if data.range(of: Data(#"\"type\":\"task_started\""#.utf8)) != nil
-                    || data.range(of: Data(#"\"type\":\"task_complete\""#.utf8)) != nil {
+                if Self.lifecycleEventTypes.contains(where: { eventType in
+                    data.range(of: Data((#"\"type\":\""# + eventType + #"\""#).utf8)) != nil
+                }) {
                     return chunkStart
                 }
             } catch {
@@ -183,7 +205,7 @@ actor CodexTaskProgressReader {
         return lowerBound
     }
 
-    private func process(data: Data, state: inout RolloutState) {
+    private func process(data: Data, state: inout RolloutState, now: Date) {
         var appendedData = data
         if state.isDroppingLeadingPartialLine {
             guard let newline = appendedData.firstIndex(of: 0x0A) else { return }
@@ -198,14 +220,14 @@ actor CodexTaskProgressReader {
         while let lineEnd = bufferedData[lineStart...].firstIndex(of: 0x0A) {
             let line = bufferedData[lineStart..<lineEnd]
             if !line.isEmpty, let text = String(data: line, encoding: .utf8) {
-                process(line: text, state: &state)
+                process(line: text, state: &state, now: now)
             }
             lineStart = bufferedData.index(after: lineEnd)
         }
         state.remainder = Data(bufferedData[lineStart...])
     }
 
-    private func process(line: String, state: inout RolloutState) {
+    private func process(line: String, state: inout RolloutState, now: Date) {
         guard let data = line.data(using: .utf8),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let payload = root["payload"] as? [String: Any],
@@ -214,16 +236,23 @@ actor CodexTaskProgressReader {
             return
         }
 
+        if state.isTaskActive {
+            // Any valid rollout record means the task is still making
+            // progress, even when the record is not a plan update.
+            state.lastActivityAt = now
+        }
+
         if root["type"] as? String == "event_msg" {
             switch payloadType {
             case "task_started":
                 state.resetTask()
                 state.isTaskActive = true
                 state.currentTurnID = payload["turn_id"] as? String
-            case "task_complete":
+                state.lastActivityAt = now
+            case let type where Self.terminalTaskEventTypes.contains(type):
                 let completedTurnID = payload["turn_id"] as? String
                 if state.currentTurnID == nil || completedTurnID == state.currentTurnID {
-                    state.isTaskActive = false
+                    state.resetTask()
                 }
             default:
                 break
@@ -236,8 +265,37 @@ actor CodexTaskProgressReader {
               let input = planInput(payload: payload, payloadType: payloadType) else {
             return
         }
+        state.lastActivityAt = now
         applyPlan(from: input, state: &state)
     }
+
+    private func expireIfStale(state: inout RolloutState, now: Date) {
+        guard state.isTaskActive,
+              let lastActivityAt = state.lastActivityAt,
+              now.timeIntervalSince(lastActivityAt) >= Self.staleTaskTimeout else {
+            return
+        }
+        state.resetTask()
+    }
+
+    private static let terminalTaskEventTypes: Set<String> = [
+        "task_complete",
+        "task_failed",
+        "task_cancelled",
+        "task_canceled",
+        "task_aborted",
+        "turn_complete",
+        "turn_failed",
+        "turn_cancelled",
+        "turn_canceled",
+        "turn_aborted",
+        "session_end",
+        "session_ended",
+        "interrupted"
+    ]
+
+    private static let lifecycleEventTypes: Set<String> =
+        terminalTaskEventTypes.union(["task_started"])
 
     private func planInput(payload: [String: Any], payloadType: String) -> String? {
         if payloadType == "function_call",

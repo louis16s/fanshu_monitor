@@ -61,6 +61,53 @@ struct CodexTaskProgressReaderTests {
         #expect(await reader.load(now: Date(timeIntervalSince1970: 2)).isEmpty)
     }
 
+    @Test func interruptedTerminalEventClearsTask() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        let index = root.appendingPathComponent("session_index.jsonl")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let threadID = "41234567-89ab-cdef-0123-456789abcdef"
+        try Data("{\"id\":\"\(threadID)\",\"thread_name\":\"中断任务\"}\n".utf8).write(to: index)
+        let rollout = sessions.appendingPathComponent("rollout-\(threadID).jsonl")
+        try Data(#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"#.utf8)
+            .write(to: rollout)
+        try append(Data([0x0A]), to: rollout)
+
+        let reader = CodexTaskProgressReader(sessionsRoot: sessions, sessionIndexURL: index)
+        let startedAt = Date()
+        #expect(await reader.load(now: startedAt).count == 1)
+
+        let interruption = #"{"type":"event_msg","payload":{"type":"task_aborted","turn_id":"turn"}}"#
+        try append(Data((interruption + "\n").utf8), to: rollout)
+        #expect(await reader.load(now: Date().addingTimeInterval(1)).isEmpty)
+    }
+
+    @Test func inactiveRolloutExpiresAfterBoundedIdlePeriod() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        let index = root.appendingPathComponent("session_index.jsonl")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let threadID = "51234567-89ab-cdef-0123-456789abcdef"
+        try Data("{\"id\":\"\(threadID)\",\"thread_name\":\"无终态任务\"}\n".utf8).write(to: index)
+        let rollout = sessions.appendingPathComponent("rollout-\(threadID).jsonl")
+        try Data(#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"#.utf8)
+            .write(to: rollout)
+        try append(Data([0x0A]), to: rollout)
+
+        let reader = CodexTaskProgressReader(sessionsRoot: sessions, sessionIndexURL: index)
+        let startedAt = Date()
+        #expect(await reader.load(now: startedAt).count == 1)
+
+        let staleAt = startedAt.addingTimeInterval(CodexTaskProgressReader.staleTaskTimeout + 1)
+        #expect(await reader.load(now: staleAt).isEmpty)
+    }
+
     @Test func missingRolloutKeepsLastStateUntilTheNextDiscoveryPass() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
