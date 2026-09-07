@@ -26,6 +26,9 @@ struct MetricGlassRow: View {
             } trailing: {
                 trailingView(theme: theme)
             }
+            .help(module.kind == .codex
+                ? module.metrics.first { $0.name == "status" }?.value ?? ""
+                : "")
 
             if isExpanded, hasExpandedDetails {
                 Group {

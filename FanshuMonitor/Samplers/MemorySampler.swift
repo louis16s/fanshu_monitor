@@ -50,7 +50,7 @@ nonisolated final class MemorySampler: MonitorSampler {
                 MonitorMetric(
                     name: "pressure",
                     value: pressure == .unknown
-                        ? previousMetric("pressure") ?? MemoryPressureState.normal.title
+                        ? previousMetric("pressure") ?? MemoryPressureState.unknown.title
                         : pressure.title
                 ),
                 MonitorMetric(name: "compressed", value: memoryBytes(compressed)),

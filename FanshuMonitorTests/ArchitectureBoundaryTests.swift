@@ -39,6 +39,35 @@ struct PreferencesCodecTests {
 }
 
 struct PowerFlowAnimationPolicyTests {
+    @Test func presentationAblationPreservesOutput() {
+        let metrics: [MonitorMetric] = [
+            .init(name: "adapter-input", value: "47.6 W"),
+            .init(name: "system-load", value: "72.1 W"),
+            .init(name: "battery-flow", value: "-24.5 W")
+        ]
+        let iterations = 10_000
+        let clock = ContinuousClock()
+        var repeatedChecksum = 0.0
+        let repeatedTime = clock.measure {
+            for _ in 0..<iterations {
+                repeatedChecksum += BatteryPowerFlowPresentation(metrics: metrics, isConnectedToPower: true).adapterInputWatts ?? 0
+                repeatedChecksum += BatteryPowerFlowPresentation(metrics: metrics, isConnectedToPower: true).systemLoadWatts ?? 0
+                repeatedChecksum += BatteryPowerFlowPresentation(metrics: metrics, isConnectedToPower: true).batteryMagnitude ?? 0
+            }
+        }
+        var sharedChecksum = 0.0
+        let sharedTime = clock.measure {
+            for _ in 0..<iterations {
+                let value = BatteryPowerFlowPresentation(metrics: metrics, isConnectedToPower: true)
+                sharedChecksum += value.adapterInputWatts ?? 0
+                sharedChecksum += value.systemLoadWatts ?? 0
+                sharedChecksum += value.batteryMagnitude ?? 0
+            }
+        }
+        #expect(repeatedChecksum == sharedChecksum)
+        print("Power presentation ablation: repeated=\(repeatedTime), shared=\(sharedTime), iterations=\(iterations)")
+    }
+
     @Test func usesASubtleCompositorAnimationCycle() {
         #expect(PowerFlowAnimationPolicy.cycleDuration >= 0.8)
         #expect(PowerFlowAnimationPolicy.cycleDuration <= 1.5)

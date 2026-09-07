@@ -91,9 +91,9 @@ nonisolated final class GPUSampler: MonitorSampler {
                 continue
             }
 
-            let utilization = doubleValue(stats["Device Utilization %"])
-                ?? doubleValue(stats["GPU Activity(%)"])
-                ?? 0
+            guard let utilization = doubleValue(stats["Device Utilization %"])
+                ?? doubleValue(stats["GPU Activity(%)"]),
+                  utilization.isFinite else { continue }
             let render = doubleValue(stats["Renderer Utilization %"])
             let tiler = doubleValue(stats["Tiler Utilization %"])
             let usedMemory = doubleValue(stats["In use system memory"])

@@ -23,6 +23,7 @@ nonisolated final class CPUSampler: MonitorSampler {
             let idleDiff = Double(info.cpu_ticks.2 &- previousCPUInfo.cpu_ticks.2)
             let niceDiff = Double(info.cpu_ticks.3 &- previousCPUInfo.cpu_ticks.3)
             let all = userDiff + systemDiff + idleDiff + niceDiff
+            guard all > 0 else { return previous ?? MonitorModule.placeholder(kind: .cpu) }
 
             let system = all > 0 ? (systemDiff / all) * 100 : 0
             let user = all > 0 ? ((userDiff + niceDiff) / all) * 100 : 0

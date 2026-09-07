@@ -3,6 +3,45 @@ import Testing
 @testable import FanshuMonitor
 
 struct CodexQuotaSamplerRetryTests {
+    @Test func accountSelectionAndFailedResetUseExistingBackoff() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let auth = root.appendingPathComponent("auth.json")
+        try Data(#"{"tokens":{"access_token":"test","account_id":"selected-account"}}"#.utf8).write(to: auth)
+        let clock = CodexRetryClock()
+        let counter = CodexRetryCounter()
+        let client = CodexUsageClient(authFileURL: auth, transport: { request in
+            #expect(request.value(forHTTPHeaderField: "ChatGPT-Account-Id") == "selected-account")
+            #expect(request.cachePolicy == .reloadIgnoringLocalCacheData)
+            if counter.increment() > 1 { throw URLError(.timedOut) }
+            let response = try #require(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (Data(#"{"plan_type":"plus","rate_limit":{"primary_window":{"used_percent":20,"reset_at":1055,"limit_window_seconds":18000}}}"#.utf8), response)
+        })
+        let sampler = CodexQuotaSampler(client: client, now: clock.now)
+        let original = await sampler.sample(previous: nil)
+        #expect(await sampler.scheduledResetRefreshDate() == Date(timeIntervalSince1970: 1080))
+        clock.advance(by: 80)
+        let failed = await sampler.sample(previous: original, force: true)
+        #expect(await sampler.scheduledResetRefreshDate() == nil)
+        #expect(failed.value == original.value)
+        _ = await sampler.sample(previous: failed)
+        #expect(counter.value == 2)
+        clock.advance(by: 15.1)
+        _ = await sampler.sample(previous: failed)
+        #expect(counter.value == 3)
+    }
+
+    @Test func quotaRemainingIsClampedAndIndependentOfWindowOrder() throws {
+        let data = Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":110,"limit_window_seconds":604800},"secondary_window":{"used_percent":-5,"limit_window_seconds":18000}}}"#.utf8)
+        let report = try CodexUsageClient.parseUsage(data)
+        let module = CodexQuotaSampler.module(from: report)
+        #expect(module.summary == "Pro")
+        #expect(module.metrics.first { $0.name == "five-hour" }?.value == "100%")
+        #expect(module.metrics.first { $0.name == "weekly" }?.value == "0%")
+        #expect(report.fetchedAt != nil)
+    }
+
     @Test func schedulesTheEarlierQuotaResetAtTheNextMinute() {
         let now = Date(timeIntervalSince1970: 1_000)
         let fiveHourReset = Date(timeIntervalSince1970: 1_055)

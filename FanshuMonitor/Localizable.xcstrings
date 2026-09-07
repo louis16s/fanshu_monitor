@@ -1194,10 +1194,22 @@
         "en": { "stringUnit": { "state": "translated", "value": "5H Reset" } }
       }
     },
+    "codex.updated-at": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "更新于" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Updated at" } }
+      }
+    },
+    "codex.cached-quota": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "缓存额度，等待刷新" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Cached limits, awaiting refresh" } }
+      }
+    },
     "metric.codex.weekly": {
       "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "一周" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Weekly" } }
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "week" } },
+        "en": { "stringUnit": { "state": "translated", "value": "week" } }
       }
     },
     "metric.codex.weekly-reset": {

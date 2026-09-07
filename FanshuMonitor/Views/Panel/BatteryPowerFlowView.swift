@@ -96,6 +96,7 @@ struct BatteryPowerFlowRow: View {
     }
 
     var body: some View {
+        let presentation = presentation
         VStack(spacing: 7) {
             Rectangle()
                 .fill(theme.rowSeparator(for: .battery))
@@ -242,6 +243,7 @@ private final class PowerFlowLayerView: NSView {
     private var presentation: BatteryPowerFlowPresentation?
     private var tint = NSColor.controlAccentColor
     private var shouldAnimate = false
+    private var renderedBounds = CGRect.null
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -263,6 +265,7 @@ private final class PowerFlowLayerView: NSView {
 
     override func layout() {
         super.layout()
+        guard renderedBounds != bounds else { return }
         updatePaths()
     }
 
@@ -271,6 +274,8 @@ private final class PowerFlowLayerView: NSView {
         tint: NSColor,
         shouldAnimate: Bool
     ) {
+        guard self.presentation != presentation || self.tint != tint
+            || self.shouldAnimate != shouldAnimate || renderedBounds != bounds else { return }
         self.presentation = presentation
         self.tint = tint
         self.shouldAnimate = shouldAnimate
@@ -279,6 +284,7 @@ private final class PowerFlowLayerView: NSView {
 
     private func updatePaths() {
         guard let presentation, bounds.width > 4, bounds.height > 4 else { return }
+        renderedBounds = bounds
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -359,8 +365,7 @@ private final class PowerFlowLayerView: NSView {
         flow.particle.cornerRadius = particleSize / 2
         flow.particle.backgroundColor = color.withAlphaComponent(0.96).cgColor
         flow.particle.shadowColor = color.cgColor
-        flow.particle.shadowOpacity = 0.42
-        flow.particle.shadowRadius = 2
+        flow.particle.shadowOpacity = 0
         flow.particle.shadowOffset = .zero
         if flow.isHidden {
             flow.particle.removeAnimation(forKey: "power-flow")

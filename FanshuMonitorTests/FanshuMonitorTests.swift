@@ -450,7 +450,7 @@ struct FanshuMonitorTests {
 
         #expect(module.kind == .codex)
         #expect(module.value == 75)
-        #expect(module.summary == "Plus")
+        #expect(module.summary == "Pro")
         #expect(module.metrics.first { $0.name == "five-hour" }?.value == "75%")
         #expect(module.metrics.first { $0.name == "weekly" }?.value == "60%")
         #expect(module.metrics.first { $0.name == "five-hour-reset" }?.value != nil)
@@ -476,7 +476,7 @@ struct FanshuMonitorTests {
         let report = try CodexUsageClient.parseUsage(Data(json.utf8))
         let module = CodexQuotaSampler.module(from: report)
 
-        #expect(module.value == 0)
+        #expect(module.value == 91)
         #expect(module.metrics.first { $0.name == "five-hour" }?.value == "--")
         #expect(module.metrics.first { $0.name == "weekly" }?.value == "91%")
         #expect(module.metrics.first { $0.name == "weekly-reset" }?.value != "--")

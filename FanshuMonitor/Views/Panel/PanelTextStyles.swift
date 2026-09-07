@@ -24,7 +24,7 @@ extension Text {
     func panelCaptionFont(size: CGFloat, weight: Font.Weight = .medium) -> some View {
         self
             .font(.system(size: size, weight: weight))
-            .kerning(0.1)
+            .kerning(0)
     }
 
     func panelMonoFont(size: CGFloat, weight: Font.Weight) -> some View {

@@ -44,6 +44,11 @@ actor CodexQuotaSampler {
         force: Bool = false,
         refreshInterval: TimeInterval = 300
     ) async -> MonitorModule {
+        // Consume an elapsed one-shot deadline before starting or joining work.
+        // A failed reset refresh must use retry backoff, not rearm a past date.
+        if let deadline = nextResetRefreshDate, deadline <= now() {
+            nextResetRefreshDate = nil
+        }
         if let inFlightRefresh {
             return moduleWithHistory(
                 await inFlightRefresh.task.value.module,
@@ -208,7 +213,7 @@ actor CodexQuotaSampler {
     static func module(from report: CodexQuotaReport) -> MonitorModule {
         let fiveHour = report.periods.first { $0.id == "5h" }
         let weekly = report.periods.first { $0.id == "week" }
-        let fiveHourRemainingValue = (fiveHour?.remainingRatio).map { $0 * 100 } ?? 0
+        let fiveHourRemainingValue = (fiveHour?.remainingRatio ?? weekly?.remainingRatio).map { $0 * 100 } ?? 0
         let fiveHourRemaining = percentText(fiveHour?.remainingRatio)
         let weeklyRemaining = percentText(weekly?.remainingRatio)
         let fiveHourResetText = formattedFiveHourReset(fiveHour?.resetAt)
@@ -225,7 +230,10 @@ actor CodexQuotaSampler {
                 MonitorMetric(name: "weekly", value: weeklyRemaining),
                 MonitorMetric(name: "five-hour-reset", value: fiveHourResetText),
                 MonitorMetric(name: "weekly-reset", value: weeklyResetText),
-                MonitorMetric(name: "reset-credits", value: resetCreditsText(report.resetCredits))
+                MonitorMetric(name: "reset-credits", value: resetCreditsText(report.resetCredits)),
+                MonitorMetric(name: "status", value: report.fetchedAt.map {
+                    String(localized: "codex.updated-at") + " " + makeQuotaTimeFormatter().string(from: $0)
+                } ?? String(localized: "codex.cached-quota"))
             ],
             samples: seedSamples(fiveHourRemainingValue)
         )
@@ -254,8 +262,10 @@ actor CodexQuotaSampler {
         switch planType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "free":
             return "Free"
-        case "plus", "pro":
+        case "plus":
             return "Plus"
+        case "pro":
+            return "Pro"
         case "team", "teams", "business":
             return "Team"
         default:
@@ -345,11 +355,15 @@ nonisolated struct CodexUsageClient: Sendable {
     }
 
     func load() async throws -> CodexQuotaReport {
-        let accessToken = try loadAccessToken()
+        let credentials = try loadCredentials()
         var request = URLRequest(url: usageURL)
         request.httpMethod = "GET"
         request.timeoutInterval = Self.requestTimeout
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(credentials.accessToken)", forHTTPHeaderField: "Authorization")
+        if let accountID = credentials.accountID, !accountID.isEmpty {
+            request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id")
+        }
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(AppVersion.userAgent, forHTTPHeaderField: "User-Agent")
 
@@ -382,7 +396,7 @@ nonisolated struct CodexUsageClient: Sendable {
             let response = try JSONDecoder().decode(CodexUsageResponse.self, from: data)
             let windows = [
                 (response.rateLimit?.primaryWindow, "5h", "5H"),
-                (response.rateLimit?.secondaryWindow, "week", "一周")
+                (response.rateLimit?.secondaryWindow, "week", "week")
             ]
             var snapshots: [String: CodexQuotaSnapshot] = [:]
             for (window, fallbackID, fallbackLabel) in windows {
@@ -395,14 +409,15 @@ nonisolated struct CodexUsageClient: Sendable {
             return CodexQuotaReport(
                 planType: response.planType,
                 periods: periods,
-                resetCredits: response.rateLimitResetCredits?.availableCount
+                resetCredits: response.rateLimitResetCredits?.availableCount,
+                fetchedAt: Date()
             )
         } catch {
             throw CodexUsageError.invalidPayload
         }
     }
 
-    private func loadAccessToken() throws -> String {
+    private func loadCredentials() throws -> (accessToken: String, accountID: String?) {
         guard FileManager.default.fileExists(atPath: authFileURL.path) else {
             throw CodexUsageError.missingAuthFile(authFileURL.path)
         }
@@ -410,10 +425,11 @@ nonisolated struct CodexUsageClient: Sendable {
         do {
             let data = try Data(contentsOf: authFileURL)
             let auth = try JSONDecoder().decode(CodexAuth.self, from: data)
-            guard let token = auth.tokens?.accessToken, !token.isEmpty else {
+            guard let credentials = auth.tokens,
+                  let token = credentials.accessToken, !token.isEmpty else {
                 throw CodexUsageError.missingAccessToken
             }
-            return token
+            return (token, credentials.accountID)
         } catch let error as CodexUsageError {
             throw error
         } catch {
@@ -426,6 +442,7 @@ nonisolated struct CodexQuotaReport: Codable, Equatable, Sendable {
     var planType: String?
     var periods: [CodexQuotaSnapshot]
     var resetCredits: Int?
+    var fetchedAt: Date? = nil
 }
 
 nonisolated struct CodexQuotaSnapshot: Codable, Equatable, Sendable {
@@ -467,9 +484,11 @@ nonisolated private struct CodexAuth: Decodable {
 
     struct Tokens: Decodable {
         var accessToken: String?
+        var accountID: String?
 
         enum CodingKeys: String, CodingKey {
             case accessToken = "access_token"
+            case accountID = "account_id"
         }
     }
 }
@@ -518,7 +537,7 @@ nonisolated private struct CodexUsageResponse: Decodable {
             guard let limitWindowSeconds else { return (fallbackID, fallbackLabel) }
             return limitWindowSeconds <= 24 * 60 * 60
                 ? ("5h", "5H")
-                : ("week", "一周")
+                : ("week", "week")
         }
 
         func snapshot(id: String, label: String) -> CodexQuotaSnapshot {

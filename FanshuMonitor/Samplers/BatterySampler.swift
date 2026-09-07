@@ -49,9 +49,12 @@ nonisolated final class BatterySampler: MonitorSampler {
         }
         didReportPowerSourceFailure = false
 
-        let current = doubleValue(description[kIOPSCurrentCapacityKey]) ?? 0
-        let maxCapacity = doubleValue(description[kIOPSMaxCapacityKey]) ?? 100
-        let percentage = maxCapacity > 0 ? min(100, max(0, current / maxCapacity * 100)) : 0
+        guard let current = doubleValue(description[kIOPSCurrentCapacityKey]),
+              let maxCapacity = doubleValue(description[kIOPSMaxCapacityKey]),
+              current.isFinite, maxCapacity.isFinite, current >= 0, maxCapacity > 0 else {
+            return previous ?? MonitorModule.placeholder(kind: .battery)
+        }
+        let percentage = min(100, current / maxCapacity * 100)
         let isCharging = (description[kIOPSIsChargingKey] as? Bool) ?? false
         let sourceState = description[kIOPSPowerSourceStateKey] as? String
         let connected = sourceState == kIOPSACPowerValue
