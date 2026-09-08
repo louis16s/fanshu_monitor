@@ -39,6 +39,7 @@ struct CodexQuotaSamplerRetryTests {
         #expect(module.summary == "Pro")
         #expect(module.metrics.first { $0.name == "five-hour" }?.value == "100%")
         #expect(module.metrics.first { $0.name == "weekly" }?.value == "0%")
+        #expect(report.periods.first { $0.id == "week" }?.label == "WEEK")
         #expect(report.fetchedAt != nil)
     }
 

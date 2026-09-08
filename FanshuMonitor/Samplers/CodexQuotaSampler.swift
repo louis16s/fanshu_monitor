@@ -396,7 +396,7 @@ nonisolated struct CodexUsageClient: Sendable {
             let response = try JSONDecoder().decode(CodexUsageResponse.self, from: data)
             let windows = [
                 (response.rateLimit?.primaryWindow, "5h", "5H"),
-                (response.rateLimit?.secondaryWindow, "week", "week")
+                (response.rateLimit?.secondaryWindow, "week", "WEEK")
             ]
             var snapshots: [String: CodexQuotaSnapshot] = [:]
             for (window, fallbackID, fallbackLabel) in windows {
@@ -537,7 +537,7 @@ nonisolated private struct CodexUsageResponse: Decodable {
             guard let limitWindowSeconds else { return (fallbackID, fallbackLabel) }
             return limitWindowSeconds <= 24 * 60 * 60
                 ? ("5h", "5H")
-                : ("week", "week")
+                : ("week", "WEEK")
         }
 
         func snapshot(id: String, label: String) -> CodexQuotaSnapshot {

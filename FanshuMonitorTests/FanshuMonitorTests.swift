@@ -719,7 +719,7 @@ struct FanshuMonitorTests {
             periods: [
                 CodexQuotaSnapshot(
                     id: "week",
-                    label: "一周",
+                    label: "WEEK",
                     remaining: 87,
                     limit: 100,
                     usedPercent: 13,

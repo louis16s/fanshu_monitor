@@ -19,7 +19,7 @@ nonisolated enum HaloRingSource: String, CaseIterable, Identifiable {
         case .memory: String(localized: "ring-source.memory")
         case .battery: String(localized: "kind.battery")
         case .codex: "Codex 5H"
-        case .codexWeekly: "Codex Week"
+        case .codexWeekly: "Codex WEEK"
         }
     }
 }

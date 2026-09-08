@@ -1208,14 +1208,14 @@
     },
     "metric.codex.weekly": {
       "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "week" } },
-        "en": { "stringUnit": { "state": "translated", "value": "week" } }
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "WEEK" } },
+        "en": { "stringUnit": { "state": "translated", "value": "WEEK" } }
       }
     },
     "metric.codex.weekly-reset": {
       "localizations": {
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "周刷新" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Weekly Reset" } }
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "WEEK刷新" } },
+        "en": { "stringUnit": { "state": "translated", "value": "WEEK Refresh" } }
       }
     },
     "metric.codex.active-tasks": {
