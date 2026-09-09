@@ -1608,6 +1608,38 @@
         }
       }
     },
+    "settings.codex-adaptive-refresh-interval": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "额度变化刷新间隔"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quota Change Refresh Interval"
+          }
+        }
+      }
+    },
+    "settings.codex-adaptive-refresh-interval.subtitle": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "额度减少后临时使用，连续两次不变恢复默认"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used after a decrease; restores the default after two unchanged results"
+          }
+        }
+      }
+    },
     "settings.minutes-format": {
       "localizations": {
         "zh-Hans": {

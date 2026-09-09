@@ -15,10 +15,51 @@ nonisolated enum CodexQuotaRefreshSchedule {
 }
 
 actor CodexQuotaSampler {
+    private struct QuotaUsageSnapshot: Equatable, Sendable {
+        let remainingByID: [String: Double]
+
+        init(report: CodexQuotaReport) {
+            remainingByID = Dictionary(
+                report.periods.map { period in
+                    (period.id, max(0, min(period.limit, period.remaining)))
+                },
+                uniquingKeysWith: { _, newValue in newValue }
+            )
+        }
+
+        init?(module: MonitorModule?) {
+            guard let module else { return nil }
+            let values = [
+                "5h": Self.remainingValue(for: "five-hour", in: module),
+                "week": Self.remainingValue(for: "weekly", in: module)
+            ].compactMapValues { $0 }
+            guard !values.isEmpty else { return nil }
+            remainingByID = values
+        }
+
+        private static func remainingValue(for metricID: MetricID, in module: MonitorModule) -> Double? {
+            guard let value = module.metrics.first(where: { $0.name == metricID })?.value,
+                  let remainingPercent = Double(value.replacingOccurrences(of: "%", with: "")),
+                  remainingPercent.isFinite
+            else {
+                return nil
+            }
+            return max(0, min(100, remainingPercent))
+        }
+
+        func hasDecrease(comparedTo previous: Self) -> Bool {
+            remainingByID.contains { id, remaining in
+                guard let previousRemaining = previous.remainingByID[id] else { return false }
+                return remaining < previousRemaining - 0.0001
+            }
+        }
+    }
+
     private struct LoadResult: Sendable {
         let module: MonitorModule
         let succeeded: Bool
         let resetDates: [Date]
+        let quotaSnapshot: QuotaUsageSnapshot?
     }
 
     private let client: CodexUsageClient
@@ -30,6 +71,9 @@ actor CodexQuotaSampler {
     private var consecutiveFailures = 0
     private var inFlightRefresh: (id: UUID, task: Task<LoadResult, Never>)?
     private var nextResetRefreshDate: Date?
+    private var lastQuotaSnapshot: QuotaUsageSnapshot?
+    private var adaptiveRefreshActive = false
+    private var unchangedRefreshCount = 0
 
     init(
         client: CodexUsageClient = CodexUsageClient(),
@@ -42,8 +86,13 @@ actor CodexQuotaSampler {
     func sample(
         previous: MonitorModule?,
         force: Bool = false,
-        refreshInterval: TimeInterval = 300
+        refreshInterval: TimeInterval = 300,
+        adaptiveRefreshInterval: TimeInterval = 60
     ) async -> MonitorModule {
+        if lastQuotaSnapshot == nil {
+            lastQuotaSnapshot = QuotaUsageSnapshot(module: previous)
+        }
+
         // Consume an elapsed one-shot deadline before starting or joining work.
         // A failed reset refresh must use retry backoff, not rearm a past date.
         if let deadline = nextResetRefreshDate, deadline <= now() {
@@ -56,7 +105,10 @@ actor CodexQuotaSampler {
             )
         }
 
-        if !force, !shouldRefresh(interval: refreshInterval) {
+        if !force, !shouldRefresh(interval: effectiveRefreshInterval(
+            defaultInterval: refreshInterval,
+            adaptiveInterval: adaptiveRefreshInterval
+        )) {
             return moduleWithHistory(
                 lastPresentedModule ?? cachedModule ?? previous ?? Self.placeholderModule,
                 previous: previous
@@ -83,6 +135,9 @@ actor CodexQuotaSampler {
                 )
                 retryNotBefore = nil
                 consecutiveFailures = 0
+                if let quotaSnapshot = result.quotaSnapshot {
+                    updateAdaptiveRefreshState(with: quotaSnapshot)
+                }
             } else {
                 consecutiveFailures += 1
                 retryNotBefore = now().addingTimeInterval(Self.retryDelay(
@@ -107,6 +162,16 @@ actor CodexQuotaSampler {
         retryNotBefore = nil
         consecutiveFailures = 0
         nextResetRefreshDate = nil
+        lastQuotaSnapshot = nil
+        adaptiveRefreshActive = false
+        unchangedRefreshCount = 0
+    }
+
+    func effectiveRefreshInterval(
+        defaultInterval: TimeInterval,
+        adaptiveInterval: TimeInterval
+    ) -> TimeInterval {
+        Self.normalizedRefreshInterval(adaptiveRefreshActive ? adaptiveInterval : defaultInterval)
     }
 
     private func shouldRefresh(interval: TimeInterval) -> Bool {
@@ -116,6 +181,29 @@ actor CodexQuotaSampler {
         }
         guard let lastSuccessfulRefreshDate else { return true }
         return currentDate.timeIntervalSince(lastSuccessfulRefreshDate) >= min(3600, max(60, interval))
+    }
+
+    private func updateAdaptiveRefreshState(with snapshot: QuotaUsageSnapshot) {
+        guard let previous = lastQuotaSnapshot else {
+            lastQuotaSnapshot = snapshot
+            return
+        }
+
+        if snapshot.hasDecrease(comparedTo: previous) {
+            adaptiveRefreshActive = true
+            unchangedRefreshCount = 0
+        } else if adaptiveRefreshActive {
+            if snapshot == previous {
+                unchangedRefreshCount += 1
+                if unchangedRefreshCount >= 2 {
+                    adaptiveRefreshActive = false
+                    unchangedRefreshCount = 0
+                }
+            } else {
+                unchangedRefreshCount = 0
+            }
+        }
+        lastQuotaSnapshot = snapshot
     }
 
     private func moduleWithHistory(_ module: MonitorModule, previous: MonitorModule?) -> MonitorModule {
@@ -135,7 +223,8 @@ actor CodexQuotaSampler {
             return LoadResult(
                 module: Self.module(from: report),
                 succeeded: true,
-                resetDates: report.periods.compactMap(\.resetAt)
+                resetDates: report.periods.compactMap(\.resetAt),
+                quotaSnapshot: QuotaUsageSnapshot(report: report)
             )
         } catch {
             return LoadResult(
@@ -144,9 +233,14 @@ actor CodexQuotaSampler {
                     errorDescription: error.localizedDescription
                 ),
                 succeeded: false,
-                resetDates: []
+                resetDates: [],
+                quotaSnapshot: nil
             )
         }
+    }
+
+    private static func normalizedRefreshInterval(_ interval: TimeInterval) -> TimeInterval {
+        min(3600, max(60, interval))
     }
 
     private static func retryDelay(consecutiveFailures: Int) -> TimeInterval {
@@ -473,6 +567,13 @@ nonisolated enum CodexQuotaCache {
 
     static func save(_ report: CodexQuotaReport, defaults: UserDefaults = .standard) {
         guard let data = try? JSONEncoder().encode(report) else {
+            return
+        }
+        if let cachedData = defaults.data(forKey: key),
+           let cachedReport = try? JSONDecoder().decode(CodexQuotaReport.self, from: cachedData),
+           cachedReport.planType == report.planType,
+           cachedReport.periods == report.periods,
+           cachedReport.resetCredits == report.resetCredits {
             return
         }
         defaults.set(data, forKey: key)

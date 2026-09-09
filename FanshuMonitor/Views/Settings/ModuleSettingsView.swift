@@ -41,6 +41,16 @@ struct ModuleSettingsView: View {
                         }
                         .fixedSize()
                     }
+
+                    SettingsDivider()
+
+                    SettingsRow(title: String(localized: "settings.codex-adaptive-refresh-interval"), subtitle: String(localized: "settings.codex-adaptive-refresh-interval.subtitle")) {
+                        Stepper(value: $settings.codexAdaptiveRefreshIntervalMinutes, in: 1...60, step: 1) {
+                            Text(codexAdaptiveRefreshIntervalText)
+                                .monospacedDigit()
+                        }
+                        .fixedSize()
+                    }
                 }
             }
 
@@ -123,6 +133,13 @@ struct ModuleSettingsView: View {
         String(
             format: String(localized: "settings.minutes-format"),
             Int(settings.codexRefreshIntervalMinutes)
+        )
+    }
+
+    private var codexAdaptiveRefreshIntervalText: String {
+        String(
+            format: String(localized: "settings.minutes-format"),
+            Int(settings.codexAdaptiveRefreshIntervalMinutes)
         )
     }
 }

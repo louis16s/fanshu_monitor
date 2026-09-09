@@ -549,19 +549,22 @@ final class MonitorStore: ObservableObject {
         refreshSchedule.markRefreshed([MonitorKind.codex], at: Date())
         let previous = allModules.first { $0.kind == .codex }
         let refreshInterval = settings.codexRefreshIntervalMinutes * 60
+        let adaptiveRefreshInterval = settings.codexAdaptiveRefreshIntervalMinutes * 60
         let coordinator = samplingCoordinator
         codexRefreshTask?.cancel()
         codexRefreshTask = Task { [weak self] in
             guard let result = await coordinator.refreshCodex(
                 previous: previous,
                 force: force,
-                refreshInterval: refreshInterval
+                refreshInterval: refreshInterval,
+                adaptiveRefreshInterval: adaptiveRefreshInterval
             ),
                   let self,
                   !Task.isCancelled
             else {
                 return
             }
+            self.refreshSchedule.setInterval(result.refreshInterval, for: .codex)
             self.mergeSampledModule(result.module)
             self.scheduleCodexResetRefresh(at: result.scheduledResetRefreshDate)
             self.refreshCodexTaskProgress()

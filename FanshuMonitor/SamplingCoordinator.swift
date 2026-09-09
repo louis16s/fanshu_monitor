@@ -50,16 +50,24 @@ actor SamplingCoordinator {
     func refreshCodex(
         previous: MonitorModule?,
         force: Bool,
-        refreshInterval: TimeInterval = 300
+        refreshInterval: TimeInterval = 300,
+        adaptiveRefreshInterval: TimeInterval = 60
     ) async -> CodexRefreshResult? {
         guard !Task.isCancelled else { return nil }
         let codexSampler = activeCodexSampler()
         let module = await codexSampler.sample(
-            previous: previous, force: force, refreshInterval: refreshInterval
+            previous: previous,
+            force: force,
+            refreshInterval: refreshInterval,
+            adaptiveRefreshInterval: adaptiveRefreshInterval
         )
         guard !Task.isCancelled else { return nil }
         return CodexRefreshResult(
             module: module,
+            refreshInterval: await codexSampler.effectiveRefreshInterval(
+                defaultInterval: refreshInterval,
+                adaptiveInterval: adaptiveRefreshInterval
+            ),
             scheduledResetRefreshDate: await codexSampler.scheduledResetRefreshDate()
         )
     }
@@ -85,5 +93,6 @@ actor SamplingCoordinator {
 
 nonisolated struct CodexRefreshResult: Sendable {
     let module: MonitorModule
+    let refreshInterval: TimeInterval
     let scheduledResetRefreshDate: Date?
 }

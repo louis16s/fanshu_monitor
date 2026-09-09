@@ -117,6 +117,49 @@ struct CodexQuotaSamplerRetryTests {
         _ = await sampler.sample(previous: recovered, force: true, refreshInterval: 600)
         #expect(counter.value == 4)
     }
+
+    @Test func quotaDecreaseTemporarilyUsesFastRefreshUntilTwoUnchangedResults() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let authURL = root.appendingPathComponent("auth.json")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data(#"{"tokens":{"access_token":"test-token"}}"#.utf8).write(to: authURL)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let counter = CodexRetryCounter()
+        let responses = [
+            #"{"plan_type":"plus","rate_limit":{"primary_window":{"used_percent":20,"limit_window_seconds":18000},"secondary_window":{"used_percent":10,"limit_window_seconds":604800}}}"#,
+            #"{"plan_type":"plus","rate_limit":{"primary_window":{"used_percent":30,"limit_window_seconds":18000},"secondary_window":{"used_percent":10,"limit_window_seconds":604800}}}"#,
+            #"{"plan_type":"plus","rate_limit":{"primary_window":{"used_percent":30,"limit_window_seconds":18000},"secondary_window":{"used_percent":10,"limit_window_seconds":604800}}}"#,
+            #"{"plan_type":"plus","rate_limit":{"primary_window":{"used_percent":30,"limit_window_seconds":18000},"secondary_window":{"used_percent":10,"limit_window_seconds":604800}}}"#
+        ].map { Data($0.utf8) }
+        let client = CodexUsageClient(
+            authFileURL: authURL,
+            transport: { request in
+                let index = min(counter.increment() - 1, responses.count - 1)
+                let response = try #require(HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                ))
+                return (responses[index], response)
+            }
+        )
+        let sampler = CodexQuotaSampler(client: client)
+
+        _ = await sampler.sample(previous: nil, force: true, refreshInterval: 300, adaptiveRefreshInterval: 60)
+        #expect(await sampler.effectiveRefreshInterval(defaultInterval: 300, adaptiveInterval: 60) == 300)
+
+        _ = await sampler.sample(previous: nil, force: true, refreshInterval: 300, adaptiveRefreshInterval: 60)
+        #expect(await sampler.effectiveRefreshInterval(defaultInterval: 300, adaptiveInterval: 60) == 60)
+
+        _ = await sampler.sample(previous: nil, force: true, refreshInterval: 300, adaptiveRefreshInterval: 60)
+        #expect(await sampler.effectiveRefreshInterval(defaultInterval: 300, adaptiveInterval: 60) == 60)
+
+        _ = await sampler.sample(previous: nil, force: true, refreshInterval: 300, adaptiveRefreshInterval: 60)
+        #expect(await sampler.effectiveRefreshInterval(defaultInterval: 300, adaptiveInterval: 60) == 300)
+    }
 }
 
 private final class CodexRetryClock: @unchecked Sendable {

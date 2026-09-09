@@ -117,6 +117,13 @@ extension MonitorSettings {
                     self?.persist(min(60, max(1, newValue)), forKey: Keys.codexRefreshIntervalMinutes)
                 }
                 .store(in: &cancellables)
+
+            $codexAdaptiveRefreshIntervalMinutes
+                .dropFirst()
+                .sink { [weak self] newValue in
+                    self?.persist(min(60, max(1, newValue)), forKey: Keys.codexAdaptiveRefreshIntervalMinutes)
+                }
+                .store(in: &cancellables)
     
             $codexHeaderDetailPreference
                 .dropFirst()

@@ -141,6 +141,7 @@ final class MonitorSettings: ObservableObject {
     @Published var displaySoftwareDimmingEnabled: Bool = true
     @Published var brightnessKeyStepPercent: Double = 5
     @Published var codexRefreshIntervalMinutes: Double = 5
+    @Published var codexAdaptiveRefreshIntervalMinutes: Double = 1
     @Published var codexHeaderDetailPreference: CodexHeaderDetailPreference = .plan
     @Published var updateChecksEnabled: Bool = true
     @Published var brightnessKeyInterceptionEnabled: Bool = true
@@ -200,6 +201,7 @@ final class MonitorSettings: ObservableObject {
         displaySoftwareDimmingEnabled = defaults.object(forKey: Keys.displaySoftwareDimmingEnabled) as? Bool ?? true
         brightnessKeyStepPercent = defaults.object(forKey: Keys.brightnessKeyStepPercent) as? Double ?? 5
         codexRefreshIntervalMinutes = defaults.object(forKey: Keys.codexRefreshIntervalMinutes) as? Double ?? 5
+        codexAdaptiveRefreshIntervalMinutes = defaults.object(forKey: Keys.codexAdaptiveRefreshIntervalMinutes) as? Double ?? 1
         codexHeaderDetailPreference = CodexHeaderDetailPreference(
             rawValue: defaults.string(forKey: Keys.codexHeaderDetailPreference) ?? ""
         ) ?? .plan
@@ -534,6 +536,7 @@ final class MonitorSettings: ObservableObject {
         displaySoftwareDimmingEnabled = true
         brightnessKeyStepPercent = 5
         codexRefreshIntervalMinutes = 5
+        codexAdaptiveRefreshIntervalMinutes = 1
         codexHeaderDetailPreference = .plan
         updateChecksEnabled = true
         brightnessKeyInterceptionEnabled = true
@@ -572,6 +575,7 @@ enum Keys {
     static let displaySoftwareDimmingEnabled = "settings.display.softwareDimmingEnabled"
     static let brightnessKeyStepPercent = "settings.display.brightnessKeyStepPercent"
     static let codexRefreshIntervalMinutes = "settings.codexRefreshIntervalMinutes"
+    static let codexAdaptiveRefreshIntervalMinutes = "settings.codexAdaptiveRefreshIntervalMinutes"
     static let codexHeaderDetailPreference = "settings.codex.headerDetailPreference"
     static let updateChecksEnabled = "settings.updateChecksEnabled"
     static let brightnessKeyInterceptionEnabled = "settings.brightnessKeyInterceptionEnabled"

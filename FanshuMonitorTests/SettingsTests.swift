@@ -84,6 +84,7 @@ struct SettingsTests {
         let settings = MonitorSettings(defaults: defaults)
 
         #expect(settings.codexRefreshIntervalMinutes == 5)
+        #expect(settings.codexAdaptiveRefreshIntervalMinutes == 1)
     }
 
     @Test func codexHeaderDetailPreferencePersists() {
@@ -128,6 +129,21 @@ struct SettingsTests {
         let settings = MonitorSettings(defaults: defaults)
 
         #expect(settings.codexRefreshIntervalMinutes == 10)
+    }
+
+    @Test func codexAdaptiveRefreshIntervalLoadsPersistedValue() {
+        let suite = "codexAdaptiveRefreshIntervalLoadsPersistedValue"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(2.0, forKey: "settings.codexAdaptiveRefreshIntervalMinutes")
+
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(settings.codexAdaptiveRefreshIntervalMinutes == 2)
+        settings.codexAdaptiveRefreshIntervalMinutes = 3
+
+        let reloaded = MonitorSettings(defaults: defaults)
+        #expect(reloaded.codexAdaptiveRefreshIntervalMinutes == 3)
     }
 
     @Test func displayModuleIsVisibleByDefault() {
