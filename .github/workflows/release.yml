@@ -270,6 +270,7 @@ jobs:
             build/release/FanshuMonitor.zip
             build/release/checksums.txt
             build/release/release-manifest.json
+          fail_on_unmatched_files: true
           body_path: docs/RELEASE_NOTES.md
           generate_release_notes: true
         env:
