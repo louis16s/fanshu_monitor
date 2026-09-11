@@ -9,9 +9,15 @@ nonisolated struct BatteryPowerTelemetry: Equatable, Sendable {
     init(
         adapterInputMilliwatts: Double?,
         systemLoadMilliwatts: Double?,
-        batteryMilliwatts: Double?
+        batteryMilliwatts: Double?,
+        adapterCurrentMilliamps: Double? = nil,
+        adapterVoltageMillivolts: Double? = nil
     ) {
-        adapterInputWatts = Self.watts(adapterInputMilliwatts, allowsNegative: false)
+        adapterInputWatts = Self.resolvedAdapterInputWatts(
+            directMilliwatts: adapterInputMilliwatts,
+            currentMilliamps: adapterCurrentMilliamps,
+            voltageMillivolts: adapterVoltageMillivolts
+        )
         systemLoadWatts = Self.watts(systemLoadMilliwatts, allowsNegative: false)
         batteryWatts = Self.watts(batteryMilliwatts, allowsNegative: true)
     }
@@ -49,6 +55,30 @@ nonisolated struct BatteryPowerTelemetry: Equatable, Sendable {
         let watts = milliwatts / 1_000
         return allowsNegative ? watts : max(0, watts)
     }
+
+    private static func resolvedAdapterInputWatts(
+        directMilliwatts: Double?,
+        currentMilliamps: Double?,
+        voltageMillivolts: Double?
+    ) -> Double? {
+        let directWatts = watts(directMilliwatts, allowsNegative: false)
+        guard let currentMilliamps,
+              let voltageMillivolts,
+              currentMilliamps.isFinite,
+              voltageMillivolts.isFinite,
+              currentMilliamps > 0,
+              voltageMillivolts > 0 else {
+            return directWatts
+        }
+
+        // Some Apple Silicon systems expose SystemPowerIn as zero while the
+        // input current and voltage remain available and accurate.
+        let derivedWatts = currentMilliamps * voltageMillivolts / 1_000_000
+        guard derivedWatts.isFinite, derivedWatts > 0 else {
+            return directWatts
+        }
+        return (directWatts ?? 0) > 0.05 ? directWatts : derivedWatts
+    }
 }
 
 nonisolated enum BatteryPowerTelemetryReader {
@@ -75,7 +105,9 @@ nonisolated enum BatteryPowerTelemetryReader {
         let telemetry = BatteryPowerTelemetry(
             adapterInputMilliwatts: signedDoubleValue(values["SystemPowerIn"]),
             systemLoadMilliwatts: signedDoubleValue(values["SystemLoad"]),
-            batteryMilliwatts: signedDoubleValue(values["BatteryPower"])
+            batteryMilliwatts: signedDoubleValue(values["BatteryPower"]),
+            adapterCurrentMilliamps: signedDoubleValue(values["SystemCurrentIn"]),
+            adapterVoltageMillivolts: signedDoubleValue(values["SystemVoltageIn"])
         )
         return telemetry.hasAnyValue ? telemetry : nil
     }

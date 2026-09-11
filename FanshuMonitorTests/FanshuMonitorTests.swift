@@ -544,6 +544,30 @@ struct FanshuMonitorTests {
         #expect(BatteryPowerTelemetry.batteryFlowText(discharging.batteryWatts) == "-7.3 W")
     }
 
+    @Test func batteryPowerTelemetryDerivesInputWhenSystemPowerInIsZero() {
+        let telemetry = BatteryPowerTelemetry(
+            adapterInputMilliwatts: 0,
+            systemLoadMilliwatts: 28_321,
+            batteryMilliwatts: -26_500,
+            adapterCurrentMilliamps: 2_915,
+            adapterVoltageMillivolts: 18_819
+        )
+
+        #expect(abs((telemetry.adapterInputWatts ?? 0) - 54.857385) < 0.000001)
+    }
+
+    @Test func batteryPowerTelemetryPrefersAValidSystemPowerInValue() {
+        let telemetry = BatteryPowerTelemetry(
+            adapterInputMilliwatts: 60_000,
+            systemLoadMilliwatts: 28_321,
+            batteryMilliwatts: -26_500,
+            adapterCurrentMilliamps: 2_915,
+            adapterVoltageMillivolts: 18_819
+        )
+
+        #expect(telemetry.adapterInputWatts == 60)
+    }
+
     @Test func batteryPowerFlowMetricsAreOptional() {
         let metrics = Dictionary(uniqueKeysWithValues: MonitorKind.battery.availableMetrics.map { ($0.id, $0) })
 
