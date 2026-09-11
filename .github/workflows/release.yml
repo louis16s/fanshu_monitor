@@ -46,6 +46,12 @@ jobs:
       - name: Import Developer ID certificate
         run: |
           set -euo pipefail
+          if [[ -z "${APPLE_CERTIFICATE_P12:-}" || -z "${APPLE_CERTIFICATE_PASSWORD:-}" || -z "${APPLE_NOTARY_PRIVATE_KEY:-}" || -z "${APPLE_NOTARY_KEY_ID:-}" || -z "${APPLE_NOTARY_ISSUER_ID:-}" ]]; then
+            echo "::warning::Apple signing secrets are not configured; the release will contain an unsigned build."
+            echo "RELEASE_SIGNED=false" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+
           for variable in \
             APPLE_CERTIFICATE_P12 \
             APPLE_CERTIFICATE_PASSWORD \
@@ -88,9 +94,12 @@ jobs:
               head -n 1
           )"
           test -n "${signing_identity}"
-          echo "SIGNING_IDENTITY=${signing_identity}" >> "${GITHUB_ENV}"
-          echo "SIGNING_KEYCHAIN=${keychain_path}" >> "${GITHUB_ENV}"
-          echo "NOTARY_KEY_PATH=${notary_key_path}" >> "${GITHUB_ENV}"
+          {
+            echo "SIGNING_IDENTITY=${signing_identity}"
+            echo "SIGNING_KEYCHAIN=${keychain_path}"
+            echo "NOTARY_KEY_PATH=${notary_key_path}"
+            echo "RELEASE_SIGNED=true"
+          } >> "${GITHUB_ENV}"
 
       - name: Verify tag matches app version
         env:
@@ -167,28 +176,36 @@ jobs:
           APP_PATH='build/番薯Monitor.xcarchive/Products/Applications/番薯Monitor.app'
           test -d "$APP_PATH"
 
-          codesign \
-            --force \
-            --options runtime \
-            --timestamp \
-            --keychain "${SIGNING_KEYCHAIN}" \
-            --sign "${SIGNING_IDENTITY}" \
-            "$APP_PATH"
-          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          if [[ "${RELEASE_SIGNED:-false}" == "true" ]]; then
+            codesign \
+              --force \
+              --options runtime \
+              --timestamp \
+              --keychain "${SIGNING_KEYCHAIN}" \
+              --sign "${SIGNING_IDENTITY}" \
+              "$APP_PATH"
+            codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          else
+            echo "::warning::Skipping signing and notarization because Apple signing secrets are unavailable."
+          fi
 
           mkdir -p build/release
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" 'build/release/notarization-upload.zip'
-          xcrun notarytool submit 'build/release/notarization-upload.zip' \
-            --key "${NOTARY_KEY_PATH}" \
-            --key-id "${APPLE_NOTARY_KEY_ID}" \
-            --issuer "${APPLE_NOTARY_ISSUER_ID}" \
-            --wait
-          xcrun stapler staple "$APP_PATH"
-          xcrun stapler validate "$APP_PATH"
-          spctl --assess --type execute --verbose=4 "$APP_PATH"
+          if [[ "${RELEASE_SIGNED:-false}" == "true" ]]; then
+            ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" 'build/release/notarization-upload.zip'
+            xcrun notarytool submit 'build/release/notarization-upload.zip' \
+              --key "${NOTARY_KEY_PATH}" \
+              --key-id "${APPLE_NOTARY_KEY_ID}" \
+              --issuer "${APPLE_NOTARY_ISSUER_ID}" \
+              --wait
+            xcrun stapler staple "$APP_PATH"
+            xcrun stapler validate "$APP_PATH"
+            spctl --assess --type execute --verbose=4 "$APP_PATH"
+          fi
 
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" 'build/release/FanshuMonitor.zip'
-          rm 'build/release/notarization-upload.zip'
+          if [[ -f 'build/release/notarization-upload.zip' ]]; then
+            rm 'build/release/notarization-upload.zip'
+          fi
           (
             cd build/release
             shasum -a 256 'FanshuMonitor.zip' > 'checksums.txt'
@@ -220,6 +237,7 @@ jobs:
               "product": "番薯Monitor",
               "version": os.environ["RELEASE_VERSION"].removeprefix("v"),
               "sourceCommit": os.environ["SOURCE_COMMIT"],
+              "signed": os.environ.get("RELEASE_SIGNED", "false") == "true",
               "artifact": {
                   "name": artifact.name,
                   "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
