@@ -61,21 +61,20 @@ nonisolated enum LogitechMouseDeviceDiscovery {
         }
         return devices.filter(LogitechMouseDeviceMatcher.isSupported)
     }
+
+    static func hasSupportedDevice() -> Bool {
+        !supportedDevices().isEmpty
+    }
 }
 
 nonisolated final class LogitechMousePresenceMonitor: @unchecked Sendable {
     typealias PresenceHandler = @Sendable (Bool) -> Void
 
     private let queue = DispatchQueue(label: "com.fanshu.monitor.mouse-presence", qos: .utility)
-    private let queueKey = DispatchSpecificKey<Void>()
     private let stateLock = NSLock()
-    private var manager: IOHIDManager?
+    private var timer: DispatchSourceTimer?
     private var handler: PresenceHandler?
     private var lastPresence: Bool?
-
-    init() {
-        queue.setSpecific(key: queueKey, value: ())
-    }
 
     deinit {
         stop()
@@ -84,7 +83,7 @@ nonisolated final class LogitechMousePresenceMonitor: @unchecked Sendable {
     func start(handler: @escaping PresenceHandler) {
         let shouldStart = stateLock.withLock {
             self.handler = handler
-            guard self.manager == nil else { return false }
+            guard self.timer == nil else { return false }
             return true
         }
         guard shouldStart else {
@@ -92,27 +91,20 @@ nonisolated final class LogitechMousePresenceMonitor: @unchecked Sendable {
             return
         }
 
-        let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        IOHIDManagerSetDeviceMatching(
-            manager,
-            [kIOHIDVendorIDKey as String: LogitechMouseDeviceMatcher.vendorID] as CFDictionary
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(
+            deadline: .now(),
+            repeating: .seconds(5),
+            leeway: .seconds(1)
         )
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        IOHIDManagerRegisterDeviceMatchingCallback(manager, Self.deviceChanged, context)
-        IOHIDManagerRegisterDeviceRemovalCallback(manager, Self.deviceChanged, context)
-        IOHIDManagerSetDispatchQueue(manager, queue)
-
+        timer.setEventHandler { [weak self] in
+            self?.publishPresence(force: false)
+        }
         stateLock.withLock {
-            self.manager = manager
+            self.timer = timer
             lastPresence = nil
         }
-        guard IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess else {
-            stop()
-            handler(false)
-            return
-        }
-        IOHIDManagerActivate(manager)
-        enqueuePresenceRefresh(force: false)
+        timer.resume()
     }
 
     func refresh() {
@@ -126,46 +118,31 @@ nonisolated final class LogitechMousePresenceMonitor: @unchecked Sendable {
     }
 
     func stop() {
-        let manager = stateLock.withLock {
-            let value = self.manager
-            self.manager = nil
+        let timer = stateLock.withLock {
+            let value = self.timer
+            self.timer = nil
             handler = nil
             lastPresence = nil
             return value
         }
-        guard let manager else { return }
-        let closeManager = {
-            IOHIDManagerCancel(manager)
-            IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-        }
-        if DispatchQueue.getSpecific(key: queueKey) != nil {
-            closeManager()
-        } else {
-            queue.sync(execute: closeManager)
-        }
+        timer?.setEventHandler {}
+        timer?.cancel()
     }
 
     private func publishPresence(force: Bool) {
-        let snapshot = stateLock.withLock { (manager, handler, lastPresence) }
-        guard let manager = snapshot.0, let handler = snapshot.1 else { return }
-        let devices = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> ?? []
-        let isPresent = devices.contains(where: LogitechMouseDeviceMatcher.isSupported)
+        let snapshot = stateLock.withLock { (timer, handler, lastPresence) }
+        guard let timer = snapshot.0, let handler = snapshot.1 else { return }
+        let isPresent = LogitechMouseDeviceDiscovery.hasSupportedDevice()
         guard force || snapshot.2 != isPresent else { return }
 
         let shouldNotify = stateLock.withLock {
-            guard self.manager === manager else { return false }
+            guard self.timer === timer else { return false }
             lastPresence = isPresent
             return true
         }
         guard shouldNotify else { return }
         AppLogger.mouse.info("Logitech mouse presence changed: \(isPresent, privacy: .public)")
         handler(isPresent)
-    }
-
-    private static let deviceChanged: IOHIDDeviceCallback = { context, _, _, _ in
-        guard let context else { return }
-        let monitor = Unmanaged<LogitechMousePresenceMonitor>.fromOpaque(context).takeUnretainedValue()
-        monitor.publishPresence(force: false)
     }
 }
 
@@ -177,6 +154,14 @@ nonisolated final class LogitechMouseWorker: @unchecked Sendable {
         await withCheckedContinuation { continuation in
             queue.async { [service] in
                 continuation.resume(returning: service.detectDevice(readDPI: readDPI))
+            }
+        }
+    }
+
+    func hasDevice() async -> Bool {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                continuation.resume(returning: LogitechMouseDeviceDiscovery.hasSupportedDevice())
             }
         }
     }

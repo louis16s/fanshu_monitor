@@ -83,6 +83,7 @@ final class MouseControlController: ObservableObject {
             refresh(readDPI: true)
         } else {
             presenceMonitor.refresh()
+            probeDevicePresence()
         }
     }
 
@@ -98,6 +99,7 @@ final class MouseControlController: ObservableObject {
             refresh(readDPI: true)
         } else {
             presenceMonitor.refresh()
+            probeDevicePresence()
         }
     }
 
@@ -193,6 +195,24 @@ final class MouseControlController: ObservableObject {
             refresh(readDPI: !(settings?.mouseDPIOnDemandEnabled ?? true))
         } else {
             suspendDeviceWork(status: "等待鼠标连接")
+            probeDevicePresence()
+        }
+    }
+
+    private func probeDevicePresence() {
+        let requestGeneration = deviceRequestGeneration
+        let sessionGeneration = presenceSessionGeneration
+        Task { [weak self, mouseWorker] in
+            let isPresent = await mouseWorker.hasDevice()
+            guard let self,
+                  requestGeneration == self.deviceRequestGeneration,
+                  sessionGeneration == self.presenceSessionGeneration,
+                  self.settings?.mouseControlEnabled == true else {
+                return
+            }
+            guard isPresent else { return }
+            self.isMousePresent = true
+            self.refresh(readDPI: !(self.settings?.mouseDPIOnDemandEnabled ?? true))
         }
     }
 
