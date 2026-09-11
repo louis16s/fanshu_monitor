@@ -32,6 +32,7 @@ playground.xcworkspace
 
 .build/
 build/
+output/
 
 # CocoaPods
 #
