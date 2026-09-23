@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import Darwin
 
 nonisolated struct CodexTaskProgress: Equatable, Identifiable, Sendable {
     let id: String
@@ -105,8 +106,13 @@ actor CodexTaskProgressReader {
             includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
             options: [.skipsHiddenFiles]
         ) else {
-            candidates = []
-            statesByURL = [:]
+            let status = sessionsRoot.path.withCString { Darwin.access($0, F_OK) }
+            if status == -1, errno == ENOENT {
+                candidates.removeAll(keepingCapacity: true)
+                statesByURL.removeAll(keepingCapacity: true)
+            } else {
+                AppLogger.codex.debug("Session directory temporarily unavailable; keeping current task state")
+            }
             return
         }
 
