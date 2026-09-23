@@ -16,6 +16,7 @@ A macOS menu bar system monitor, external display controller, and scheduled lock
 
 - Apple Silicon Mac
 - Minimum macOS version: macOS 26.0
+- Build and launch verified on macOS 27.0 with the Xcode 27 SDK
 - External display brightness control requires a DDC/CI-capable display, cable, and connection path
 - F1/F2 takeover and mouse button mapping require Accessibility permission
 

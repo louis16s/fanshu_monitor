@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07171d">
   <title>番薯Monitor - 一处掌控你的 Mac</title>
-  <meta name="description" content="番薯Monitor 是面向 Apple Silicon 和 macOS 26+ 的菜单栏系统监控、外接显示器控制与自动锁屏工具。">
+  <meta name="description" content="番薯Monitor 是面向 Apple Silicon 和 macOS 26+（已验证 macOS 27）的菜单栏系统监控、外接显示器控制与自动锁屏工具。">
   <meta property="og:title" content="番薯Monitor">
   <meta property="og:description" content="系统状态、外接屏亮度、自动锁屏、鼠标与 Codex 额度，一处掌控。">
   <meta property="og:type" content="website">
@@ -63,7 +63,7 @@
           <a class="button primary" href="https://github.com/louis16s/fanshu_monitor/releases" target="_blank" rel="noopener">下载 v0.3.3</a>
           <a class="button quiet" href="https://github.com/louis16s/fanshu_monitor" target="_blank" rel="noopener">在 GitHub 查看</a>
         </div>
-        <span class="requirement">Apple Silicon · macOS 26+</span>
+        <span class="requirement">Apple Silicon · macOS 26+ · 已验证 macOS 27</span>
       </div>
 
       <div class="hero-product" aria-label="番薯Monitor 动态面板演示">
@@ -190,7 +190,7 @@
         <details><summary>所有外接显示器都能控制亮度吗？<span>＋</span></summary><p>显示器、线缆和连接方式需要支持 DDC/CI。应用会逐台检测，并明确显示不可控原因；不可控时亮度键会交还 macOS。</p></details>
         <details><summary>会不会一直占用很多 CPU？<span>＋</span></summary><p>隐藏模块停止对应采样，面板关闭后降低非必要刷新频率，DDC、HID 和电池重遥测等数据按需读取并缓存。</p></details>
         <details><summary>自动锁屏会先进入屏幕保护吗？<span>＋</span></summary><p>不会。启用番薯Monitor 的时间策略后，到达闲置时间会直接请求系统锁定，登录后策略会继续运行。</p></details>
-        <details><summary>支持哪些 Mac？<span>＋</span></summary><p>当前版本面向 Apple Silicon Mac，最低系统版本为 macOS 26.0。</p></details>
+        <details><summary>支持哪些 Mac？<span>＋</span></summary><p>当前版本面向 Apple Silicon Mac，最低系统版本为 macOS 26.0，已在 macOS 27.0 上完成构建与启动验证。</p></details>
         <details><summary>软件收费吗？<span>＋</span></summary><p>番薯Monitor 以 MIT License 开源发布，可免费下载、使用和审查源码。</p></details>
       </div>
     </section>

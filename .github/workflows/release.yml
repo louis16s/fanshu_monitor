@@ -12,7 +12,7 @@ concurrency:
 jobs:
   build-and-release:
     name: Build and release
-    runs-on: macos-26
+    runs-on: xcode-27
     env:
       APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -30,18 +30,12 @@ jobs:
       - name: Select toolchain
         run: |
           set -euo pipefail
-          for developer_dir in \
-            /Applications/Xcode_26.6.app/Contents/Developer \
-            /Applications/Xcode.app/Contents/Developer; do
-            if [[ -d "$developer_dir" ]]; then
-              sudo xcode-select --switch "$developer_dir"
-              break
-            fi
-          done
-          test "$(xcode-select -p)" = /Applications/Xcode_26.6.app/Contents/Developer \
-            || test "$(xcode-select -p)" = /Applications/Xcode.app/Contents/Developer
           sw_vers
           xcodebuild -version
+          xcode_major="$(xcodebuild -version | awk 'NR == 1 { sub(/\..*/, "", $2); print $2 }')"
+          test "$xcode_major" = '27'
+          test "$(sw_vers -productVersion | cut -d. -f1)" = '27'
+          test "$(xcrun --sdk macosx --show-sdk-version | cut -d. -f1)" = '27'
 
       - name: Import Developer ID certificate
         run: |

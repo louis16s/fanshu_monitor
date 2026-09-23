@@ -12,8 +12,18 @@ concurrency:
 
 jobs:
   verify:
-    name: Test, build, and analyze Direct app
-    runs-on: macos-26
+    name: Verify (${{ matrix.display_name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            xcode_major: '26'
+            display_name: macOS 26 / Xcode 26
+          - runner: xcode-27
+            xcode_major: '27'
+            display_name: macOS 27 / Xcode 27
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
     steps:
@@ -25,17 +35,23 @@ jobs:
       - name: Select toolchain
         run: |
           set -euo pipefail
-          for developer_dir in \
-            /Applications/Xcode_26.6.app/Contents/Developer \
-            /Applications/Xcode.app/Contents/Developer; do
-            if [[ -d "$developer_dir" ]]; then
-              sudo xcode-select --switch "$developer_dir"
-              break
-            fi
-          done
-          test "$(xcode-select -p)" = /Applications/Xcode_26.6.app/Contents/Developer \
-            || test "$(xcode-select -p)" = /Applications/Xcode.app/Contents/Developer
+          if [[ '${{ matrix.xcode_major }}' == '26' ]]; then
+            for developer_dir in \
+              /Applications/Xcode_26.6.app/Contents/Developer \
+              /Applications/Xcode.app/Contents/Developer; do
+              if [[ -d "$developer_dir" ]]; then
+                sudo xcode-select --switch "$developer_dir"
+                break
+              fi
+            done
+          fi
           xcodebuild -version
+          xcode_major="$(xcodebuild -version | awk 'NR == 1 { sub(/\..*/, "", $2); print $2 }')"
+          test "$xcode_major" = '${{ matrix.xcode_major }}'
+          if [[ '${{ matrix.xcode_major }}' == '27' ]]; then
+            test "$(sw_vers -productVersion | cut -d. -f1)" = '27'
+            test "$(xcrun --sdk macosx --show-sdk-version | cut -d. -f1)" = '27'
+          fi
 
       - name: Run unit tests
         run: |
