@@ -89,7 +89,7 @@ struct DisplayControlsSection: View {
             }
         }
         .animation(expansionAnimation, value: isExpanded)
-        .glassEffect(.regular.tint(palette.displayGlassTint), in: .rect(cornerRadius: 14, style: .continuous))
+        .glassEffect(.regular.tint(palette.displayGlassTint), in: .rect(cornerRadius: MonitorConstants.rowCornerRadius, style: .continuous))
     }
 
     @ViewBuilder

@@ -59,39 +59,19 @@ struct MonitorPalette {
     }
 
     func rowGlassTint(for kind: MonitorKind) -> Color {
-        switch preference {
-        case .systemBlue, .graphite:
-            neutralGlassTint
-        case .rose, .aurora:
-            moduleTint(for: kind).opacity(isDark ? 0.16 : 0.08)
-        }
+        neutralGlassTint
     }
 
     func rowSeparator(for kind: MonitorKind) -> Color {
-        switch preference {
-        case .systemBlue, .graphite:
-            neutralSeparator
-        case .rose, .aurora:
-            moduleTint(for: kind).opacity(isDark ? 0.28 : 0.18)
-        }
+        neutralSeparator
     }
 
     var displayGlassTint: Color {
-        switch preference {
-        case .systemBlue, .graphite:
-            neutralGlassTint
-        case .rose, .aurora:
-            displayTint.opacity(isDark ? 0.16 : 0.08)
-        }
+        neutralGlassTint
     }
 
     var displaySeparator: Color {
-        switch preference {
-        case .systemBlue, .graphite:
-            neutralSeparator
-        case .rose, .aurora:
-            displayTint.opacity(isDark ? 0.28 : 0.18)
-        }
+        neutralSeparator
     }
 
     var displayBadgeFill: Color {

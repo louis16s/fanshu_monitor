@@ -14,7 +14,7 @@ nonisolated enum MonitorConstants {
 
     // MARK: Panel Dimensions
     static let panelWidth = 320.0
-    static let rowCornerRadius = 14.0
+    static let rowCornerRadius = 8.0
 
     // MARK: Animation Durations
     static let cpuAnimationDuration = 0.30

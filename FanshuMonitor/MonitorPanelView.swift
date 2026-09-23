@@ -24,8 +24,7 @@ struct MonitorPanelView: View {
         )
 
         GlassEffectContainer(spacing: 8) {
-            VStack(spacing: 5) {
-                // Header: Live 脉冲点 + 时间
+            VStack(spacing: 7) {
                 header(theme: theme)
 
                 ForEach(store.modules) { module in
@@ -44,7 +43,7 @@ struct MonitorPanelView: View {
                         .glassEffectID("display-controls", in: glassNamespace)
                 }
             }
-            .padding(.top, 6)
+            .padding(.top, 8)
             .padding(.horizontal, 10)
             .padding(.bottom, 10)
             .frame(width: MonitorConstants.panelWidth)
@@ -66,63 +65,62 @@ struct MonitorPanelView: View {
     }
 
     private func header(theme: MonitorPanelTheme) -> some View {
-        HStack {
-            HStack(spacing: 5) {
+        HStack(spacing: 6) {
+            HStack(spacing: 7) {
                 Circle()
                     .fill(theme.liveDot(for: store.haloRingLoadLevel))
-                    .frame(width: 5, height: 5)
+                    .frame(width: 6, height: 6)
 
-                Text("番薯monitor · v\(appVersion)")
-                    .panelLabelFont(size: 9, tracking: 1.1)
+                Text("番薯 Monitor")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(theme.primaryText)
+
+                Text("v\(appVersion)")
+                    .panelMonoFont(size: 9, weight: .medium)
                     .foregroundStyle(theme.captionText)
-
             }
 
-            Spacer()
+            Spacer(minLength: 4)
 
-            Button {
+            headerButton("lock.fill", help: "立即锁屏", theme: theme) {
                 store.lockScreenController.lockNow()
-            } label: {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(theme.captionText)
-            .help("立即锁屏")
-            .accessibilityLabel("立即锁屏")
 
-            Button {
+            headerButton("gearshape", help: "设置", theme: theme) {
                 SettingsWindowPresenter.open(openSettings)
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(theme.captionText)
-            .help("设置")
 
-            Button {
+            headerButton("power", help: "退出", theme: theme) {
                 NSApp.terminate(nil)
-            } label: {
-                Image(systemName: "power")
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(theme.captionText)
-            .help("退出")
 
             Text(timeString)
-                .panelMonoFont(size: 9, weight: .medium)
+                .panelMonoFont(size: 10, weight: .medium)
                 .foregroundStyle(theme.captionText)
+                .frame(minWidth: 34, alignment: .trailing)
+                .padding(.leading, 3)
         }
-        .padding(.horizontal, 4)
-        .frame(height: 20)
+        .padding(.horizontal, 6)
+        .frame(height: 28)
+    }
+
+    private func headerButton(
+        _ symbol: String,
+        help: String,
+        theme: MonitorPanelTheme,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(theme.secondaryText)
+                .frame(width: 24, height: 24)
+                .background(theme.trackFill, in: RoundedRectangle(cornerRadius: 6))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
     }
 
     @ViewBuilder

@@ -5,6 +5,7 @@ on:
     branches:
       - main
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -24,6 +25,7 @@ jobs:
             xcode_major: '27'
             display_name: macOS 27 / Xcode 27
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -71,7 +73,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: unit-test-diagnostics
+          name: unit-test-diagnostics-xcode-${{ matrix.xcode_major }}
           path: |
             ${{ runner.temp }}/FanshuMonitorTests.log
             ${{ runner.temp }}/FanshuMonitorTests.xcresult
@@ -85,7 +87,6 @@ jobs:
             -project '番薯monitor.xcodeproj' \
             -target FanshuMonitorDirect \
             -configuration Debug \
-            -destination 'platform=macOS,arch=arm64' \
             CODE_SIGNING_ALLOWED=NO \
             build
 
@@ -119,7 +120,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ui-test-diagnostics
+          name: ui-test-diagnostics-xcode-${{ matrix.xcode_major }}
           path: |
             ${{ runner.temp }}/FanshuMonitorUITests.log
             ${{ runner.temp }}/FanshuMonitorUITests.xcresult
@@ -133,6 +134,5 @@ jobs:
             -project '番薯monitor.xcodeproj' \
             -target FanshuMonitorDirect \
             -configuration Release \
-            -destination 'platform=macOS,arch=arm64' \
             CODE_SIGNING_ALLOWED=NO \
             analyze

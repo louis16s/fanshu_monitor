@@ -71,9 +71,9 @@ struct SettingsGroup<Content: View>: View {
             VStack(spacing: 0) {
                 content
             }
-            .background(.quaternary.opacity(0.48), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(.quaternary.opacity(0.38), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(.separator.opacity(0.22), lineWidth: 1)
             }
         }
@@ -175,7 +175,7 @@ struct SettingsIconHeader<Accessory: View>: View {
 
         GlassEffectContainer {
             header
-                .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                .glassEffect(.regular, in: .rect(cornerRadius: 8))
         }
     }
 }
