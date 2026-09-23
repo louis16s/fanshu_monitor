@@ -11,7 +11,6 @@ BUNDLE_ID="com.fanshu.monitor"
 OUTPUTS_DIR="$WORKSPACE_DIR/outputs"
 APP_BUNDLE="$OUTPUTS_DIR/$APP_NAME.app"
 ZIP_PATH="$OUTPUTS_DIR/$APP_NAME.zip"
-BACKUP_DIR="$OUTPUTS_DIR/backups/$(date +%Y%m%d-%H%M%S)-before-run-refresh"
 BUILD_LOG="${TMPDIR:-/tmp}/fanshu-monitor-xcodebuild.log"
 APP_EXECUTABLE="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
@@ -60,11 +59,11 @@ build_release() {
   fi
 
   stop_app
-  mkdir -p "$BACKUP_DIR"
-  if [[ -d "$APP_BUNDLE" ]]; then
-    ditto "$APP_BUNDLE" "$BACKUP_DIR/$APP_NAME.app"
-    rm -rf "$APP_BUNDLE"
-  fi
+  # The outputs directory is a single-version delivery directory. Remove old
+  # app/zip builds and historical backups before staging the new build.
+  find "$OUTPUTS_DIR" -mindepth 1 -maxdepth 1 \
+    \( -name "$APP_NAME*.app" -o -name "$APP_NAME*.zip" -o -name "backups" \) \
+    -exec rm -rf -- {} +
 
   ditto "$built_app" "$APP_BUNDLE"
   touch "$APP_BUNDLE"
