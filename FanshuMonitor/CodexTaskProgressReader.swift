@@ -73,7 +73,7 @@ actor CodexTaskProgressReader {
     }
 
     func load(now: Date = Date()) -> [CodexTaskProgress] {
-        if candidates.isEmpty || now.timeIntervalSince(lastDiscovery) >= 30 {
+        if now.timeIntervalSince(lastDiscovery) >= 30 {
             discoverRecentRollouts(now: now)
         }
 

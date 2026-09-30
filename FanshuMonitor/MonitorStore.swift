@@ -592,7 +592,6 @@ final class MonitorStore: ObservableObject {
         codexTaskProgressTimerCancellable?.cancel()
         codexTaskProgressTimerCancellable = nil
         codexTaskProgressTask?.cancel()
-        codexTaskProgressTask = nil
 
         guard isPanelVisible,
               settings.isVisible(.codex),
@@ -616,15 +615,17 @@ final class MonitorStore: ObservableObject {
     private func refreshCodexTaskProgress() {
         guard isPanelVisible,
               settings.isVisible(.codex),
-              settings.isMetricEnabled(.activeTasks, for: .codex) else {
+              settings.isMetricEnabled(.activeTasks, for: .codex),
+              codexTaskProgressTask == nil else {
             return
         }
-        codexTaskProgressTask?.cancel()
         codexTaskProgressTask = Task { [weak self] in
+            guard let reader = self?.codexTaskProgressReader else { return }
+            let tasks = await reader.load()
             guard let self else { return }
-            let tasks = await codexTaskProgressReader.load()
+            self.codexTaskProgressTask = nil
             guard !Task.isCancelled else { return }
-            applyCodexTaskProgress(tasks)
+            self.applyCodexTaskProgress(tasks)
         }
     }
 

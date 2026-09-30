@@ -3,6 +3,27 @@ import Testing
 @testable import FanshuMonitor
 
 struct CodexTaskProgressReaderTests {
+    @Test func emptySessionDiscoveryIsCachedForThirtySeconds() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        let index = root.appendingPathComponent("session_index.jsonl")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let reader = CodexTaskProgressReader(sessionsRoot: sessions, sessionIndexURL: index)
+        #expect(await reader.load(now: Date(timeIntervalSince1970: 0)).isEmpty)
+
+        let threadID = "61234567-89ab-cdef-0123-456789abcdef"
+        try Data("{\"id\":\"\(threadID)\",\"thread_name\":\"新任务\"}\n".utf8).write(to: index)
+        let rollout = sessions.appendingPathComponent("rollout-\(threadID).jsonl")
+        let event = #"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"#
+        try Data((event + "\n").utf8).write(to: rollout)
+
+        #expect(await reader.load(now: Date(timeIntervalSince1970: 29)).isEmpty)
+        #expect(await reader.load(now: Date(timeIntervalSince1970: 30)).count == 1)
+    }
+
     @Test func sessionIndexUpdatesIncrementallyAndWaitsForCompleteLines() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

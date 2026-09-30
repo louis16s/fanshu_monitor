@@ -13,9 +13,46 @@ APP_BUNDLE="$OUTPUTS_DIR/$APP_NAME.app"
 ZIP_PATH="$OUTPUTS_DIR/$APP_NAME.zip"
 BUILD_LOG="${TMPDIR:-/tmp}/fanshu-monitor-xcodebuild.log"
 APP_EXECUTABLE="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+STAGING_DIR=""
+OLD_APP_STAGED=0
+OLD_ZIP_STAGED=0
+NEW_APP_INSTALLED=0
+NEW_ZIP_INSTALLED=0
 
 usage() {
   echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2
+}
+
+validate_mode() {
+  case "$MODE" in
+    run|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify) ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+}
+
+cleanup_staging() {
+  local status=$?
+  if [[ "$status" -ne 0 && -n "$STAGING_DIR" && -d "$STAGING_DIR" ]]; then
+    if [[ "$NEW_APP_INSTALLED" == 1 && -d "$APP_BUNDLE" ]]; then
+      mv "$APP_BUNDLE" "$STAGING_DIR/failed-new.app" || true
+    fi
+    if [[ "$NEW_ZIP_INSTALLED" == 1 && -f "$ZIP_PATH" ]]; then
+      mv "$ZIP_PATH" "$STAGING_DIR/failed-new.zip" || true
+    fi
+    if [[ "$OLD_APP_STAGED" == 1 && -d "$STAGING_DIR/previous.app" ]]; then
+      mv "$STAGING_DIR/previous.app" "$APP_BUNDLE" || true
+    fi
+    if [[ "$OLD_ZIP_STAGED" == 1 && -f "$STAGING_DIR/previous.zip" ]]; then
+      mv "$STAGING_DIR/previous.zip" "$ZIP_PATH" || true
+    fi
+  fi
+  if [[ -n "$STAGING_DIR" && -d "$STAGING_DIR" ]]; then
+    rm -rf -- "$STAGING_DIR"
+  fi
+  exit "$status"
 }
 
 stop_app() {
@@ -32,6 +69,8 @@ stop_app() {
 
 build_release() {
   mkdir -p "$OUTPUTS_DIR"
+  STAGING_DIR="$(mktemp -d "$OUTPUTS_DIR/.build.XXXXXX")"
+  trap cleanup_staging EXIT
   xcodebuild \
     -project "$PROJECT" \
     -scheme "$SCHEME" \
@@ -58,24 +97,48 @@ build_release() {
     exit 1
   fi
 
-  stop_app
-  # The outputs directory is a single-version delivery directory. Remove old
-  # app/zip builds and historical backups before staging the new build.
-  find "$OUTPUTS_DIR" -mindepth 1 -maxdepth 1 \
-    \( -name "$APP_NAME*.app" -o -name "$APP_NAME*.zip" -o -name "backups" \) \
-    -exec rm -rf -- {} +
+  local staged_app="$STAGING_DIR/$APP_NAME.app"
+  local staged_zip="$STAGING_DIR/$APP_NAME.zip"
+  ditto "$built_app" "$staged_app"
+  [[ -x "$staged_app/Contents/MacOS/$APP_NAME" ]] || {
+    echo "Built app executable is missing" >&2
+    exit 1
+  }
+  local staged_version
+  staged_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$staged_app/Contents/Info.plist")"
+  [[ -n "$staged_version" ]] || {
+    echo "Built app version is missing" >&2
+    exit 1
+  }
+  codesign --verify --deep --strict "$staged_app"
+  (
+    cd "$STAGING_DIR"
+    ditto -c -k --sequesterRsrc --keepParent "$APP_NAME.app" "$APP_NAME.zip"
+  )
 
-  ditto "$built_app" "$APP_BUNDLE"
+  stop_app
+  if [[ -d "$APP_BUNDLE" ]]; then
+    mv "$APP_BUNDLE" "$STAGING_DIR/previous.app"
+    OLD_APP_STAGED=1
+  fi
+  if [[ -f "$ZIP_PATH" ]]; then
+    mv "$ZIP_PATH" "$STAGING_DIR/previous.zip"
+    OLD_ZIP_STAGED=1
+  fi
+  mv "$staged_app" "$APP_BUNDLE"
+  NEW_APP_INSTALLED=1
+  mv "$staged_zip" "$ZIP_PATH"
+  NEW_ZIP_INSTALLED=1
+
+  find "$OUTPUTS_DIR" -mindepth 1 -maxdepth 1 \
+    \( \( -name "$APP_NAME*.app" ! -name "$APP_NAME.app" \) \
+       -o \( -name "$APP_NAME*.zip" ! -name "$APP_NAME.zip" \) \
+       -o -name backups \) \
+    -exec rm -rf -- {} +
   touch "$APP_BUNDLE"
   xattr -dr com.apple.quarantine "$APP_BUNDLE" 2>/dev/null || true
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
     -f -R -trusted "$APP_BUNDLE" 2>/dev/null || true
-
-  rm -f "$ZIP_PATH"
-  (
-    cd "$OUTPUTS_DIR"
-    ditto -c -k --sequesterRsrc --keepParent "$APP_NAME.app" "$APP_NAME.zip"
-  )
 }
 
 open_app() {
@@ -83,6 +146,7 @@ open_app() {
   /usr/bin/open -n "$APP_BUNDLE"
 }
 
+validate_mode
 build_release
 
 case "$MODE" in

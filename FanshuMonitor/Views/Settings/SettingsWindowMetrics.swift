@@ -8,4 +8,9 @@ enum SettingsWindowMetrics {
     static var contentSize: NSSize {
         NSSize(width: width, height: height)
     }
+
+    static func needsResize(currentSize: NSSize, targetSize: NSSize, tolerance: CGFloat = 0.5) -> Bool {
+        abs(currentSize.width - targetSize.width) > tolerance
+            || abs(currentSize.height - targetSize.height) > tolerance
+    }
 }

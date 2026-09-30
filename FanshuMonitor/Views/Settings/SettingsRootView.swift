@@ -124,8 +124,8 @@ private extension NSWindow {
         let size = SettingsWindowMetrics.contentSize
         contentMinSize = size
         contentMaxSize = size
-        guard abs(contentView?.frame.width ?? 0 - size.width) > 0.5 ||
-              abs(contentView?.frame.height ?? 0 - size.height) > 0.5 else {
+        let currentSize = contentView?.frame.size ?? .zero
+        guard SettingsWindowMetrics.needsResize(currentSize: currentSize, targetSize: size) else {
             return
         }
         setContentSize(size)

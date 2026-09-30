@@ -9,6 +9,19 @@ import Testing
 
 @MainActor
 struct SettingsTests {
+    @Test func settingsWindowResizeUsesDistanceFromTargetSize() {
+        let target = SettingsWindowMetrics.contentSize
+        #expect(!SettingsWindowMetrics.needsResize(currentSize: target, targetSize: target))
+        #expect(!SettingsWindowMetrics.needsResize(
+            currentSize: NSSize(width: target.width + 0.4, height: target.height),
+            targetSize: target
+        ))
+        #expect(SettingsWindowMetrics.needsResize(
+            currentSize: NSSize(width: target.width + 1, height: target.height),
+            targetSize: target
+        ))
+    }
+
     @Test func monitorModulesUseOneLogicalSettingsOrder() {
         #expect(MonitorKind.settingsOrder == [
             .cpu,
