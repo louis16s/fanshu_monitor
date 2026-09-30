@@ -598,7 +598,13 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
     }
 
     private func saveStoredValue(_ value: Double, for control: DisplayControlKind, displayStorageID: String) {
-        defaults.set(min(100, max(0, value)), forKey: storedValueKey(for: control, displayStorageID: displayStorageID))
+        let key = storedValueKey(for: control, displayStorageID: displayStorageID)
+        let clampedValue = min(100, max(0, value))
+        if let storedValue = defaults.object(forKey: key) as? NSNumber,
+           storedValue.doubleValue == clampedValue {
+            return
+        }
+        defaults.set(clampedValue, forKey: key)
     }
 
     private func storedValueKey(for control: DisplayControlKind, displayStorageID: String) -> String {
@@ -679,10 +685,9 @@ nonisolated struct DisplayDDCRangeStore {
     }
 
     func save(_ range: DDCValueRange, displayStorageID: String) {
-        defaults.set(
-            ["min": Int(range.min), "max": Int(range.max)],
-            forKey: key(displayStorageID: displayStorageID)
-        )
+        guard self.range(displayStorageID: displayStorageID) != range else { return }
+        defaults.set(["min": Int(range.min), "max": Int(range.max)],
+                     forKey: key(displayStorageID: displayStorageID))
     }
 
     private func key(displayStorageID: String) -> String {

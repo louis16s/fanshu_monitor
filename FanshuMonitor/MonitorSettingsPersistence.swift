@@ -242,6 +242,11 @@ extension MonitorSettings {
         }
     
         func persist<T>(_ value: T, forKey key: String) {
+            let existingValue = defaults.object(forKey: key) as? NSObject
+            let newValue = value as? NSObject
+            if let existingValue, let newValue, existingValue.isEqual(newValue) {
+                return
+            }
             defaults.set(value, forKey: key)
         }
     
