@@ -1,6 +1,41 @@
 import AppKit
 import SwiftUI
 
+/// Keep window tracking and layout alive while releasing hidden view graphs and layers.
+struct WindowResidentContent<Content: View>: View {
+    let onVisibilityChanged: (Bool) -> Void
+    @ViewBuilder let content: () -> Content
+    @State private var isVisible = true
+    @State private var lastSize: CGSize = .zero
+
+    var body: some View {
+        Group {
+            if isVisible {
+                content()
+                    .onGeometryChange(for: CGSize.self) { proxy in
+                        proxy.size
+                    } action: { size in
+                        if size.width > 0 && size.height > 0 {
+                            lastSize = size
+                        }
+                    }
+            } else {
+                Color.clear.frame(width: lastSize.width, height: lastSize.height)
+            }
+        }
+        .background {
+            PanelWindowVisibilityTracker { visible in
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    isVisible = visible
+                }
+                onVisibilityChanged(visible)
+            }
+        }
+    }
+}
+
 struct TransparentWindowBackground: NSViewRepresentable {
     let colorSchemeOverride: ColorScheme?
 

@@ -9,6 +9,15 @@ struct SettingsRootView: View {
     @State private var selection: SettingsRoute = .general
 
     var body: some View {
+        WindowResidentContent(onVisibilityChanged: { _ in }) {
+            settingsContent
+        }
+        .frame(width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height)
+        .fixedSize()
+        .background(SettingsWindowTracker(selection: $selection))
+    }
+
+    private var settingsContent: some View {
         HStack(spacing: 0) {
             SettingsSidebar(selection: $selection, settings: settings)
                 .frame(width: SettingsWindowMetrics.sidebarWidth)
@@ -25,7 +34,6 @@ struct SettingsRootView: View {
         }
         .frame(width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height)
         .fixedSize()
-        .background(SettingsWindowTracker(selection: $selection))
     }
 
     @ViewBuilder

@@ -274,6 +274,7 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
             screen: screen
         )
         window.backgroundColor = .black
+        window.isReleasedWhenClosed = false
         window.isOpaque = false
         window.hasShadow = false
         window.ignoresMouseEvents = true
@@ -294,13 +295,15 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
 
     @MainActor
     private func removeWindow(for displayID: CGDirectDisplayID) {
-        guard let window = overlayWindows[displayID] else { return }
+        guard let window = overlayWindows.removeValue(forKey: displayID) else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0
             context.allowsImplicitAnimation = false
             window.alphaValue = 0
             window.orderOut(nil)
         }
+        window.contentView = nil
+        window.close()
     }
 
     @MainActor

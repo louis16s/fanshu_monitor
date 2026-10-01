@@ -1,6 +1,76 @@
 import Foundation
+import AppKit
+import SwiftUI
+import Combine
 import Testing
 @testable import FanshuMonitor
+
+@MainActor
+@Suite(.serialized)
+struct WindowResidentContentTests {
+    @Test func releasesHiddenContentAndRestoresItWithoutShrinkingTheWindow() async throws {
+        let probe = WindowContentProbe()
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
+            styleMask: [.borderless], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: WindowResidentContent(onVisibilityChanged: { visible in
+            probe.isVisible = visible
+        }) {
+            WindowProbeView(probe: probe)
+        })
+        window.contentView = host
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+            window.close()
+        }
+
+        for _ in 0..<3 {
+            window.orderFront(nil)
+            try await waitUntil { probe.isVisible && probe.mounted == 1 }
+            host.layoutSubtreeIfNeeded()
+            #expect(host.fittingSize == CGSize(width: 320, height: 180))
+
+            window.orderOut(nil)
+            try await waitUntil { !probe.isVisible && probe.mounted == 0 && probe.resource == nil }
+            host.layoutSubtreeIfNeeded()
+            #expect(host.fittingSize == CGSize(width: 320, height: 180))
+        }
+    }
+
+    private func waitUntil(_ predicate: () -> Bool) async throws {
+        for _ in 0..<100 {
+            if predicate() { return }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(predicate(), "Window lifecycle did not settle")
+    }
+}
+
+@MainActor
+private final class WindowContentProbe {
+    var isVisible = false
+    var mounted = 0
+    weak var resource: WindowTestResource?
+}
+
+private final class WindowTestResource: ObservableObject {}
+
+private struct WindowProbeView: View {
+    let probe: WindowContentProbe
+    @StateObject private var resource = WindowTestResource()
+
+    var body: some View {
+        Color.clear.frame(width: 320, height: 180)
+            .onAppear {
+                probe.resource = resource
+                probe.mounted += 1
+            }
+            .onDisappear { probe.mounted -= 1 }
+    }
+}
 
 @MainActor
 struct PanelExpansionStateTests {

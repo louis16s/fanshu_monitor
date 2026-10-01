@@ -16,6 +16,14 @@ struct MonitorPanelView: View {
     }
 
     var body: some View {
+        WindowResidentContent(onVisibilityChanged: store.setPanelVisible) {
+            panelContent
+        }
+        .containerBackground(.clear, for: .window)
+        .background(TransparentWindowBackground(colorSchemeOverride: settings.themePreference.colorScheme))
+    }
+
+    private var panelContent: some View {
         let theme = MonitorPanelTheme(
             palette: MonitorPalette(
                 preference: settings.colorSchemePreference,
@@ -23,7 +31,7 @@ struct MonitorPanelView: View {
             )
         )
 
-        GlassEffectContainer(spacing: 8) {
+        return GlassEffectContainer(spacing: 8) {
             VStack(spacing: 7) {
                 header(theme: theme)
 
@@ -48,13 +56,6 @@ struct MonitorPanelView: View {
             .padding(.bottom, 10)
             .frame(width: MonitorConstants.panelWidth)
             .background(panelBackgroundColor)
-        }
-        .containerBackground(.clear, for: .window)
-        .background(TransparentWindowBackground(colorSchemeOverride: settings.themePreference.colorScheme))
-        .background {
-            PanelWindowVisibilityTracker { isVisible in
-                store.setPanelVisible(isVisible)
-            }
         }
     }
 
