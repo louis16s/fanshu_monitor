@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 180" role="img" aria-labelledby="title desc">
+<title id="title">分配环 · 功率分流</title><desc id="desc">适配器输入48瓦，系统使用32瓦，电池充电16瓦。沿线动画表示功率传输方向。</desc>
+<style>
+:root{--text:#202831;--muted:#687580;--track:#dce3e8;--surface:#f7f9fb;--input:#159b80;--system:#4587ef;--battery:#d79820}
+@media(prefers-color-scheme:dark){:root{--text:#edf2f6;--muted:#a0adb8;--track:#35414b;--surface:#21292f;--input:#45ceb0;--system:#7daaff;--battery:#eaba58}}
+svg{background:var(--surface)}text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:var(--text);letter-spacing:0}
+.label{font-size:17px;fill:var(--muted)}.value{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}.minor{font-size:13px;fill:var(--muted)}
+.line{fill:none;stroke-linecap:round;stroke-linejoin:round}.track{stroke:var(--track)}
+.input{stroke:var(--input)}.system{stroke:var(--system)}.battery{stroke:var(--battery)}
+.flow{stroke-dasharray:3 23;animation:flow 2s linear infinite}.bandflow{stroke-dasharray:12 30;animation:flow 2.8s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-104}}
+@media(prefers-reduced-motion:reduce){.flow,.bandflow{animation:none}}
+</style>
+<defs>
+<g id="plug" fill="none" stroke="var(--input)" stroke-width="2.2" stroke-linecap="round"><path d="M5 0v6m8-6v6M2 6h14v4a7 7 0 0 1-7 7v5M0 9h2m14 0h2"/></g>
+<g id="screen" fill="none" stroke="var(--system)" stroke-width="2"><rect width="23" height="15" rx="2"/><path d="M11.5 15v5m-6 0h12"/></g>
+<g id="battery" fill="none" stroke="var(--battery)" stroke-width="2"><rect width="23" height="13" rx="3"/><path d="M25 4v5m-13-8-4 6h5l-3 5"/></g>
+</defs>
+
+<path class="line track" stroke-width="2" d="M156 86H218M310 65C345 65 350 49 396 49M310 108C345 108 350 135 396 135"/>
+<path class="line input flow" stroke-width="3" d="M156 86H218"/>
+<path class="line system flow" stroke-width="3" d="M310 65C345 65 350 49 396 49"/>
+<path class="line battery flow" stroke-width="3" d="M310 108C345 108 350 135 396 135"/>
+<circle cx="266" cy="86" r="42" fill="none" stroke="var(--track)" stroke-width="7"/>
+<circle cx="266" cy="86" r="42" fill="none" stroke="var(--system)" stroke-width="7" stroke-dasharray="172 264" transform="rotate(-90 266 86)"/>
+<circle cx="266" cy="86" r="42" fill="none" stroke="var(--battery)" stroke-width="7" stroke-dasharray="82 264" stroke-dashoffset="-178" transform="rotate(-90 266 86)"/>
+<text class="minor" x="266" y="81" text-anchor="middle">功率分配</text><text x="266" y="104" text-anchor="middle" font-size="18" font-weight="600">48 W</text>
+<use href="#plug" x="16" y="70"/><text class="label" x="48" y="76">输入</text><text class="value" x="48" y="103">48.0 W</text>
+<use href="#screen" x="414" y="29"/><text class="label" x="448" y="43">系统</text><text class="value" x="448" y="70">32.0 W</text>
+<use href="#battery" x="414" y="115"/><text class="label" x="448" y="127">充电</text><text class="value" x="448" y="154">16.0 W</text>
+</svg>

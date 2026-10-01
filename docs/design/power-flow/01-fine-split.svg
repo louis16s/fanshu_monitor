@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 180" role="img" aria-labelledby="title desc">
+<title id="title">细线分流 · 功率分流</title><desc id="desc">适配器输入48瓦，系统使用32瓦，电池充电16瓦。沿线动画表示功率传输方向。</desc>
+<style>
+:root{--text:#202831;--muted:#687580;--track:#dce3e8;--surface:#f7f9fb;--input:#159b80;--system:#4587ef;--battery:#d79820}
+@media(prefers-color-scheme:dark){:root{--text:#edf2f6;--muted:#a0adb8;--track:#35414b;--surface:#21292f;--input:#45ceb0;--system:#7daaff;--battery:#eaba58}}
+svg{background:var(--surface)}text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:var(--text);letter-spacing:0}
+.label{font-size:17px;fill:var(--muted)}.value{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}.minor{font-size:13px;fill:var(--muted)}
+.line{fill:none;stroke-linecap:round;stroke-linejoin:round}.track{stroke:var(--track)}
+.input{stroke:var(--input)}.system{stroke:var(--system)}.battery{stroke:var(--battery)}
+.flow{stroke-dasharray:3 23;animation:flow 2s linear infinite}.bandflow{stroke-dasharray:12 30;animation:flow 2.8s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-104}}
+@media(prefers-reduced-motion:reduce){.flow,.bandflow{animation:none}}
+</style>
+<defs>
+<g id="plug" fill="none" stroke="var(--input)" stroke-width="2.2" stroke-linecap="round"><path d="M5 0v6m8-6v6M2 6h14v4a7 7 0 0 1-7 7v5M0 9h2m14 0h2"/></g>
+<g id="screen" fill="none" stroke="var(--system)" stroke-width="2"><rect width="23" height="15" rx="2"/><path d="M11.5 15v5m-6 0h12"/></g>
+<g id="battery" fill="none" stroke="var(--battery)" stroke-width="2"><rect width="23" height="13" rx="3"/><path d="M25 4v5m-13-8-4 6h5l-3 5"/></g>
+</defs>
+
+<path class="line track" stroke-width="3" d="M156 86H244C306 86 313 49 396 49M244 86C306 86 313 135 396 135"/>
+<path class="line input" stroke-width="3" opacity=".45" d="M156 86H244"/>
+<path class="line system" stroke-width="3" opacity=".45" d="M244 86C306 86 313 49 396 49"/>
+<path class="line battery" stroke-width="3" opacity=".45" d="M244 86C306 86 313 135 396 135"/>
+<path class="line input flow" stroke-width="4" d="M156 86H244"/>
+<path class="line system flow" stroke-width="4" d="M244 86C306 86 313 49 396 49"/>
+<path class="line battery flow" stroke-width="4" d="M244 86C306 86 313 135 396 135"/>
+<circle cx="244" cy="86" r="5" fill="var(--surface)" stroke="var(--input)" stroke-width="2"/>
+<path class="line system" stroke-width="2" d="m389 44 7 5-7 5"/><path class="line battery" stroke-width="2" d="m389 130 7 5-7 5"/>
+<use href="#plug" x="16" y="70"/><text class="label" x="48" y="76">输入</text><text class="value" x="48" y="103">48.0 W</text>
+<use href="#screen" x="414" y="29"/><text class="label" x="448" y="43">系统</text><text class="value" x="448" y="70">32.0 W</text>
+<use href="#battery" x="414" y="115"/><text class="label" x="448" y="127">充电</text><text class="value" x="448" y="154">16.0 W</text>
+</svg>
