@@ -67,9 +67,10 @@ struct MonitorPanelView: View {
     private func header(theme: MonitorPanelTheme) -> some View {
         HStack(spacing: 6) {
             HStack(spacing: 7) {
-                Circle()
-                    .fill(theme.liveDot(for: store.haloRingLoadLevel))
-                    .frame(width: 6, height: 6)
+                PanelLiveStatusDot(
+                    color: theme.liveDot(for: store.haloRingLoadLevel),
+                    isActive: store.isPanelVisible
+                )
 
                 Text("番薯 Monitor")
                     .font(.system(size: 11, weight: .semibold))
@@ -227,4 +228,32 @@ struct MonitorPanelView: View {
         formatter.dateFormat = "HH:mm"
         return formatter
     }()
+}
+
+private struct PanelLiveStatusDot: View {
+    let color: Color
+    let isActive: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Group {
+            if isActive && !reduceMotion {
+                Circle()
+                    .fill(color)
+                    .phaseAnimator([false, true]) { dot, expanded in
+                        dot
+                            .opacity(expanded ? 1 : 0.5)
+                            .scaleEffect(expanded ? 1 : 0.85)
+                    } animation: { _ in
+                        .easeInOut(duration: 1.8)
+                    }
+            } else {
+                Circle()
+                    .fill(color)
+            }
+        }
+        .frame(width: 6, height: 6)
+        .accessibilityHidden(true)
+    }
 }
