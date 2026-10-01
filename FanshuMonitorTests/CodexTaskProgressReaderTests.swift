@@ -186,6 +186,128 @@ struct CodexTaskProgressReaderTests {
         #expect(progress.activeStep == "正在处理")
     }
 
+    @Test func planRecordAcrossReadChunksPreservesUTF8AndProgress() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let sessions = root.appendingPathComponent("sessions")
+        let index = root.appendingPathComponent("session_index.jsonl")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let threadID = UUID().uuidString.lowercased()
+        let rollout = sessions.appendingPathComponent("rollout-\(threadID).jsonl")
+        let response: [String: Any] = [
+            "type": "response_item",
+            "payload": [
+                "type": "function_call", "name": "update_plan",
+                "padding": String(repeating: "跨块", count: 60_000),
+                "arguments": #"{"plan":[{"step":"已完成","status":"completed"},{"step":"继续处理","status":"in_progress"}]}"#
+            ]
+        ]
+        var data = Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"# + "\n").utf8)
+        data.append(try JSONSerialization.data(withJSONObject: response))
+        data.append(0x0A)
+        try data.write(to: rollout)
+        let reader = CodexTaskProgressReader(sessionsRoot: sessions, sessionIndexURL: index)
+        let task = try #require(await reader.load().first)
+        #expect(task.totalSteps == 2)
+        #expect(task.completedSteps == 1)
+        #expect(task.activeStep == "继续处理")
+    }
+
+    @Test func oversizedPartialRecordDoesNotHideFollowingTerminalEvent() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let sessions = root.appendingPathComponent("sessions")
+        let index = root.appendingPathComponent("session_index.jsonl")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let rollout = sessions.appendingPathComponent("rollout-\(UUID().uuidString.lowercased()).jsonl")
+        try Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"# + "\n").utf8).write(to: rollout)
+        let reader = CodexTaskProgressReader(sessionsRoot: sessions, sessionIndexURL: index)
+        let now = Date()
+        #expect(await reader.load(now: now).count == 1)
+        try append(Data(repeating: 0x78, count: 2 * 1_024 * 1_024), to: rollout)
+        #expect(await reader.load(now: now.addingTimeInterval(1)).count == 1)
+        let retained = await reader.retainedStateCounts()
+        #expect(retained.bufferedBytes <= 1_024 * 1_024)
+        try append(Data(("\n" + #"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"turn"}}"# + "\n").utf8), to: rollout)
+        #expect(await reader.load(now: now.addingTimeInterval(2)).isEmpty)
+    }
+
+    @Test func boundedTitlesKeepCurrentNamesAndRecoverAnOlderReturningSession() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let sessions = root.appendingPathComponent("sessions")
+        let index = root.appendingPathComponent("session_index.jsonl")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let now = Date()
+        var indexData = Data()
+        var rollouts: [URL] = []
+        var threadIDs: [String] = []
+        for position in 0..<13 {
+            let id = UUID().uuidString.lowercased()
+            let url = sessions.appendingPathComponent("rollout-\(id).jsonl")
+            try Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"# + "\n").utf8).write(to: url)
+            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(Double(position))], ofItemAtPath: url.path)
+            indexData.append(Data("{\"id\":\"\(id)\",\"thread_name\":\"任务\(position)\"}\n".utf8))
+            rollouts.append(url)
+            threadIDs.append(id)
+        }
+        for _ in 0..<1_000 {
+            indexData.append(Data("{\"id\":\"\(UUID().uuidString)\",\"thread_name\":\"历史会话\"}\n".utf8))
+        }
+        try indexData.write(to: index)
+        let reader = CodexTaskProgressReader(sessionsRoot: sessions, sessionIndexURL: index)
+        let initial = await reader.load(now: now)
+        #expect(initial.count == 12)
+        #expect(initial.allSatisfy { $0.title.hasPrefix("任务") })
+        #expect(!initial.contains { $0.id == threadIDs[0] })
+        #expect(await reader.retainedStateCounts().titles <= 256)
+
+        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(31)], ofItemAtPath: rollouts[0].path)
+        let returning = await reader.load(now: now.addingTimeInterval(31))
+        #expect(returning.first { $0.id == threadIDs[0] }?.title == "任务0")
+        #expect(await reader.retainedStateCounts().titles <= 256)
+
+        try append(Data("{\"id\":\"\(threadIDs[0])\",\"thread_name\":\"已改名的旧任务\"}\n".utf8), to: index)
+        let renamed = await reader.load(now: now.addingTimeInterval(62))
+        #expect(renamed.first { $0.id == threadIDs[0] }?.title == "已改名的旧任务")
+    }
+
+    @Test func oversizedIndexRecordDoesNotBlockLaterTitlesOrIndexReplacement() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let sessions = root.appendingPathComponent("sessions")
+        let index = root.appendingPathComponent("session_index.jsonl")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = UUID().uuidString.lowercased()
+        let rollout = sessions.appendingPathComponent("rollout-\(id).jsonl")
+        try Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"# + "\n").utf8).write(to: rollout)
+        var indexData = Data(repeating: 0x78, count: 2 * 1_024 * 1_024)
+        indexData.append(Data("\n{\"id\":\"\(id)\",\"thread_name\":\"有效标题\"}\n".utf8))
+        try indexData.write(to: index)
+        let reader = CodexTaskProgressReader(sessionsRoot: sessions, sessionIndexURL: index)
+        let now = Date()
+        #expect(await reader.load(now: now).first?.title == "有效标题")
+        try Data("{\"id\":\"\(id)\",\"thread_name\":\"重建索引后的标题\"}\n".utf8).write(to: index)
+        #expect(await reader.load(now: now.addingTimeInterval(31)).first?.title == "重建索引后的标题")
+    }
+
+    @Test func cancelledLoadDoesNotDelayTheNextDiscovery() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let sessions = root.appendingPathComponent("sessions")
+        let index = root.appendingPathComponent("session_index.jsonl")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let rollout = sessions.appendingPathComponent("rollout-\(UUID().uuidString.lowercased()).jsonl")
+        try Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"# + "\n").utf8).write(to: rollout)
+        let reader = CodexTaskProgressReader(sessionsRoot: sessions, sessionIndexURL: index)
+        let cancelled = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return await reader.load(now: Date(timeIntervalSince1970: 0))
+        }
+        #expect(await cancelled.value.isEmpty)
+        #expect(await reader.load(now: Date(timeIntervalSince1970: 1)).count == 1)
+    }
+
     private func append(_ data: Data, to url: URL) throws {
         let handle = try FileHandle(forWritingTo: url)
         defer { try? handle.close() }

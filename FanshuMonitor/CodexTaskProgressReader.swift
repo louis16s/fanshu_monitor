@@ -25,11 +25,47 @@ actor CodexTaskProgressReader {
     // terminal event. Keep the fallback long enough for quiet tool calls, but
     // never let an abandoned task remain visible indefinitely.
     static let staleTaskTimeout: TimeInterval = 120
+    private static let readChunkBytes = 256 * 1_024
+    private static let maximumRecordBytes = 1_024 * 1_024
+    private static let maximumCandidates = 12
+    private static let maximumCachedTitles = 256
+
+    private struct JSONLineBuffer {
+        var remainder = Data()
+        var isDroppingPartialLine = false
+
+        mutating func consume(_ data: Data, processLine: (Data.SubSequence) -> Void) {
+            var appendedData = data
+            if isDroppingPartialLine {
+                guard let newline = appendedData.firstIndex(of: 0x0A) else { return }
+                appendedData = Data(appendedData[appendedData.index(after: newline)...])
+                isDroppingPartialLine = false
+            }
+
+            var bufferedData = remainder
+            bufferedData.append(appendedData)
+            var lineStart = bufferedData.startIndex
+            while let lineEnd = bufferedData[lineStart...].firstIndex(of: 0x0A) {
+                let line = bufferedData[lineStart..<lineEnd]
+                if !line.isEmpty, line.count <= CodexTaskProgressReader.maximumRecordBytes {
+                    autoreleasepool { processLine(line) }
+                }
+                lineStart = bufferedData.index(after: lineEnd)
+            }
+            if bufferedData.count - lineStart > CodexTaskProgressReader.maximumRecordBytes {
+                // Large image/tool payloads are irrelevant to task status. Resume
+                // at the next record instead of retaining an unbounded partial line.
+                remainder = Data()
+                isDroppingPartialLine = true
+            } else {
+                remainder = Data(bufferedData[lineStart...])
+            }
+        }
+    }
 
     private struct RolloutState {
         var offset: UInt64 = 0
-        var remainder = Data()
-        var isDroppingLeadingPartialLine = false
+        var lines = JSONLineBuffer()
         var currentTurnID: String?
         var isTaskActive = false
         var completedSteps = 0
@@ -58,9 +94,12 @@ actor CodexTaskProgressReader {
     private var candidates: [RolloutCandidate] = []
     private var statesByURL: [URL: RolloutState] = [:]
     private var titleByThreadID: [String: String] = [:]
+    private var titleOrderByThreadID: [String: UInt64] = [:]
+    private var titleOrder: UInt64 = 0
+    private var missingTitleIDs: Set<String> = []
     private var lastDiscovery = Date.distantPast
     private var sessionIndexOffset: UInt64 = 0
-    private var sessionIndexRemainder = Data()
+    private var sessionIndexLines = JSONLineBuffer()
 
     init(
         sessionsRoot: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -73,12 +112,18 @@ actor CodexTaskProgressReader {
     }
 
     func load(now: Date = Date()) -> [CodexTaskProgress] {
+        guard !Task.isCancelled else { return [] }
         if now.timeIntervalSince(lastDiscovery) >= 30 {
             discoverRecentRollouts(now: now)
+        }
+        guard !Task.isCancelled else {
+            lastDiscovery = .distantPast
+            return []
         }
 
         var result: [CodexTaskProgress] = []
         for candidate in candidates {
+            guard !Task.isCancelled else { break }
             var state = statesByURL[candidate.url] ?? RolloutState()
             update(candidate: candidate, state: &state, now: now)
             statesByURL[candidate.url] = state
@@ -97,9 +142,18 @@ actor CodexTaskProgressReader {
         return result
     }
 
+    #if DEBUG
+    func retainedStateCounts() -> (candidates: Int, titles: Int, bufferedBytes: Int) {
+        (
+            candidates.count,
+            titleByThreadID.count,
+            sessionIndexLines.remainder.count + statesByURL.values.reduce(0) { $0 + $1.lines.remainder.count }
+        )
+    }
+    #endif
+
     private func discoverRecentRollouts(now: Date) {
         lastDiscovery = now
-        updateSessionTitles()
 
         guard let enumerator = FileManager.default.enumerator(
             at: sessionsRoot,
@@ -117,7 +171,9 @@ actor CodexTaskProgressReader {
         }
 
         var discovered: [RolloutCandidate] = []
+        discovered.reserveCapacity(Self.maximumCandidates + 1)
         for case let url as URL in enumerator where url.pathExtension == "jsonl" {
+            guard !Task.isCancelled else { return }
             guard url.lastPathComponent.hasPrefix("rollout-"),
                   let threadID = threadID(from: url)
             else {
@@ -127,12 +183,25 @@ actor CodexTaskProgressReader {
             guard values?.isRegularFile == true, let modifiedAt = values?.contentModificationDate else {
                 continue
             }
-            discovered.append(RolloutCandidate(url: url, threadID: threadID, modifiedAt: modifiedAt))
+            let candidate = RolloutCandidate(url: url, threadID: threadID, modifiedAt: modifiedAt)
+            let insertionIndex = discovered.firstIndex {
+                candidate.modifiedAt > $0.modifiedAt
+                    || (candidate.modifiedAt == $0.modifiedAt && candidate.url.path < $0.url.path)
+            } ?? discovered.endIndex
+            if insertionIndex < Self.maximumCandidates {
+                discovered.insert(candidate, at: insertionIndex)
+                if discovered.count > Self.maximumCandidates {
+                    discovered.removeLast()
+                }
+            }
         }
 
-        candidates = Array(discovered.sorted { $0.modifiedAt > $1.modifiedAt }.prefix(12))
+        candidates = discovered
         let retainedURLs = Set(candidates.map(\.url))
         statesByURL = statesByURL.filter { retainedURLs.contains($0.key) }
+        missingTitleIDs.formIntersection(Set(candidates.map(\.threadID)))
+        let readWholeIndex = updateSessionTitles()
+        recoverMissingTitles(indexWasFullyRead: readWholeIndex)
     }
 
     private func update(candidate: RolloutCandidate, state: inout RolloutState, now: Date) {
@@ -165,16 +234,21 @@ actor CodexTaskProgressReader {
             ? initialReadOffset(url: candidate.url, fileSize: fileSize)
             : state.offset
         if initialRead && readOffset > 0 {
-            state.isDroppingLeadingPartialLine = true
+            state.lines.isDroppingPartialLine = true
         }
         guard let handle = try? FileHandle(forReadingFrom: candidate.url) else { return }
         defer { try? handle.close() }
 
         do {
             try handle.seek(toOffset: readOffset)
-            let data = try handle.readToEnd() ?? Data()
-            state.offset = try handle.offset()
-            process(data: data, state: &state, now: now)
+            _ = try readChunks(handle: handle, fileSize: fileSize) { data, offset in
+                var lines = state.lines
+                lines.consume(data) { line in
+                    process(line: line, state: &state, now: now)
+                }
+                state.lines = lines
+                state.offset = offset
+            }
         } catch {
             expireIfStale(state: &state, now: now)
             return
@@ -196,11 +270,14 @@ actor CodexTaskProgressReader {
         while chunkEnd > lowerBound {
             let chunkStart = max(lowerBound, chunkEnd > chunkSize ? chunkEnd - chunkSize : 0)
             do {
-                try handle.seek(toOffset: chunkStart)
-                let data = try handle.read(upToCount: Int(chunkEnd - chunkStart)) ?? Data()
-                if Self.lifecycleEventTypes.contains(where: { eventType in
-                    data.range(of: Data((#"\"type\":\""# + eventType + #"\""#).utf8)) != nil
-                }) {
+                let containsLifecycle = try autoreleasepool {
+                    try handle.seek(toOffset: chunkStart)
+                    let data = try handle.read(upToCount: Int(chunkEnd - chunkStart)) ?? Data()
+                    return Self.lifecycleEventTypes.contains { eventType in
+                        data.range(of: Data((#"\"type\":\""# + eventType + #"\""#).utf8)) != nil
+                    }
+                }
+                if containsLifecycle {
                     return chunkStart
                 }
             } catch {
@@ -211,31 +288,8 @@ actor CodexTaskProgressReader {
         return lowerBound
     }
 
-    private func process(data: Data, state: inout RolloutState, now: Date) {
-        var appendedData = data
-        if state.isDroppingLeadingPartialLine {
-            guard let newline = appendedData.firstIndex(of: 0x0A) else { return }
-            appendedData = Data(appendedData[appendedData.index(after: newline)...])
-            state.isDroppingLeadingPartialLine = false
-        }
-
-        var bufferedData = state.remainder
-        bufferedData.append(appendedData)
-        var lineStart = bufferedData.startIndex
-
-        while let lineEnd = bufferedData[lineStart...].firstIndex(of: 0x0A) {
-            let line = bufferedData[lineStart..<lineEnd]
-            if !line.isEmpty, let text = String(data: line, encoding: .utf8) {
-                process(line: text, state: &state, now: now)
-            }
-            lineStart = bufferedData.index(after: lineEnd)
-        }
-        state.remainder = Data(bufferedData[lineStart...])
-    }
-
-    private func process(line: String, state: inout RolloutState, now: Date) {
-        guard let data = line.data(using: .utf8),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+    private func process(line: Data.SubSequence, state: inout RolloutState, now: Date) {
+        guard let root = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
               let payload = root["payload"] as? [String: Any],
               let payloadType = payload["type"] as? String
         else {
@@ -362,59 +416,120 @@ actor CodexTaskProgressReader {
         state.activeStep = entries.first { $0.status == "in_progress" }?.step
     }
 
-    private func updateSessionTitles() {
+    private func updateSessionTitles() -> Bool {
         let fileSize: UInt64
         do {
             let attributes = try FileManager.default.attributesOfItem(atPath: sessionIndexURL.path)
-            guard let size = (attributes[.size] as? NSNumber)?.uint64Value else { return }
+            guard let size = (attributes[.size] as? NSNumber)?.uint64Value else { return false }
             fileSize = size
         } catch {
             AppLogger.codex.debug("Session index unavailable: \(error.localizedDescription, privacy: .private(mask: .hash))")
-            return
+            return false
         }
 
         if fileSize < sessionIndexOffset {
             sessionIndexOffset = 0
-            sessionIndexRemainder.removeAll(keepingCapacity: true)
+            sessionIndexLines = JSONLineBuffer()
             titleByThreadID.removeAll(keepingCapacity: true)
+            titleOrderByThreadID.removeAll(keepingCapacity: true)
+            missingTitleIDs.removeAll()
         }
-        guard fileSize > sessionIndexOffset else { return }
+        guard fileSize > sessionIndexOffset else { return false }
+        let readingFromStart = sessionIndexOffset == 0
 
         do {
             let handle = try FileHandle(forReadingFrom: sessionIndexURL)
             defer { try? handle.close() }
             try handle.seek(toOffset: sessionIndexOffset)
-            let appendedData = try handle.readToEnd() ?? Data()
-            sessionIndexOffset = try handle.offset()
-            processSessionIndex(data: appendedData)
+            let completed = try readChunks(handle: handle, fileSize: fileSize) { data, offset in
+                var lines = sessionIndexLines
+                lines.consume(data) { parseSessionIndexLine($0) }
+                sessionIndexLines = lines
+                sessionIndexOffset = offset
+                trimTitleCache()
+            }
+            return readingFromStart && completed
         } catch {
             AppLogger.codex.error("Unable to update session index: \(error.localizedDescription, privacy: .private(mask: .hash))")
+            return false
         }
     }
 
-    private func processSessionIndex(data: Data) {
-        var bufferedData = sessionIndexRemainder
-        bufferedData.append(data)
-        let newline = Data([0x0A])
-        var lineStart = bufferedData.startIndex
-
-        while let lineEnd = bufferedData[lineStart...].firstRange(of: newline)?.lowerBound {
-            parseSessionIndexLine(bufferedData[lineStart..<lineEnd])
-            lineStart = bufferedData.index(after: lineEnd)
+    private func readChunks(
+        handle: FileHandle,
+        fileSize: UInt64,
+        processChunk: (Data, UInt64) -> Void
+    ) throws -> Bool {
+        var offset = try handle.offset()
+        while offset < fileSize {
+            guard !Task.isCancelled else { return false }
+            let count = Int(min(UInt64(Self.readChunkBytes), fileSize - offset))
+            let didRead = try autoreleasepool {
+                guard let data = try handle.read(upToCount: count), !data.isEmpty else { return false }
+                offset = try handle.offset()
+                processChunk(data, offset)
+                return true
+            }
+            guard didRead else { return false }
         }
-        sessionIndexRemainder = Data(bufferedData[lineStart...])
+        return true
     }
 
-    private func parseSessionIndexLine(_ line: Data.SubSequence) {
+    private func recoverMissingTitles(indexWasFullyRead: Bool) {
+        let unresolvedIDs = Set(candidates.map(\.threadID)).filter {
+            titleByThreadID[$0] == nil && !missingTitleIDs.contains($0)
+        }
+        guard !unresolvedIDs.isEmpty else { return }
+        if indexWasFullyRead {
+            missingTitleIDs.formUnion(unresolvedIDs)
+            return
+        }
+
+        do {
+            let handle = try FileHandle(forReadingFrom: sessionIndexURL)
+            defer { try? handle.close() }
+            let fileSize = try handle.seekToEnd()
+            try handle.seek(toOffset: 0)
+            var lines = JSONLineBuffer()
+            let completed = try readChunks(handle: handle, fileSize: fileSize) { data, _ in
+                lines.consume(data) { parseSessionIndexLine($0, matching: unresolvedIDs) }
+            }
+            if completed {
+                missingTitleIDs.formUnion(unresolvedIDs.filter { titleByThreadID[$0] == nil })
+            }
+            trimTitleCache()
+        } catch {
+            AppLogger.codex.debug("Session title lookup temporarily unavailable")
+        }
+    }
+
+    private func parseSessionIndexLine(_ line: Data.SubSequence, matching ids: Set<String>? = nil) {
         guard !line.isEmpty,
               let record = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
               let id = record["id"] as? String,
+              ids?.contains(id) ?? true,
               let title = record["thread_name"] as? String,
               !title.isEmpty
         else {
             return
         }
-        titleByThreadID[id] = title
+        titleByThreadID[id] = compactTitle(title)
+        titleOrder &+= 1
+        titleOrderByThreadID[id] = titleOrder
+        missingTitleIDs.remove(id)
+    }
+
+    private func trimTitleCache() {
+        guard titleByThreadID.count > Self.maximumCachedTitles else { return }
+        let pinnedIDs = Set(candidates.map(\.threadID)).filter { titleByThreadID[$0] != nil }
+        let recentIDs = titleOrderByThreadID
+            .filter { !pinnedIDs.contains($0.key) }
+            .sorted { $0.value > $1.value }
+            .prefix(Self.maximumCachedTitles - pinnedIDs.count)
+            .map(\.key)
+        let retainedIDs = pinnedIDs.union(recentIDs)
+        titleByThreadID = titleByThreadID.filter { retainedIDs.contains($0.key) }
+        titleOrderByThreadID = titleOrderByThreadID.filter { retainedIDs.contains($0.key) }
     }
 
     private func threadID(from url: URL) -> String? {
