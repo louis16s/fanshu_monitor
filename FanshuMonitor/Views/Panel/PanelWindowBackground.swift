@@ -1,8 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// Keep window tracking and layout alive while releasing hidden view graphs and layers.
+/// Frequently opened panels can retain their content independently of sampling demand.
 struct WindowResidentContent<Content: View>: View {
+    var releasesContentWhenHidden = true
     let onVisibilityChanged: (Bool) -> Void
     @ViewBuilder let content: () -> Content
     @State private var isVisible = true
@@ -10,7 +11,7 @@ struct WindowResidentContent<Content: View>: View {
 
     var body: some View {
         Group {
-            if isVisible {
+            if isVisible || !releasesContentWhenHidden {
                 content()
                     .onGeometryChange(for: CGSize.self) { proxy in
                         proxy.size

@@ -8,6 +8,44 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct WindowResidentContentTests {
+    @Test func retainedPanelContentIsReadyBeforeTheWindowBecomesVisible() async throws {
+        let probe = WindowContentProbe()
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
+            styleMask: [.borderless], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: WindowResidentContent(
+            releasesContentWhenHidden: false,
+            onVisibilityChanged: { probe.isVisible = $0 }
+        ) {
+            WindowProbeView(probe: probe)
+        })
+        window.contentView = host
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+            window.close()
+        }
+        host.layoutSubtreeIfNeeded()
+        try await waitUntil { probe.mounted == 1 && probe.resource != nil }
+        #expect(!window.isVisible)
+        let resource = try #require(probe.resource)
+
+        for _ in 0..<3 {
+            // Cached content already exists before orderFront and the visibility callback.
+            #expect(probe.resource === resource)
+            #expect(probe.mounted == 1)
+            window.orderFront(nil)
+            try await waitUntil { probe.isVisible }
+            window.orderOut(nil)
+            try await waitUntil { !probe.isVisible }
+            #expect(probe.resource === resource)
+            #expect(probe.mounted == 1)
+            #expect(host.fittingSize == CGSize(width: 320, height: 180))
+        }
+    }
+
     @Test func releasesHiddenContentAndRestoresItWithoutShrinkingTheWindow() async throws {
         let probe = WindowContentProbe()
         let window = NSWindow(

@@ -16,7 +16,7 @@ struct MonitorPanelView: View {
     }
 
     var body: some View {
-        WindowResidentContent(onVisibilityChanged: store.setPanelVisible) {
+        WindowResidentContent(releasesContentWhenHidden: false, onVisibilityChanged: store.setPanelVisible) {
             panelContent
         }
         .containerBackground(.clear, for: .window)
