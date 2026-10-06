@@ -7,6 +7,10 @@ actor SamplingCoordinator {
     private var codexSampler: CodexQuotaSampler?
     private var latestResidencyRequestID: UInt64 = 0
 
+    init(codexSampler: CodexQuotaSampler? = nil) {
+        self.codexSampler = codexSampler
+    }
+
     func retainSamplers(
         for visibleKinds: Set<MonitorKind>,
         requestID: UInt64

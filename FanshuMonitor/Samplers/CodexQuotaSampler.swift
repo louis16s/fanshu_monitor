@@ -64,6 +64,7 @@ actor CodexQuotaSampler {
 
     private let client: CodexUsageClient
     private let now: @Sendable () -> Date
+    private let saveReport: @Sendable (CodexQuotaReport) -> Void
     private var cachedModule: MonitorModule?
     private var lastPresentedModule: MonitorModule?
     private var lastSuccessfulRefreshDate: Date?
@@ -77,10 +78,12 @@ actor CodexQuotaSampler {
 
     init(
         client: CodexUsageClient = CodexUsageClient(),
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        saveReport: @escaping @Sendable (CodexQuotaReport) -> Void = { CodexQuotaCache.save($0) }
     ) {
         self.client = client
         self.now = now
+        self.saveReport = saveReport
     }
 
     func sample(
@@ -118,8 +121,9 @@ actor CodexQuotaSampler {
         let refreshID = UUID()
         let cachedModule = cachedModule ?? previous
         let client = client
+        let saveReport = saveReport
         let task = Task {
-            await Self.loadModule(client: client, cachedModule: cachedModule)
+            await Self.loadModule(client: client, cachedModule: cachedModule, saveReport: saveReport)
         }
         inFlightRefresh = (refreshID, task)
 
@@ -215,11 +219,12 @@ actor CodexQuotaSampler {
 
     private static func loadModule(
         client: CodexUsageClient,
-        cachedModule: MonitorModule?
+        cachedModule: MonitorModule?,
+        saveReport: @Sendable (CodexQuotaReport) -> Void
     ) async -> LoadResult {
         do {
             let report = try await client.load()
-            CodexQuotaCache.save(report)
+            saveReport(report)
             return LoadResult(
                 module: Self.module(from: report),
                 succeeded: true,
@@ -475,7 +480,7 @@ nonisolated struct CodexUsageClient: Sendable {
             throw CodexUsageError.invalidResponse(response.statusCode)
         }
 
-        return try Self.parseUsage(data)
+        return try Self.parseUsage(data, now: Date())
     }
 
     static func mapTransportError(_ error: Error) -> CodexUsageError {
@@ -485,7 +490,7 @@ nonisolated struct CodexUsageClient: Sendable {
         return .networkFailed(error.localizedDescription)
     }
 
-    static func parseUsage(_ data: Data) throws -> CodexQuotaReport {
+    static func parseUsage(_ data: Data, now: Date = Date()) throws -> CodexQuotaReport {
         do {
             let response = try JSONDecoder().decode(CodexUsageResponse.self, from: data)
             let windows = [
@@ -496,7 +501,7 @@ nonisolated struct CodexUsageClient: Sendable {
             for (window, fallbackID, fallbackLabel) in windows {
                 guard let window else { continue }
                 let identity = window.periodIdentity(fallbackID: fallbackID, fallbackLabel: fallbackLabel)
-                snapshots[identity.id] = window.snapshot(id: identity.id, label: identity.label)
+                snapshots[identity.id] = window.snapshot(id: identity.id, label: identity.label, now: now)
             }
             let periods = ["5h", "week"].compactMap { snapshots[$0] }
 
@@ -504,7 +509,7 @@ nonisolated struct CodexUsageClient: Sendable {
                 planType: response.planType,
                 periods: periods,
                 resetCredits: response.rateLimitResetCredits?.availableCount,
-                fetchedAt: Date()
+                fetchedAt: now
             )
         } catch {
             throw CodexUsageError.invalidPayload
@@ -626,11 +631,13 @@ nonisolated private struct CodexUsageResponse: Decodable {
     struct Window: Decodable {
         var usedPercent: Double
         var resetAt: Double?
+        var resetAfterSeconds: Double?
         var limitWindowSeconds: Double?
 
         enum CodingKeys: String, CodingKey {
             case usedPercent = "used_percent"
             case resetAt = "reset_at"
+            case resetAfterSeconds = "reset_after_seconds"
             case limitWindowSeconds = "limit_window_seconds"
         }
 
@@ -641,15 +648,21 @@ nonisolated private struct CodexUsageResponse: Decodable {
                 : ("week", "WEEK")
         }
 
-        func snapshot(id: String, label: String) -> CodexQuotaSnapshot {
+        func snapshot(id: String, label: String, now: Date) -> CodexQuotaSnapshot {
             let used = max(0, min(100, usedPercent))
+            let absoluteResetDate = resetAt.flatMap { timestamp in
+                timestamp.isFinite && timestamp > 0 ? Date(timeIntervalSince1970: timestamp) : nil
+            }
+            let relativeResetDate = resetAfterSeconds.flatMap { seconds in
+                seconds.isFinite && seconds >= 0 ? now.addingTimeInterval(seconds) : nil
+            }
             return CodexQuotaSnapshot(
                 id: id,
                 label: label,
                 remaining: 100 - used,
                 limit: 100,
                 usedPercent: used,
-                resetAt: resetAt.map { Date(timeIntervalSince1970: $0) }
+                resetAt: absoluteResetDate ?? relativeResetDate
             )
         }
     }

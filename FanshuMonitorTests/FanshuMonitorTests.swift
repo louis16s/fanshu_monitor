@@ -483,6 +483,58 @@ struct FanshuMonitorTests {
         #expect(module.metrics.first { $0.name == "reset-credits" }?.value == "--")
     }
 
+    @Test func codexUsageBuildsResetDatesFromRelativeDurationsWhenAbsoluteDatesAreMissing() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let json = """
+        {
+          "plan_type": "plus",
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 30,
+              "reset_at": null,
+              "reset_after_seconds": 1800,
+              "limit_window_seconds": 18000
+            },
+            "secondary_window": {
+              "used_percent": 10,
+              "reset_at": null,
+              "reset_after_seconds": 86400,
+              "limit_window_seconds": 604800
+            }
+          }
+        }
+        """
+
+        let report = try CodexUsageClient.parseUsage(Data(json.utf8), now: now)
+        let module = CodexQuotaSampler.module(from: report)
+
+        #expect(report.periods.first { $0.id == "5h" }?.resetAt == now.addingTimeInterval(1800))
+        #expect(report.periods.first { $0.id == "week" }?.resetAt == now.addingTimeInterval(86400))
+        #expect(module.metrics.first { $0.name == "five-hour-reset" }?.value != "--")
+        #expect(module.metrics.first { $0.name == "weekly-reset" }?.value != "--")
+    }
+
+    @Test func codexUsagePrefersAbsoluteResetDateOverRelativeDuration() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let absoluteReset = now.addingTimeInterval(7200)
+        let json = """
+        {
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 30,
+              "reset_at": \(absoluteReset.timeIntervalSince1970),
+              "reset_after_seconds": 1800,
+              "limit_window_seconds": 18000
+            }
+          }
+        }
+        """
+
+        let report = try CodexUsageClient.parseUsage(Data(json.utf8), now: now)
+
+        #expect(report.periods.first { $0.id == "5h" }?.resetAt == absoluteReset)
+    }
+
     @Test func codexResetCreditsMetricIsDisabledByDefault() {
         let resetCredits = MonitorKind.codex.availableMetrics.first { $0.id == "reset-credits" }
         let localizedTitle = String(localized: "metric.codex.reset-credits")

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import FanshuMonitor
 
@@ -65,8 +66,15 @@ struct SamplingCoordinatorTests {
         #expect(await coordinator.loadedSamplerKinds() == [.cpu])
     }
 
-    @Test func staleResidencyRequestCannotReleaseCurrentCodexSampler() async {
-        let coordinator = SamplingCoordinator()
+    @Test func staleResidencyRequestCannotReleaseCurrentCodexSampler() async throws {
+        let authURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data(#"{"tokens":{"access_token":"test-token"}}"#.utf8).write(to: authURL)
+        defer { try? FileManager.default.removeItem(at: authURL) }
+        let client = CodexUsageClient(authFileURL: authURL, transport: { request in
+            let response = try #require(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (Data(#"{"rate_limit":{"primary_window":{"used_percent":20}}}"#.utf8), response)
+        })
+        let coordinator = SamplingCoordinator(codexSampler: CodexQuotaSampler(client: client, saveReport: { _ in }))
         _ = await coordinator.refreshCodex(previous: nil, force: false)
 
         await coordinator.retainSamplers(for: [.codex], requestID: 2)

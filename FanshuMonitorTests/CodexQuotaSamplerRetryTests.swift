@@ -11,6 +11,8 @@ struct CodexQuotaSamplerRetryTests {
         try Data(#"{"tokens":{"access_token":"test","account_id":"selected-account"}}"#.utf8).write(to: auth)
         let clock = CodexRetryClock()
         let counter = CodexRetryCounter()
+        let savedReports = CodexRetryCounter()
+        let realCacheBefore = UserDefaults.standard.data(forKey: "codex.quota.lastSuccessfulReport")
         let client = CodexUsageClient(authFileURL: auth, transport: { request in
             #expect(request.value(forHTTPHeaderField: "ChatGPT-Account-Id") == "selected-account")
             #expect(request.cachePolicy == .reloadIgnoringLocalCacheData)
@@ -18,7 +20,9 @@ struct CodexQuotaSamplerRetryTests {
             let response = try #require(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil))
             return (Data(#"{"plan_type":"plus","rate_limit":{"primary_window":{"used_percent":20,"reset_at":1055,"limit_window_seconds":18000}}}"#.utf8), response)
         })
-        let sampler = CodexQuotaSampler(client: client, now: clock.now)
+        let sampler = CodexQuotaSampler(client: client, now: clock.now, saveReport: { _ in
+            _ = savedReports.increment()
+        })
         let original = await sampler.sample(previous: nil)
         #expect(await sampler.scheduledResetRefreshDate() == Date(timeIntervalSince1970: 1080))
         clock.advance(by: 80)
@@ -30,6 +34,8 @@ struct CodexQuotaSamplerRetryTests {
         clock.advance(by: 15.1)
         _ = await sampler.sample(previous: failed)
         #expect(counter.value == 3)
+        #expect(savedReports.value == 1)
+        #expect(UserDefaults.standard.data(forKey: "codex.quota.lastSuccessfulReport") == realCacheBefore)
     }
 
     @Test func quotaRemainingIsClampedAndIndependentOfWindowOrder() throws {
@@ -92,7 +98,7 @@ struct CodexQuotaSamplerRetryTests {
                 )
             }
         )
-        let sampler = CodexQuotaSampler(client: client, now: clock.now)
+        let sampler = CodexQuotaSampler(client: client, now: clock.now, saveReport: { _ in })
 
         let failure = await sampler.sample(previous: nil)
         #expect(counter.value == 1)
@@ -146,7 +152,7 @@ struct CodexQuotaSamplerRetryTests {
                 return (responses[index], response)
             }
         )
-        let sampler = CodexQuotaSampler(client: client)
+        let sampler = CodexQuotaSampler(client: client, saveReport: { _ in })
 
         _ = await sampler.sample(previous: nil, force: true, refreshInterval: 300, adaptiveRefreshInterval: 60)
         #expect(await sampler.effectiveRefreshInterval(defaultInterval: 300, adaptiveInterval: 60) == 300)
