@@ -67,21 +67,10 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
 
     func userBrightness(
         for displayID: CGDirectDisplayID,
-        storedUserBrightness: Double?,
-        hardwareBrightness: Double?,
-        restoredQuantizationOpacity: Double
+        hardwareBrightness: Double?
     ) -> Double? {
         if let cached = cachedBrightness(for: displayID) {
             return cached
-        }
-
-        if let storedUserBrightness {
-            setUserBrightness(
-                storedUserBrightness,
-                for: displayID,
-                additionalOverlayOpacity: restoredQuantizationOpacity
-            )
-            return storedUserBrightness
         }
 
         guard let hardwareBrightness else { return nil }
@@ -116,15 +105,11 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
 
     func sync(with displays: [ControlledDisplay]) {
         let displayIDs = Set(displays.map(\.id))
-        let brightnessByID = Dictionary(uniqueKeysWithValues: displays.map { ($0.id, $0.brightness) })
 
         lock.lock()
         requestedBrightness = requestedBrightness.filter { displayIDs.contains($0.key) }
         quantizationOverlayOpacity = quantizationOverlayOpacity.filter { displayIDs.contains($0.key) }
         requestGenerations = requestGenerations.filter { displayIDs.contains($0.key) }
-        for (displayID, brightness) in brightnessByID where CGDisplayIsBuiltin(displayID) == 0 {
-            requestedBrightness[displayID] = brightness
-        }
         let values = requestedBrightness
         let additionalOpacities = quantizationOverlayOpacity
         let requests = values.map { displayID, brightness in

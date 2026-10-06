@@ -134,17 +134,6 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
                let learnedRange = ddc?.valueRange(for: .brightness, displayID: id) {
                 ddcRangeStore.save(learnedRange, displayStorageID: storageID)
             }
-            let restoredQuantizationOpacity: Double
-            if usesDDC, let storedBrightness {
-                let mappedHardware = softwareDimming.hardwareBrightness(forUserBrightness: storedBrightness)
-                restoredQuantizationOpacity = ddc?.brightnessWritePlan(
-                    for: mappedHardware,
-                    displayID: id
-                ).overlayOpacity ?? 0
-            } else {
-                restoredQuantizationOpacity = 0
-            }
-
             return ControlledDisplay(
                 id: id,
                 storageID: storageID,
@@ -158,9 +147,7 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
                 brightness: appleBrightness.map { Double($0 * 100) }
                     ?? softwareDimming.userBrightness(
                         for: id,
-                        storedUserBrightness: storedBrightness,
-                        hardwareBrightness: ddcBrightness,
-                        restoredQuantizationOpacity: restoredQuantizationOpacity
+                        hardwareBrightness: ddcBrightness
                     )
                     ?? storedBrightness
                     ?? DisplayControlKind.brightness.defaultValue,
@@ -377,11 +364,6 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             cacheBuiltInDisplay(
                 displayID: cachedDisplayID,
                 brightness: restoredBrightnessOverride
-            )
-        } else if let cachedBrightness = defaults.object(forKey: Self.cachedBuiltInBrightnessKey) as? Double {
-            _ = displayServices.setBrightness(
-                displayID: cachedDisplayID,
-                value: Float(cachedBrightness)
             )
         }
         return cachedDisplayID

@@ -330,6 +330,33 @@ struct DisplayDDCBridgeLifecycleTests {
 
 struct DisplayGammaServiceTests {
     @MainActor
+    @Test func discoveryDoesNotApplyDimmingUntilTheUserAdjustsBrightness() async {
+        let displayID: CGDirectDisplayID = 123_456_789
+        let hardware = FakeDisplayGammaHardware(displayID: displayID)
+        let service = DisplaySoftwareDimmingService(gammaHardware: hardware)
+        let display = ControlledDisplay(
+            id: displayID, storageID: "external", name: "External", kind: .externalDDC,
+            isBuiltIn: false, usesNativeBrightness: false, supportsBrightness: true,
+            supportsVolume: false, supportsContrast: false, brightness: 0, volume: 0,
+            contrast: 0, brightnessUnavailableReason: nil, volumeUnavailableReason: nil,
+            contrastUnavailableReason: nil, capabilities: nil
+        )
+
+        #expect(service.userBrightness(for: displayID, hardwareBrightness: 50) == 57.5)
+        service.sync(with: [display])
+        await service.waitForGammaOperations()
+        #expect(hardware.readCounts.isEmpty)
+        #expect(hardware.tables[displayID] == FakeDisplayGammaHardware.identityTable)
+
+        service.setUserBrightness(0, for: displayID)
+        await service.waitForGammaOperations()
+        #expect(hardware.tables[displayID] != FakeDisplayGammaHardware.identityTable)
+        #expect(service.userBrightness(for: displayID, hardwareBrightness: 50) == 0)
+        service.clearAll()
+        await service.waitForGammaOperations()
+    }
+
+    @MainActor
     @Test func softwareDimmingKeepsSlowGammaWritesOffTheUIThreadAndRestoresInOrder() async throws {
         let displayID: CGDirectDisplayID = 123_456_789
         let hardware = FakeDisplayGammaHardware(displayID: displayID)
