@@ -260,6 +260,10 @@ final class MonitorSettings: ObservableObject {
             loadedMetrics[.codex, default: defaultMetricIds(for: .codex)].insert(.activeTasks)
             defaults.set(true, forKey: Keys.codexActiveTasksMetricMigrated)
         }
+        if !defaults.bool(forKey: Keys.codexWeeklyResetMetricMigrated) {
+            loadedMetrics[.codex, default: defaultMetricIds(for: .codex)].insert(.weeklyReset)
+            defaults.set(true, forKey: Keys.codexWeeklyResetMetricMigrated)
+        }
         enabledMetrics = loadedMetrics
 
         let launchAtLoginDesired = defaults.object(forKey: Keys.launchAtLoginDesired) as? Bool
@@ -593,5 +597,6 @@ enum Keys {
     static let visibleKinds = "settings.visibleKinds"
     static let codexVisibilityMigrated = "settings.codexVisibilityMigrated"
     static let codexActiveTasksMetricMigrated = "settings.codex.activeTasksMetricMigrated"
+    static let codexWeeklyResetMetricMigrated = "settings.codex.weeklyResetMetricMigrated"
     static let enabledMetricsPrefix = "settings.enabledMetrics."
 }

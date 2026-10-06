@@ -310,6 +310,21 @@ struct SettingsTests {
         #expect(!reloaded.isMetricEnabled("active-tasks", for: .codex))
     }
 
+    @Test func weeklyResetMetricIsEnabledAndMigratedForExistingCodexSelections() {
+        let suite = "weeklyResetMetricIsEnabledAndMigratedForExistingCodexSelections"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(["five-hour", "five-hour-reset", "weekly"], forKey: "settings.enabledMetrics.codex")
+
+        let migrated = MonitorSettings(defaults: defaults)
+        #expect(migrated.isMetricEnabled("weekly-reset", for: .codex))
+        #expect(migrated.enabledMetrics[.codex]?.contains("weekly-reset") == true)
+
+        migrated.setMetric("weekly-reset", enabled: false, for: .codex)
+        let reloaded = MonitorSettings(defaults: defaults)
+        #expect(!reloaded.isMetricEnabled("weekly-reset", for: .codex))
+    }
+
     @Test func memoryDefaultsShowCompressed() {
         let defaults = UserDefaults(suiteName: "memoryDefaultsShowCompressed")!
         defaults.removePersistentDomain(forName: "memoryDefaultsShowCompressed")

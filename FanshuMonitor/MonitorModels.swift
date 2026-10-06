@@ -156,7 +156,7 @@ nonisolated enum MonitorKind: String, CaseIterable, Identifiable, Sendable {
                 MetricSwitch(id: "five-hour", title: "5H", isDefault: true),
                 MetricSwitch(id: "five-hour-reset", title: String(localized: "metric.codex.five-hour-reset"), isDefault: true),
                 MetricSwitch(id: "weekly", title: String(localized: "metric.codex.weekly"), isDefault: true),
-                MetricSwitch(id: "weekly-reset", title: String(localized: "metric.codex.weekly-reset"), isDefault: false),
+                MetricSwitch(id: "weekly-reset", title: String(localized: "metric.codex.weekly-reset"), isDefault: true),
                 MetricSwitch(id: "active-tasks", title: String(localized: "metric.codex.active-tasks"), isDefault: true),
                 MetricSwitch(id: "reset-credits", title: String(localized: "metric.codex.reset-credits"), isDefault: false),
             ]
