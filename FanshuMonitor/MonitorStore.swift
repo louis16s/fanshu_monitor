@@ -90,6 +90,17 @@ final class MonitorStore: ObservableObject {
         brightnessKeyEventTap = BrightnessKeyEventTap(settings: settings, displayController: displayController)
         configureDisplayControlServices()
         mouseController.configure(settings: settings)
+        NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.configureDisplayControlServices()
+                if !self.displayController.hasExternalScreen {
+                    // Discover once after removal to release old DDC services, even with a closed panel.
+                    self.displayController.refreshAsync()
+                }
+            }
+            .store(in: &cancellables)
         lockScreenController.configure(settings: settings)
         configureTerminationSignalHandler()
         Publishers.MergeMany(
@@ -410,7 +421,8 @@ final class MonitorStore: ObservableObject {
             contrastControlEnabled: settings.displayContrastControlEnabled,
             capabilitiesEnabled: settings.displayCapabilitiesEnabled,
             brightnessKeyInterceptionEnabled: settings.brightnessKeyInterceptionEnabled,
-            needsBuiltInBlackoutMaintenance: displayController.needsBuiltInBlackoutMaintenance
+            needsBuiltInBlackoutMaintenance: displayController.needsBuiltInBlackoutMaintenance,
+            hasExternalDisplay: displayController.hasExternalScreen
         )
         let demandChanged = displayController.applyDemand(demand)
 
@@ -425,7 +437,7 @@ final class MonitorStore: ObservableObject {
             displayController.stopAutomaticRefresh()
         }
 
-        if settings.brightnessKeyInterceptionEnabled {
+        if settings.brightnessKeyInterceptionEnabled && displayController.hasExternalScreen {
             brightnessKeyEventTap?.start()
         } else {
             brightnessKeyEventTap?.stop()

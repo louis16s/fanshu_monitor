@@ -147,6 +147,40 @@ struct PanelExpansionStateTests {
 }
 
 struct DisplayControlDemandPolicyTests {
+    @Test func absentExternalDisplayDoesNotKeepKeyboardOrDDCControlsActive() {
+        let resolved = demand(panelVisible: false, sectionExpanded: true,
+                              interceptBrightnessKeys: true, hasExternalDisplay: false)
+        #expect(!resolved.controllerRequired)
+        #expect(resolved.activeControls.isEmpty)
+        #expect(!resolved.capabilitiesRequested)
+    }
+
+    @Test func builtInPanelKeepsNativeBrightnessButNotExternalControls() {
+        let resolved = demand(panelVisible: true, sectionExpanded: true,
+                              capabilitiesEnabled: true, interceptBrightnessKeys: true,
+                              hasExternalDisplay: false)
+        #expect(resolved.controllerRequired)
+        #expect(resolved.activeControls == [.brightness])
+        #expect(!resolved.capabilitiesRequested)
+    }
+
+    @Test func missingExternalDisplayDoesNotDisableBuiltInRecovery() {
+        let resolved = demand(panelVisible: false, sectionExpanded: false,
+                              hasExternalDisplay: false, needsMaintenance: true)
+        #expect(resolved.controllerRequired)
+        #expect(resolved.activeControls.isEmpty)
+    }
+
+    @Test func reconnectRestoresTheConfiguredExternalDemand() {
+        let absent = demand(panelVisible: false, sectionExpanded: false,
+                            interceptBrightnessKeys: true, hasExternalDisplay: false)
+        let connected = demand(panelVisible: false, sectionExpanded: false,
+                               interceptBrightnessKeys: true, hasExternalDisplay: true)
+        #expect(absent != connected)
+        #expect(connected.controllerRequired)
+        #expect(connected.activeControls == [.brightness])
+    }
+
     @Test func closedPanelDoesNotLoadDisplayControlsWithoutAnExplicitFeatureDemand() {
         let demand = demand(panelVisible: false, sectionExpanded: true)
 
@@ -200,7 +234,9 @@ struct DisplayControlDemandPolicyTests {
         volumeEnabled: Bool = true,
         contrastEnabled: Bool = true,
         capabilitiesEnabled: Bool = true,
-        interceptBrightnessKeys: Bool = false
+        interceptBrightnessKeys: Bool = false,
+        hasExternalDisplay: Bool = true,
+        needsMaintenance: Bool = false
     ) -> DisplayControlDemand {
         DisplayControlDemandPolicy.resolve(
             panelVisible: panelVisible,
@@ -211,7 +247,8 @@ struct DisplayControlDemandPolicyTests {
             contrastControlEnabled: contrastEnabled,
             capabilitiesEnabled: capabilitiesEnabled,
             brightnessKeyInterceptionEnabled: interceptBrightnessKeys,
-            needsBuiltInBlackoutMaintenance: false
+            needsBuiltInBlackoutMaintenance: needsMaintenance,
+            hasExternalDisplay: hasExternalDisplay
         )
     }
 }

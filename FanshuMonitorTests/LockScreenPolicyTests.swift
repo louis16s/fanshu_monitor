@@ -727,7 +727,10 @@ struct LockScreenPolicyTests {
         #expect(probe.nativeRequests == 0)
 
         controller.handleSystemDidWake()
-        try? await Task.sleep(for: .milliseconds(60))
+        for _ in 0..<100 {
+            if probe.assertionAcquisitions > acquisitionsBeforeSleep && probe.nativeRequests == 1 { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
         #expect(probe.assertionAcquisitions > acquisitionsBeforeSleep)
         #expect(probe.nativeRequests == 1)
     }

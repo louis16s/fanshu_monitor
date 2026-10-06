@@ -54,8 +54,18 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         }
 
         let displayIDs = Array(ids.prefix(Int(count)))
+        let kinds = Dictionary(uniqueKeysWithValues: displayIDs.map { ($0, displayClassifier.classify(displayID: $0)) })
+        let ddcDisplayIDs = displayIDs.filter { kinds[$0] == .externalDDC }
         AppLogger.ui.info("Detected \(displayIDs.count) online displays")
-        let ddc = ddcBridge(loadIfNeeded: !activeControls.isEmpty)
+        if ddcDisplayIDs.isEmpty {
+            let previous = configurationLock.withLock {
+                let bridge = storedDDCBridge
+                storedDDCBridge = nil
+                return bridge
+            }
+            previous?.releaseServices()
+        }
+        let ddc = ddcBridge(loadIfNeeded: !ddcDisplayIDs.isEmpty && !activeControls.isEmpty)
         let forceDDCReset: Bool
         if activeControls.isEmpty {
             forceDDCReset = false
@@ -66,11 +76,11 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             }
         }
         if !activeControls.isEmpty {
-            ddc?.refresh(displayIDs: displayIDs, forceReset: forceDDCReset)
+            ddc?.refresh(displayIDs: ddcDisplayIDs, forceReset: forceDDCReset)
         }
 
         return displayIDs.map { id in
-            let displayKind = displayClassifier.classify(displayID: id)
+            let displayKind = kinds[id] ?? displayClassifier.classify(displayID: id)
             let isBuiltIn = displayKind == .builtIn
             let usesNativeBrightness = displayKind == .builtIn || displayKind == .appleNative
             let usesDDC = displayKind == .externalDDC
@@ -196,6 +206,8 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
                 return false
             }
         }
+
+        guard display.kind == .externalDDC, CGDisplayIsOnline(display.id) != 0 else { return false }
 
         var writeValue = value
         if control == .brightness {

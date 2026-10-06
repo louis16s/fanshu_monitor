@@ -28,6 +28,7 @@ final class BrightnessKeyEventTap {
     func start() {
         guard eventTap == nil else { return }
         guard settings?.brightnessKeyInterceptionEnabled == true else { return }
+        guard displayController?.hasExternalScreen == true else { return }
         guard Self.canInterceptBrightnessKeys(
             accessibilityGranted: AXIsProcessTrusted(),
             inputMonitoringGranted: CGPreflightListenEventAccess()
@@ -70,7 +71,8 @@ final class BrightnessKeyEventTap {
     }
 
     func refreshPermissionState() {
-        guard settings?.brightnessKeyInterceptionEnabled == true else {
+        guard settings?.brightnessKeyInterceptionEnabled == true,
+              displayController?.hasExternalScreen == true else {
             stop()
             return
         }

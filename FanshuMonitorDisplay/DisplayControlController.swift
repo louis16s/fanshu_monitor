@@ -28,26 +28,27 @@ nonisolated enum DisplayControlDemandPolicy {
         contrastControlEnabled: Bool,
         capabilitiesEnabled: Bool,
         brightnessKeyInterceptionEnabled: Bool,
-        needsBuiltInBlackoutMaintenance: Bool
+        needsBuiltInBlackoutMaintenance: Bool,
+        hasExternalDisplay: Bool = true
     ) -> DisplayControlDemand {
         let panelControlsActive = panelVisible && displayModuleVisible && displaySectionExpanded
         var activeControls: Set<DisplayControlKind> = []
-        if brightnessKeyInterceptionEnabled || (panelControlsActive && brightnessControlEnabled) {
+        if (hasExternalDisplay && brightnessKeyInterceptionEnabled) || (panelControlsActive && brightnessControlEnabled) {
             activeControls.insert(.brightness)
         }
-        if panelControlsActive && volumeControlEnabled {
+        if hasExternalDisplay && panelControlsActive && volumeControlEnabled {
             activeControls.insert(.volume)
         }
-        if panelControlsActive && contrastControlEnabled {
+        if hasExternalDisplay && panelControlsActive && contrastControlEnabled {
             activeControls.insert(.contrast)
         }
 
         return DisplayControlDemand(
-            controllerRequired: brightnessKeyInterceptionEnabled
+            controllerRequired: (hasExternalDisplay && brightnessKeyInterceptionEnabled)
                 || needsBuiltInBlackoutMaintenance
                 || (panelVisible && displayModuleVisible),
             activeControls: activeControls,
-            capabilitiesRequested: panelControlsActive && capabilitiesEnabled,
+            capabilitiesRequested: hasExternalDisplay && panelControlsActive && capabilitiesEnabled,
             panelControlsActive: panelControlsActive
         )
     }
@@ -55,6 +56,12 @@ nonisolated enum DisplayControlDemandPolicy {
 
 @MainActor
 final class DisplayControlController: ObservableObject {
+    var hasExternalScreen: Bool {
+        NSScreen.screens.contains { screen in
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return false }
+            return CGDisplayIsBuiltin(number.uint32Value) == 0
+        }
+    }
     @Published private(set) var displays: [ControlledDisplay] = []
     @Published private var builtInBlackoutDisplayIDs: Set<CGDirectDisplayID> = []
     @Published private(set) var builtInBlackoutActionFailed = false
@@ -283,6 +290,14 @@ final class DisplayControlController: ObservableObject {
     }
 
     func startAutomaticRefresh() {
+        let needsExternalMonitoring = hasExternalScreen || needsBuiltInBlackoutMaintenance
+        if !needsExternalMonitoring {
+            powerEventBridge?.stop()
+            powerEventBridge = nil
+            hardwareTopologyMonitor?.stop()
+            hardwareTopologyMonitor = nil
+            topologyMaintenanceCoordinator.cancel()
+        }
         if screenChangeObserver == nil {
             screenChangeObserver = NotificationCenter.default.addObserver(
                 forName: NSApplication.didChangeScreenParametersNotification,
@@ -322,7 +337,7 @@ final class DisplayControlController: ObservableObject {
             }
         }
 
-        if powerEventBridge == nil {
+        if needsExternalMonitoring && powerEventBridge == nil {
             let topologyMaintenanceCoordinator = topologyMaintenanceCoordinator
             let bridge = DisplayPowerEventBridge(
                 earlyHandler: { event in
@@ -336,7 +351,7 @@ final class DisplayControlController: ObservableObject {
             bridge.start()
         }
 
-        if hardwareTopologyMonitor == nil {
+        if needsExternalMonitoring && hardwareTopologyMonitor == nil {
             let monitor = DisplayHardwareTopologyMonitor(
                 topologyChanged: { [weak self] event in
                     self?.handleHardwareTopologyEvent(event)
@@ -818,7 +833,6 @@ final class DisplayControlController: ObservableObject {
     }
 
     private func configureNativeBrightnessSync() {
-        stopNativeBrightnessSync()
         guard DisplayNativeBrightnessSyncPolicy.shouldRun(
             panelVisible: controlDemand.panelControlsActive,
             moduleVisible: true,
@@ -827,8 +841,10 @@ final class DisplayControlController: ObservableObject {
                 $0.usesNativeBrightness && $0.supportsBrightness
             }
         ) else {
+            stopNativeBrightnessSync()
             return
         }
+        guard nativeBrightnessSyncTask == nil else { return }
 
         nativeBrightnessSyncGeneration &+= 1
         let generation = nativeBrightnessSyncGeneration

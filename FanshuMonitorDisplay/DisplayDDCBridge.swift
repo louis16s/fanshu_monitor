@@ -54,6 +54,20 @@ nonisolated final class DisplayDDCBridge: @unchecked Sendable {
         }
     }
 
+    func releaseServices() {
+        let ids = stateLock.withLock {
+            let ids = Array(servicesByDisplayID.keys)
+            servicesByDisplayID.removeAll()
+            valueRanges.removeAll()
+            controlCodes.removeAll()
+            return ids
+        }
+        for id in ids {
+            registry.reset(displayID: id)
+            DDCTransport.reset(displayID: id)
+        }
+    }
+
     func hasService(for displayID: CGDirectDisplayID) -> Bool {
         stateLock.withLock { servicesByDisplayID[displayID] != nil }
     }

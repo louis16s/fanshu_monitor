@@ -317,6 +317,17 @@ struct DisplaySoftwareDimmingWindowPolicyTests {
     }
 }
 
+struct DisplayDDCBridgeLifecycleTests {
+    @Test func releasingDDCServicesClearsCachedRangesAndCanRunTwice() {
+        let bridge = DisplayDDCBridge()
+        bridge.setValueRange(DDCValueRange(min: 0, max: 100), for: .brightness, displayID: 1)
+        #expect(bridge.valueRange(for: .brightness, displayID: 1) != nil)
+        bridge.releaseServices()
+        bridge.releaseServices()
+        #expect(bridge.valueRange(for: .brightness, displayID: 1) == nil)
+    }
+}
+
 struct DisplayGammaServiceTests {
     @MainActor
     @Test func softwareDimmingKeepsSlowGammaWritesOffTheUIThreadAndRestoresInOrder() async throws {
