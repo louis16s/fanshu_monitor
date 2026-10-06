@@ -378,7 +378,7 @@ nonisolated private func makeQuotaTimeFormatter() -> DateFormatter {
 nonisolated private func makeQuotaDateFormatter() -> DateFormatter {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "zh_CN")
-    formatter.dateFormat = "yyyy.M.d"
+    formatter.dateFormat = "M.d"
     return formatter
 }
 

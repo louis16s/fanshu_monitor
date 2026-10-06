@@ -798,7 +798,7 @@ struct FanshuMonitorTests {
         #expect(!presentation.hasFiveHourQuota)
         #expect(presentation.progressValue == 80)
         #expect(presentation.weeklyText == "80%")
-        #expect(presentation.weeklyResetText == "2026.7.18")
+        #expect(presentation.weeklyResetText == "7.18")
     }
 
     @Test func codexQuotaPresentationRestoresFiveHourLayoutAutomatically() {
@@ -811,6 +811,13 @@ struct FanshuMonitorTests {
         #expect(presentation.hasFiveHourQuota)
         #expect(presentation.progressValue == 47)
         #expect(presentation.fiveHourText == "47%")
+    }
+
+    @Test func weeklyResetPresentationAcceptsShortDatesAndPreservesMissingValues() {
+        for value in ["7.18", "--", "未提供", "invalid.date"] {
+            let presentation = CodexQuotaPresentation(metrics: [MonitorMetric(name: .weeklyReset, value: value)])
+            #expect(presentation.weeklyResetText == value)
+        }
     }
 
     @Test func codexQuotaPresentationIdentifiesAWeeklyFallback() {

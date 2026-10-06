@@ -318,6 +318,46 @@ struct DisplaySoftwareDimmingWindowPolicyTests {
 }
 
 struct DisplayGammaServiceTests {
+    @MainActor
+    @Test func softwareDimmingKeepsSlowGammaWritesOffTheUIThreadAndRestoresInOrder() async throws {
+        let displayID: CGDirectDisplayID = 123_456_789
+        let hardware = FakeDisplayGammaHardware(displayID: displayID)
+        let gate = DispatchSemaphore(value: 0)
+        let entered = DispatchSemaphore(value: 0)
+        hardware.writeGate = gate
+        hardware.writeEntered = entered
+        let service = DisplaySoftwareDimmingService(gammaHardware: hardware)
+        defer { gate.signal() }
+
+        let start = ContinuousClock.now
+        service.setUserBrightness(0, for: displayID)
+        #expect(start.duration(to: .now) < .milliseconds(500))
+        // A restore must also return while a previous hardware write is blocked.
+        let writeStarted: Bool = await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                continuation.resume(returning: entered.wait(timeout: .now() + 1) == .success)
+            }
+        }
+        #expect(writeStarted)
+        let restoreStart = ContinuousClock.now
+        service.clearAll()
+        #expect(restoreStart.duration(to: .now) < .milliseconds(500))
+        gate.signal()
+        await service.waitForGammaOperations()
+
+        #expect(!hardware.writeWasOnMainThread)
+        #expect(hardware.tables[displayID] == FakeDisplayGammaHardware.identityTable)
+
+        service.setUserBrightness(0, for: displayID)
+        await service.waitForGammaOperations()
+        #expect(hardware.tables[displayID] == FakeDisplayGammaHardware.identityTable.scaled(
+            by: DisplayDimmingCalibration.gammaFactor(forUserBrightness: 0)
+        ))
+        service.suspendForDisplaySleep()
+        await service.waitForGammaOperations()
+        #expect(hardware.tables[displayID] == FakeDisplayGammaHardware.identityTable)
+    }
+
     private let displayID: CGDirectDisplayID = 42
 
     @Test func scalesTheOriginalBaselineInsteadOfThePreviouslyDimmedTable() {
@@ -391,6 +431,9 @@ nonisolated private final class FakeDisplayGammaHardware: DisplayGammaHardware, 
     var tables: [CGDirectDisplayID: DisplayGammaTable]
     var readCounts: [CGDirectDisplayID: Int] = [:]
     var writeShouldFail = false
+    var writeGate: DispatchSemaphore?
+    var writeEntered: DispatchSemaphore?
+    private(set) var writeWasOnMainThread = false
     private(set) var restoreColorSyncCallCount = 0
 
     init(displayID: CGDirectDisplayID) {
@@ -412,6 +455,12 @@ nonisolated private final class FakeDisplayGammaHardware: DisplayGammaHardware, 
     }
 
     func writeTable(_ table: DisplayGammaTable, displayID: CGDirectDisplayID) -> Bool {
+        writeWasOnMainThread = writeWasOnMainThread || Thread.isMainThread
+        if let gate = writeGate {
+            writeGate = nil
+            writeEntered?.signal()
+            _ = gate.wait(timeout: .now() + 2)
+        }
         guard !writeShouldFail else { return false }
         tables[displayID] = table
         return true

@@ -45,12 +45,25 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
     private let dimmingThreshold: Double = DisplayDimmingCalibration.hardwareZeroUserBrightness
     private let maximumOverlayOpacity: Double = DisplayDimmingCalibration.maximumOverlayOpacity
     private let lock = NSLock()
-    private let gamma = DisplayGammaService()
+    private let gamma: DisplayGammaService
+    private let gammaWorkQueue = DispatchQueue(label: "com.fanshu.monitor.dimming-work", qos: .userInitiated)
     private var requestedBrightness: [CGDirectDisplayID: Double] = [:]
     private var quantizationOverlayOpacity: [CGDirectDisplayID: Double] = [:]
     private var requestGenerations: [CGDirectDisplayID: UInt64] = [:]
     private var lifecycleGeneration: UInt64 = 0
     @MainActor private var overlayWindows: [CGDirectDisplayID: NSWindow] = [:]
+
+    init(gammaHardware: any DisplayGammaHardware = SystemDisplayGammaHardware()) {
+        gamma = DisplayGammaService(hardware: gammaHardware)
+    }
+
+    #if DEBUG
+    func waitForGammaOperations() async {
+        await withCheckedContinuation { continuation in
+            gammaWorkQueue.async { continuation.resume() }
+        }
+    }
+    #endif
 
     func userBrightness(
         for displayID: CGDirectDisplayID,
@@ -90,16 +103,15 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         requestedBrightness[displayID] = clamped
         quantizationOverlayOpacity[displayID] = clampedAdditionalOpacity
         let token = nextApplyTokenLocked(for: displayID)
-        lock.unlock()
-
-        Task { @MainActor [weak self] in
-            guard let self, self.isCurrent(token, for: displayID) else { return }
-            self.apply(
+        gammaWorkQueue.async { [weak self] in
+            self?.apply(
                 userBrightness: clamped,
                 additionalOverlayOpacity: clampedAdditionalOpacity,
-                for: displayID
+                for: displayID,
+                token: token
             )
         }
+        lock.unlock()
     }
 
     func sync(with displays: [ControlledDisplay]) {
@@ -124,25 +136,25 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
             )
         }
         let syncLifecycleGeneration = lifecycleGeneration
-        lock.unlock()
-
-        gamma.removeMissingDisplays(
-            keeping: Set(values.keys.filter { CGDisplayIsBuiltin($0) == 0 })
-        )
-
-        Task { @MainActor [weak self] in
-            guard let self else { return }
+        gammaWorkQueue.async { [weak self] in
+            guard let self, self.isCurrent(lifecycleGeneration: syncLifecycleGeneration) else { return }
+            self.gamma.removeMissingDisplays(
+                keeping: Set(values.keys.filter { CGDisplayIsBuiltin($0) == 0 })
+            )
             for request in requests where self.isCurrent(request.token, for: request.displayID) {
                 self.apply(
                     userBrightness: request.brightness,
                     additionalOverlayOpacity: request.opacity,
-                    for: request.displayID
+                    for: request.displayID,
+                    token: request.token
                 )
             }
-            if self.isCurrent(lifecycleGeneration: syncLifecycleGeneration) {
+            Task { @MainActor [weak self] in
+                guard let self, self.isCurrent(lifecycleGeneration: syncLifecycleGeneration) else { return }
                 self.removeMissingWindows(keeping: displayIDs)
             }
         }
+        lock.unlock()
     }
 
     func clear(displayID: CGDirectDisplayID) {
@@ -150,13 +162,16 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         requestedBrightness[displayID] = nil
         quantizationOverlayOpacity[displayID] = nil
         requestGenerations[displayID, default: 0] &+= 1
-        lock.unlock()
-
-        _ = gamma.restore(displayID: displayID)
-
-        Task { @MainActor [weak self] in
-            self?.removeWindow(for: displayID)
+        let token = ApplyToken(lifecycleGeneration: lifecycleGeneration, requestGeneration: requestGenerations[displayID] ?? 0)
+        gammaWorkQueue.async { [weak self] in
+            guard let self else { return }
+            _ = self.gamma.restore(displayID: displayID)
+            Task { @MainActor [weak self] in
+                guard let self, self.isCurrent(token, for: displayID) else { return }
+                self.removeWindow(for: displayID)
+            }
         }
+        lock.unlock()
     }
 
     func clearAll() {
@@ -165,11 +180,8 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         requestedBrightness.removeAll()
         quantizationOverlayOpacity.removeAll()
         requestGenerations.removeAll()
+        enqueueRestoreAllLocked()
         lock.unlock()
-
-        gamma.restoreAll()
-
-        removeAllWindows()
     }
 
     /// Restores the system color pipeline before display sleep while retaining
@@ -177,17 +189,24 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
     func suspendForDisplaySleep() {
         lock.lock()
         lifecycleGeneration &+= 1
+        enqueueRestoreAllLocked()
         lock.unlock()
-
-        gamma.restoreAll()
-        removeAllWindows()
     }
 
-    private func removeAllWindows() {
-        Task { @MainActor [weak self] in
+    // Enqueue under the state lock so restore and apply preserve request order.
+    private func enqueueRestoreAllLocked() {
+        let generation = lifecycleGeneration
+        let generations = requestGenerations
+        gammaWorkQueue.async { [weak self] in
             guard let self else { return }
-            for displayID in Array(self.overlayWindows.keys) {
-                self.removeWindow(for: displayID)
+            self.gamma.restoreAll()
+            Task { @MainActor [weak self] in
+                guard let self, self.isCurrent(lifecycleGeneration: generation) else { return }
+                for displayID in Array(self.overlayWindows.keys) {
+                    if self.hasRequestGeneration(generations[displayID], for: displayID) {
+                        self.removeWindow(for: displayID)
+                    }
+                }
             }
         }
     }
@@ -196,6 +215,12 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return requestedBrightness[displayID]
+    }
+
+    private func hasRequestGeneration(_ generation: UInt64?, for displayID: CGDirectDisplayID) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return requestGenerations[displayID] == generation
     }
 
     private func nextApplyTokenLocked(for displayID: CGDirectDisplayID) -> ApplyToken {
@@ -219,26 +244,34 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         return expected == lifecycleGeneration
     }
 
-    @MainActor
     private func apply(
         userBrightness: Double,
         additionalOverlayOpacity: Double,
-        for displayID: CGDirectDisplayID
+        for displayID: CGDirectDisplayID,
+        token: ApplyToken
     ) {
-        guard CGDisplayIsBuiltin(displayID) == 0 else {
-            removeWindow(for: displayID)
-            return
-        }
-
+        guard isCurrent(token, for: displayID) else { return }
         let gammaFactor = DisplayDimmingCalibration.gammaFactor(
             forUserBrightness: userBrightness,
             additionalOverlayOpacity: additionalOverlayOpacity
         )
-        if gamma.apply(factor: gammaFactor, displayID: displayID) {
+        let gammaApplied = gamma.apply(factor: gammaFactor, displayID: displayID)
+        Task { @MainActor [weak self] in
+            guard let self, self.isCurrent(token, for: displayID) else { return }
+            if gammaApplied {
+                self.removeWindow(for: displayID)
+            } else {
+                self.applyOverlay(userBrightness: userBrightness, additionalOverlayOpacity: additionalOverlayOpacity, for: displayID)
+            }
+        }
+    }
+
+    @MainActor
+    private func applyOverlay(userBrightness: Double, additionalOverlayOpacity: Double, for displayID: CGDirectDisplayID) {
+        guard CGDisplayIsBuiltin(displayID) == 0 else {
             removeWindow(for: displayID)
             return
         }
-
         let baseOpacity = overlayOpacity(for: userBrightness)
         let opacity = 1 - (1 - baseOpacity) * (1 - additionalOverlayOpacity)
         guard opacity > 0.001 else {
@@ -288,7 +321,8 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
 
     @MainActor
     private func removeMissingWindows(keeping displayIDs: Set<CGDirectDisplayID>) {
-        for displayID in Array(overlayWindows.keys) where !displayIDs.contains(displayID) {
+        for displayID in Array(overlayWindows.keys) where !displayIDs.contains(displayID)
+            && cachedBrightness(for: displayID) == nil {
             removeWindow(for: displayID)
         }
     }

@@ -148,7 +148,11 @@ private struct CodexMetricDetailGrid: View {
     let theme: MonitorPanelTheme
 
     private var quotaMetrics: [MonitorMetric] {
-        var result = metrics
+        var result = metrics.map { metric in
+            metric.name == .weeklyReset
+                ? MonitorMetric(name: metric.name, value: presentation.weeklyResetText)
+                : metric
+        }
         if !presentation.hasFiveHourQuota {
             result.removeAll { $0.name == .fiveHour || $0.name == .fiveHourReset }
         }

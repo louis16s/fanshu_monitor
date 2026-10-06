@@ -13,7 +13,7 @@ struct CodexQuotaPresentation: Equatable, Sendable {
         fiveHourText = Self.displayValue(values["five-hour"])
         weeklyPercent = Self.percent(from: values["weekly"])
         weeklyText = Self.displayValue(values["weekly"])
-        weeklyResetText = Self.displayValue(values["weekly-reset"])
+        weeklyResetText = Self.weeklyResetDisplayValue(values["weekly-reset"])
     }
 
     var hasFiveHourQuota: Bool {
@@ -48,5 +48,15 @@ struct CodexQuotaPresentation: Equatable, Sendable {
             return "--"
         }
         return value
+    }
+
+    private static func weeklyResetDisplayValue(_ value: String?) -> String {
+        let text = displayValue(value)
+        let components = text.split(separator: ".")
+        guard components.count == 3, components[0].count == 4,
+              Int(components[0]) != nil,
+              let month = Int(components[1]), (1...12).contains(month),
+              let day = Int(components[2]), (1...31).contains(day) else { return text }
+        return "\(month).\(day)"
     }
 }

@@ -127,7 +127,9 @@ final class DisplayControlController: ObservableObject {
     }
     weak var settings: MonitorSettings? {
         didSet {
-            service.softwareDimmingEnabled = settings?.displaySoftwareDimmingEnabled ?? true
+            let enabled = settings?.displaySoftwareDimmingEnabled ?? true
+            guard service.softwareDimmingEnabled != enabled else { return }
+            service.softwareDimmingEnabled = enabled
             if service.softwareDimmingEnabled {
                 syncSoftwareDimming()
             } else {
