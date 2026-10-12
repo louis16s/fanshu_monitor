@@ -8,6 +8,33 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct WindowResidentContentTests {
+    @Test func rapidReopeningReportsTheCurrentWindowVisibility() async throws {
+        let probe = WindowContentProbe()
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
+            styleMask: [.borderless], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: WindowResidentContent(onVisibilityChanged: {
+            probe.isVisible = $0
+        }) {
+            WindowProbeView(probe: probe)
+        })
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+            window.close()
+        }
+        for _ in 0..<10 {
+            window.orderFront(nil)
+            window.orderOut(nil)
+        }
+        window.orderFront(nil)
+        try await waitUntil { probe.isVisible && probe.mounted == 1 }
+        #expect(window.isVisible)
+        #expect(probe.resource != nil)
+    }
+
     @Test func retainedPanelContentIsReadyBeforeTheWindowBecomesVisible() async throws {
         let probe = WindowContentProbe()
         let window = NSWindow(

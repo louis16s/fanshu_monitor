@@ -108,10 +108,10 @@ private final class PanelWindowVisibilityTrackingView: NSView {
         }
 
         let tracker = WeakPanelWindowVisibilityTracker(self)
-        visibilityObservation = window.observe(\.isVisible, options: [.initial, .new]) { _, change in
+        visibilityObservation = window.observe(\.isVisible, options: [.initial, .new]) { _, _ in
             Task { @MainActor in
                 await Task.yield()
-                tracker.value?.scheduleReport(visible: change.newValue == true)
+                tracker.value?.reportCurrentVisibility()
             }
         }
         NotificationCenter.default.addObserver(

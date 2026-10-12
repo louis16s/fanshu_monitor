@@ -9,9 +9,7 @@ struct SettingsRootView: View {
     @State private var selection: SettingsRoute = .general
 
     var body: some View {
-        WindowResidentContent(onVisibilityChanged: { _ in }) {
-            settingsContent
-        }
+        settingsContent
         .frame(width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height)
         .fixedSize()
         .background(SettingsWindowTracker(selection: $selection))
