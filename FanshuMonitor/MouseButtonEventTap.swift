@@ -6,9 +6,17 @@ final class MouseButtonEventTap {
     private weak var settings: MonitorSettings?
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var isRunning = false
+    private let permissionProvider: () -> Bool
+    private let startOverride: (() -> Bool)?
+    private let stopOverride: (() -> Void)?
 
-    init(settings: MonitorSettings) {
+    init(settings: MonitorSettings, permissionProvider: @escaping () -> Bool = { AXIsProcessTrusted() },
+         startOverride: (() -> Bool)? = nil, stopOverride: (() -> Void)? = nil) {
         self.settings = settings
+        self.permissionProvider = permissionProvider
+        self.startOverride = startOverride
+        self.stopOverride = stopOverride
     }
 
     deinit {
@@ -23,10 +31,25 @@ final class MouseButtonEventTap {
 
     @discardableResult
     func start() -> Bool {
-        guard eventTap == nil else { return true }
-        guard AXIsProcessTrusted() else {
+        guard permissionProvider() else {
+            stop()
             AppLogger.mouse.info("Mouse button tap waiting for Accessibility permission")
             return false
+        }
+        if isRunning {
+            if startOverride != nil { return true }
+            if let eventTap, CFMachPortIsValid(eventTap),
+               runLoopSource.map(CFRunLoopSourceIsValid) == true {
+                if !CGEvent.tapIsEnabled(tap: eventTap) {
+                    CGEvent.tapEnable(tap: eventTap, enable: true)
+                }
+                if CGEvent.tapIsEnabled(tap: eventTap) { return true }
+            }
+            stop()
+        }
+        if let startOverride {
+            isRunning = startOverride()
+            return isRunning
         }
 
         let mask = (1 << CGEventType.otherMouseDown.rawValue)
@@ -45,17 +68,27 @@ final class MouseButtonEventTap {
             return false
         }
 
-        eventTap = tap
-        runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        if let runLoopSource {
-            CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+        guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            CFMachPortInvalidate(tap)
+            AppLogger.mouse.error("Mouse button tap run-loop source creation failed")
+            return false
         }
+        eventTap = tap
+        runLoopSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+        guard CGEvent.tapIsEnabled(tap: tap) else {
+            stop()
+            return false
+        }
+        isRunning = true
         AppLogger.mouse.info("Mouse button tap started")
         return true
     }
 
     func stop() {
+        if isRunning { stopOverride?() }
+        isRunning = false
         if let eventTap {
             CGEvent.tapEnable(tap: eventTap, enable: false)
         }
@@ -76,7 +109,7 @@ final class MouseButtonEventTap {
             stop()
             return
         }
-        guard AXIsProcessTrusted() else {
+        guard permissionProvider() else {
             stop()
             AppLogger.mouse.info("Mouse button tap stopped because Accessibility permission was revoked")
             return

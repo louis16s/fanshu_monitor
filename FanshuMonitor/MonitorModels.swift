@@ -263,11 +263,11 @@ nonisolated struct MonitorModule: Equatable, Identifiable, Sendable {
         case .gpu:
             summary = "0%"
             metrics = [
-                MonitorMetric(name: "gpu-memory", value: "0 B"),
-                MonitorMetric(name: "allocated", value: "0 B"),
-                MonitorMetric(name: "render", value: "0%"),
+                MonitorMetric(name: "gpu-memory", value: "--"),
+                MonitorMetric(name: "allocated", value: "--"),
+                MonitorMetric(name: "render", value: "--"),
                 MonitorMetric(name: "temperature", value: "--"),
-                MonitorMetric(name: "tiler", value: "0%")
+                MonitorMetric(name: "tiler", value: "--")
             ]
             pressure = nil
         case .memory:

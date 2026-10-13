@@ -233,13 +233,14 @@ actor CodexTaskProgressReader {
         let readOffset = initialRead
             ? initialReadOffset(url: candidate.url, fileSize: fileSize)
             : state.offset
-        if initialRead && readOffset > 0 {
-            state.lines.isDroppingPartialLine = true
-        }
         guard let handle = try? FileHandle(forReadingFrom: candidate.url) else { return }
         defer { try? handle.close() }
 
         do {
+            if initialRead && readOffset > 0 {
+                try handle.seek(toOffset: readOffset - 1)
+                state.lines.isDroppingPartialLine = try handle.read(upToCount: 1) != Data([0x0A])
+            }
             try handle.seek(toOffset: readOffset)
             _ = try readChunks(handle: handle, fileSize: fileSize) { data, offset in
                 var lines = state.lines

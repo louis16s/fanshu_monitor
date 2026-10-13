@@ -1,7 +1,55 @@
 import Foundation
 import IOKit
 
-nonisolated final class SMCReader {
+nonisolated protocol SMCTemperatureSource: AnyObject {
+    var isConnectionValid: Bool { get }
+    func cpuTemperature() -> Double?
+    func gpuTemperature() -> Double?
+}
+
+nonisolated final class SMCTemperatureCache {
+    private let makeSource: () -> SMCTemperatureSource?
+    private let now: () -> Date
+    private var source: SMCTemperatureSource?
+    private var retryAt: Date?
+    private var failures = 0
+
+    init(makeSource: @escaping () -> SMCTemperatureSource? = { SMCReader() }, now: @escaping () -> Date = Date.init) {
+        self.makeSource = makeSource
+        self.now = now
+    }
+
+    func temperature(gpu: Bool) -> Double? {
+        guard !Task.isCancelled else { return nil }
+        if source == nil {
+            guard retryAt.map({ now() >= $0 }) ?? true else { return nil }
+            source = makeSource()
+            guard source != nil else {
+                deferReconnect()
+                return nil
+            }
+        }
+        guard let source else { return nil }
+        let value = gpu ? source.gpuTemperature() : source.cpuTemperature()
+        if !source.isConnectionValid {
+            self.source = nil
+            deferReconnect()
+        } else {
+            failures = 0
+            retryAt = nil
+        }
+        guard let value, value.isFinite, value > 0 else { return nil }
+        return value
+    }
+
+    private func deferReconnect() {
+        failures = min(failures + 1, 3)
+        retryAt = now().addingTimeInterval(min(60, 15 * pow(2, Double(failures - 1))))
+    }
+}
+
+nonisolated final class SMCReader: SMCTemperatureSource {
+    private(set) var isConnectionValid = true
     private static let callLock = NSLock()
     private var conn: io_connect_t = 0
     private static let temperatureKeys = [
@@ -41,7 +89,8 @@ nonisolated final class SMCReader {
     private func averageTemperature(for keys: [String]) -> Double? {
         var temperatures: [Double] = []
         for key in keys {
-            if let value = readValue(key) {
+            guard isConnectionValid, !Task.isCancelled else { break }
+            if let value = readValue(key), value.isFinite, value > 0 {
                 temperatures.append(value)
             }
         }
@@ -52,7 +101,7 @@ nonisolated final class SMCReader {
     // MARK: - Private
 
     private func readValue(_ key: String) -> Double? {
-        guard conn != 0 else { return nil }
+        guard conn != 0, isConnectionValid else { return nil }
 
         var input = SMCKeyData_t()
         var output = SMCKeyData_t()
@@ -62,6 +111,7 @@ nonisolated final class SMCReader {
 
         var result = call(2, input: &input, output: &output)
         guard result == kIOReturnSuccess else { return nil }
+        guard output.result == 0 else { return nil }
 
         let dataSize = output.keyInfo.dataSize
         let dataType = output.keyInfo.dataType
@@ -70,6 +120,7 @@ nonisolated final class SMCReader {
         input.keyInfo.dataSize = dataSize
         result = call(2, input: &input, output: &output)
         guard result == kIOReturnSuccess else { return nil }
+        guard output.result == 0 else { return nil }
 
         return parseValue(bytes: output.bytes, dataSize: dataSize, dataType: dataType)
     }
@@ -118,7 +169,15 @@ nonisolated final class SMCReader {
         defer { Self.callLock.unlock() }
         let inputSize = MemoryLayout<SMCKeyData_t>.stride
         var outputSize = MemoryLayout<SMCKeyData_t>.stride
-        return IOConnectCallStructMethod(conn, UInt32(index), &input, inputSize, &output, &outputSize)
+        let result = IOConnectCallStructMethod(conn, UInt32(index), &input, inputSize, &output, &outputSize)
+        // Missing/unsupported keys do not invalidate an otherwise live connection.
+        if result != kIOReturnSuccess,
+           result != kIOReturnNotFound,
+           result != kIOReturnUnsupported,
+           result != kIOReturnBadArgument {
+            isConnectionValid = false
+        }
+        return result
     }
 
     private func fourCharCode(_ str: String) -> UInt32 {

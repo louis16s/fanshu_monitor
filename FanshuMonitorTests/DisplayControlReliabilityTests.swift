@@ -330,6 +330,58 @@ struct DisplayDDCBridgeLifecycleTests {
 
 struct DisplayGammaServiceTests {
     @MainActor
+    @Test func sleepingDimmingRejectsLateSyncAndLateUserWritesUntilResume() async {
+        let id: CGDirectDisplayID = 123_456_789
+        let hardware = FakeDisplayGammaHardware(displayID: id)
+        let service = DisplaySoftwareDimmingService(gammaHardware: hardware)
+        service.setUserBrightness(0, for: id)
+        await service.waitForGammaOperations()
+        service.suspendForDisplaySleep()
+        service.sync(with: [])
+        service.setUserBrightness(5, for: id)
+        await service.waitForGammaOperations()
+        #expect(hardware.tables[id] == FakeDisplayGammaHardware.identityTable)
+        #expect(service.userBrightness(for: id, hardwareBrightness: 0) == 0)
+        service.resumeAfterDisplaySleep()
+        service.sync(with: [])
+        await service.waitForGammaOperations()
+        #expect(hardware.tables[id] == FakeDisplayGammaHardware.identityTable.scaled(by: 0.3))
+        service.clearAll()
+        await service.waitForGammaOperations()
+    }
+
+    @MainActor
+    @Test func onlineMissingDisplayRetainsDimmingRequestButDisconnectedDisplayDropsIt() async {
+        let id: CGDirectDisplayID = 123_456_789
+        let hardware = FakeDisplayGammaHardware(displayID: id)
+        let service = DisplaySoftwareDimmingService(gammaHardware: hardware)
+        service.setUserBrightness(0, for: id)
+        await service.waitForGammaOperations()
+        service.sync(with: [])
+        await service.waitForGammaOperations()
+        #expect(service.userBrightness(for: id, hardwareBrightness: 0) == 0)
+        #expect(hardware.readCounts[id] == 1)
+        hardware.onlineDisplayIDs = []
+        service.sync(with: [])
+        await service.waitForGammaOperations()
+        #expect(service.userBrightness(for: id, hardwareBrightness: 0) == 15)
+        service.clearAll()
+        await service.waitForGammaOperations()
+    }
+
+    @Test func disabledDimmingReadsHardwareCoordinatesEvenWithACachedUserValue() async {
+        let id: CGDirectDisplayID = 123_456_789
+        let hardware = FakeDisplayGammaHardware(displayID: id)
+        let service = DisplaySoftwareDimmingService(gammaHardware: hardware)
+        service.setUserBrightness(100, for: id)
+        await service.waitForGammaOperations()
+        for value in [0.0, 50, 100] {
+            #expect(service.userBrightness(for: id, hardwareBrightness: value, enabled: false) == value)
+        }
+        #expect(service.userBrightness(for: id, hardwareBrightness: nil, enabled: false) == nil)
+    }
+
+    @MainActor
     @Test func discoveryDoesNotApplyDimmingUntilTheUserAdjustsBrightness() async {
         let displayID: CGDirectDisplayID = 123_456_789
         let hardware = FakeDisplayGammaHardware(displayID: displayID)
@@ -1160,6 +1212,134 @@ struct BuiltInDisplayRecoverySnapshotTests {
 
 struct DisplayControlWorkerTests {
     private let key = ControlKey(displayID: 1, control: .brightness)
+
+    @Test func mixedWriteModesEndAtTheLatestKeyboardRequestWithAQueuedSliderWrite() {
+        let worker = DisplayControlWorker()
+        let recorder = ThreadSafeValues()
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        worker.setValue(10, for: key, sequence: 1, mode: .ordered, performWrite: { value in
+            started.signal()
+            _ = release.wait(timeout: .now() + 3)
+            recorder.append(value)
+            return true
+        }, completion: { _ in })
+        #expect(started.wait(timeout: .now() + 1) == .success)
+        worker.setValue(20, for: key, sequence: 2, mode: .coalesced,
+                        performWrite: { recorder.append($0); return true }, completion: { _ in })
+        worker.flushPendingWritesForTesting()
+        worker.setValue(30, for: key, sequence: 3, mode: .ordered,
+                        performWrite: { recorder.append($0); return true }, completion: { _ in finished.signal() })
+        worker.flushPendingWritesForTesting()
+        release.signal()
+        #expect(finished.wait(timeout: .now() + 2) == .success)
+        #expect(recorder.values == [10, 20, 30])
+    }
+
+    @Test func sleepCancellationDropsDebouncedAndQueuedHardwareWrites() {
+        let worker = DisplayControlWorker()
+        let recorder = ThreadSafeValues()
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let drained = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        worker.setValue(10, for: key, sequence: 1, mode: .ordered, performWrite: { value in
+            started.signal()
+            _ = release.wait(timeout: .now() + 3)
+            recorder.append(value)
+            return true
+        }, completion: { _ in })
+        #expect(started.wait(timeout: .now() + 1) == .success)
+        worker.setValue(20, for: key, sequence: 2, mode: .coalesced,
+                        performWrite: { recorder.append($0); return true }, completion: { _ in })
+        worker.flushPendingWritesForTesting()
+        worker.setValue(30, for: key, sequence: 3, mode: .coalesced,
+                        performWrite: { recorder.append($0); return true }, completion: { _ in })
+        worker.cancelPendingWrites()
+        worker.flushPendingWritesForTesting()
+        worker.readNativeBrightness(displayID: key.displayID, performRead: { 0 },
+                                    completion: { _ in drained.signal() })
+        release.signal()
+        #expect(drained.wait(timeout: .now() + 2) == .success)
+        #expect(recorder.values == [10])
+    }
+
+    @Test func latestSliderRequestSupersedesPendingKeyboardRequest() {
+        let worker = DisplayControlWorker()
+        let recorder = ThreadSafeValues()
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        worker.setValue(10, for: key, sequence: 1, mode: .ordered, performWrite: { value in
+            started.signal()
+            _ = release.wait(timeout: .now() + 3)
+            recorder.append(value)
+            return true
+        }, completion: { _ in })
+        #expect(started.wait(timeout: .now() + 1) == .success)
+        worker.setValue(20, for: key, sequence: 2, mode: .ordered,
+                        performWrite: { recorder.append($0); return true }, completion: { _ in })
+        worker.setValue(30, for: key, sequence: 3, mode: .coalesced,
+                        performWrite: { recorder.append($0); return true }, completion: { _ in finished.signal() })
+        worker.flushPendingWritesForTesting()
+        release.signal()
+        #expect(finished.wait(timeout: .now() + 2) == .success)
+        #expect(recorder.values == [10, 30])
+    }
+
+    @Test func cancelledForcedRecoveryDoesNotRetryTopology() {
+        let worker = DisplayControlWorker()
+        let calls = ThreadSafeCount()
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        worker.restoreBuiltInAfterExternalDisconnect(
+            brightnessPercent: 35, forceRestore: true,
+            topologyRetryDelays: [0, 0], brightnessRetryDelays: [0],
+            hasExternalDisplay: { true }, restoreTopology: { brightness in
+                #expect(brightness == 0.35)
+                calls.increment()
+                started.signal()
+                _ = release.wait(timeout: .now() + 3)
+                return nil
+            }, applyBrightness: { _, _ in Issue.record("Cancelled recovery wrote brightness"); return true },
+            completion: { result in #expect(result == .cancelled); finished.signal() }
+        )
+        #expect(started.wait(timeout: .now() + 1) == .success)
+        worker.cancelBuiltInRecovery()
+        release.signal()
+        #expect(finished.wait(timeout: .now() + 2) == .success)
+        #expect(calls.value == 1)
+    }
+
+    @Test func cancelledRecoveryDoesNotRetryBrightness() {
+        let worker = DisplayControlWorker()
+        let calls = ThreadSafeCount()
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        worker.restoreBuiltInAfterExternalDisconnect(
+            brightnessPercent: 35, topologyRetryDelays: [0], brightnessRetryDelays: [0, 0],
+            hasExternalDisplay: { false }, restoreTopology: { _ in 42 },
+            applyBrightness: { brightness, id in
+                #expect(brightness == 0.35 && id == 42)
+                calls.increment()
+                started.signal()
+                _ = release.wait(timeout: .now() + 3)
+                return false
+            }, completion: { result in #expect(result == .cancelled); finished.signal() }
+        )
+        #expect(started.wait(timeout: .now() + 1) == .success)
+        worker.cancelBuiltInRecovery()
+        release.signal()
+        #expect(finished.wait(timeout: .now() + 2) == .success)
+        #expect(calls.value == 1)
+    }
 
     @Test func orderedKeyboardWritesKeepTheActiveAndLatestLevels() {
         let worker = DisplayControlWorker()

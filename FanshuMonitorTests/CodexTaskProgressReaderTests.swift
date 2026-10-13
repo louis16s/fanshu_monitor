@@ -3,6 +3,27 @@ import Testing
 @testable import FanshuMonitor
 
 struct CodexTaskProgressReaderTests {
+    @Test func largeRolloutPreservesAlignedLifecycleAndSkipsPartialLine() async throws {
+        let chunk = 1_024 * 1_024
+        for partial in [false, true] {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let id = "71234567-89ab-cdef-0123-456789abcdef"
+            let rollout = root.appendingPathComponent("rollout-\(id).jsonl")
+            let start = Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"# + "\n").utf8)
+            var tail = partial ? Data("partial\n".utf8) : Data()
+            tail.append(start)
+            tail.append(Data(repeating: 0x0A, count: chunk - tail.count))
+            var data = Data("prefix".utf8)
+            if !partial { data.append(0x0A) }
+            data.append(tail)
+            try data.write(to: rollout)
+            let reader = CodexTaskProgressReader(sessionsRoot: root, sessionIndexURL: root.appendingPathComponent("index"))
+            #expect(await reader.load().map(\.id) == [id])
+        }
+    }
+
     @Test func emptySessionDiscoveryIsCachedForThirtySeconds() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

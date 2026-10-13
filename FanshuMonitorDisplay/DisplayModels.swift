@@ -317,6 +317,7 @@ nonisolated enum BuiltInBlackoutMaintenancePolicy {
 }
 
 nonisolated enum BuiltInDisconnectRecoveryResult: Sendable, Equatable {
+    case cancelled
     case externalDisplayPresent
     case restored(displayID: CGDirectDisplayID)
     case brightnessPending(displayID: CGDirectDisplayID)

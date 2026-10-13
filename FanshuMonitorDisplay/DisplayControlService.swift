@@ -18,6 +18,8 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
     private var storedDDCBridge: DisplayDDCBridge?
     private var storedSoftwareDimmingEnabled = true
     private var shouldResetDDCServiceCache = false
+    private var dimmingLifecycleGeneration: UInt64 = 0
+    private var displaySleeping = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -26,7 +28,12 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
 
     var softwareDimmingEnabled: Bool {
         get { configurationLock.withLock { storedSoftwareDimmingEnabled } }
-        set { configurationLock.withLock { storedSoftwareDimmingEnabled = newValue } }
+        set {
+            configurationLock.withLock {
+                if storedSoftwareDimmingEnabled != newValue { dimmingLifecycleGeneration &+= 1 }
+                storedSoftwareDimmingEnabled = newValue
+            }
+        }
     }
 
     func invalidateDDCServiceCache() {
@@ -147,7 +154,8 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
                 brightness: appleBrightness.map { Double($0 * 100) }
                     ?? softwareDimming.userBrightness(
                         for: id,
-                        hardwareBrightness: ddcBrightness
+                        hardwareBrightness: ddcBrightness,
+                        enabled: softwareDimmingEnabled
                     )
                     ?? storedBrightness
                     ?? DisplayControlKind.brightness.defaultValue,
@@ -181,6 +189,7 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
     }
 
     func setValue(_ value: Double, for control: DisplayControlKind, display: ControlledDisplay) -> Bool {
+        let generation = configurationLock.withLock { dimmingLifecycleGeneration }
         guard display.supports(control) else {
             return false
         }
@@ -208,12 +217,16 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         guard let ddc = ddcBridge(loadIfNeeded: true) else { return false }
         let outcome = ddc.write(writeValue, for: control, displayID: display.id)
         if outcome.success {
-            if control == .brightness, softwareDimmingEnabled {
-                softwareDimming.setUserBrightness(
-                    value,
-                    for: display.id,
-                    additionalOverlayOpacity: outcome.quantizationOverlayOpacity
-                )
+            if control == .brightness {
+                configurationLock.withLock {
+                    guard !displaySleeping, generation == dimmingLifecycleGeneration,
+                          storedSoftwareDimmingEnabled else { return }
+                    softwareDimming.setUserBrightness(
+                        value,
+                        for: display.id,
+                        additionalOverlayOpacity: outcome.quantizationOverlayOpacity
+                    )
+                }
             }
             if control == .brightness,
                let range = ddc.valueRange(for: .brightness, displayID: display.id) {
@@ -249,12 +262,28 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
         softwareDimming.sync(with: displays)
     }
 
+    var hasSoftwareDimmingRequests: Bool { softwareDimming.hasRequests }
+
     func clearSoftwareDimming() {
-        softwareDimming.clearAll()
+        configurationLock.withLock {
+            dimmingLifecycleGeneration &+= 1
+            softwareDimming.clearAll()
+        }
     }
 
     func suspendSoftwareDimmingForDisplaySleep() {
-        softwareDimming.suspendForDisplaySleep()
+        configurationLock.withLock {
+            displaySleeping = true
+            dimmingLifecycleGeneration &+= 1
+            softwareDimming.suspendForDisplaySleep()
+        }
+    }
+
+    func resumeSoftwareDimmingAfterDisplaySleep() {
+        configurationLock.withLock {
+            displaySleeping = false
+            softwareDimming.resumeAfterDisplaySleep()
+        }
     }
 
     func setBuiltInBlackout(_ enabled: Bool, display: ControlledDisplay, displays: [ControlledDisplay]) -> Bool {

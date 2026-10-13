@@ -35,6 +35,7 @@ final class MonitorStore: ObservableObject {
     private var samplerResidencyRequestID: UInt64 = 0
     private var codexRefreshTask: Task<Void, Never>?
     private var codexResetRefreshTask: Task<Void, Never>?
+    private var codexRetryRefreshTask: Task<Void, Never>?
     private var codexTaskProgressTask: Task<Void, Never>?
     private var codexTaskProgressTimerCancellable: AnyCancellable?
     private lazy var codexTaskProgressReader = CodexTaskProgressReader()
@@ -192,6 +193,8 @@ final class MonitorStore: ObservableObject {
                     self.codexRefreshTask = nil
                     self.codexResetRefreshTask?.cancel()
                     self.codexResetRefreshTask = nil
+                    self.codexRetryRefreshTask?.cancel()
+                    self.codexRetryRefreshTask = nil
                 }
                 let activeKinds = self.activeSamplingKinds
                 self.cancelSamplingTask()
@@ -240,6 +243,7 @@ final class MonitorStore: ObservableObject {
         samplerResidencyTask?.cancel()
         codexRefreshTask?.cancel()
         codexResetRefreshTask?.cancel()
+        codexRetryRefreshTask?.cancel()
         codexTaskProgressTask?.cancel()
         codexTaskProgressTimerCancellable?.cancel()
         timerCancellable?.cancel()
@@ -528,6 +532,10 @@ final class MonitorStore: ObservableObject {
 
     private func syncSamplerResidency() {
         let activeKinds = activeSamplingKinds
+        if !activeKinds.contains(.codex) {
+            codexRetryRefreshTask?.cancel()
+            codexRetryRefreshTask = nil
+        }
         samplerResidencyRequestID &+= 1
         let requestID = samplerResidencyRequestID
         samplerResidencyTask?.cancel()
@@ -579,7 +587,24 @@ final class MonitorStore: ObservableObject {
             self.refreshSchedule.setInterval(result.refreshInterval, for: .codex)
             self.mergeSampledModule(result.module)
             self.scheduleCodexResetRefresh(at: result.scheduledResetRefreshDate)
+            self.scheduleCodexRetryRefresh(at: result.scheduledRetryRefreshDate)
             self.refreshCodexTaskProgress()
+        }
+    }
+
+    private func scheduleCodexRetryRefresh(at date: Date?) {
+        codexRetryRefreshTask?.cancel()
+        codexRetryRefreshTask = nil
+        guard activeSamplingKinds.contains(.codex), let date else { return }
+        codexRetryRefreshTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(max(0, date.timeIntervalSinceNow)))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, let self,
+                  self.activeSamplingKinds.contains(.codex) else { return }
+            self.refreshCodexUsage(force: false)
         }
     }
 

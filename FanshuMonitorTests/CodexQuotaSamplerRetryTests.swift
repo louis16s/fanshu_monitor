@@ -3,6 +3,34 @@ import Testing
 @testable import FanshuMonitor
 
 struct CodexQuotaSamplerRetryTests {
+    @Test func coordinatorReturnsIndependentRetryDeadline() async throws {
+        let auth = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data(#"{"tokens":{"access_token":"fake"}}"#.utf8).write(to: auth)
+        defer { try? FileManager.default.removeItem(at: auth) }
+        let clock = CodexRetryClock()
+        let counter = CodexRetryCounter()
+        let client = CodexUsageClient(authFileURL: auth, transport: { request in
+            if counter.increment() <= 3 { throw URLError(.timedOut) }
+            let response = try #require(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (Data(#"{"rate_limit":{"primary_window":{"used_percent":20}}}"#.utf8), response)
+        })
+        let sampler = CodexQuotaSampler(client: client, now: clock.now, saveReport: { _ in })
+        let coordinator = SamplingCoordinator(codexSampler: sampler)
+        for delay in [15.0, 30.0, 60.0] {
+            let result = try #require(await coordinator.refreshCodex(previous: nil, force: false, refreshInterval: 600))
+            #expect(result.refreshInterval == 600)
+            #expect(result.scheduledRetryRefreshDate == clock.now().addingTimeInterval(delay))
+            _ = await coordinator.refreshCodex(previous: result.module, force: false, refreshInterval: 600)
+            clock.advance(by: delay)
+        }
+        #expect(counter.value == 3)
+        let recovered = try #require(await coordinator.refreshCodex(previous: nil, force: false, refreshInterval: 600))
+        #expect(recovered.scheduledRetryRefreshDate == nil)
+        #expect(recovered.refreshInterval == 600)
+        await sampler.release()
+        #expect(await sampler.scheduledRetryRefreshDate() == nil)
+    }
+
     @Test func accountSelectionAndFailedResetUseExistingBackoff() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

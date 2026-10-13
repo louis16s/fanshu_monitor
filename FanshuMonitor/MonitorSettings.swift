@@ -240,12 +240,16 @@ final class MonitorSettings: ObservableObject {
             var migratedKinds = Set(kinds)
             if !defaults.bool(forKey: Keys.codexVisibilityMigrated) {
                 migratedKinds.insert(.codex)
+                defaults.set(migratedKinds.map(\.rawValue).sorted(), forKey: Keys.visibleKinds)
                 defaults.set(true, forKey: Keys.codexVisibilityMigrated)
             }
             visibleKinds = migratedKinds
         } else {
             visibleKinds = Set(MonitorKind.allCases)
-            defaults.set(true, forKey: Keys.codexVisibilityMigrated)
+            if !defaults.bool(forKey: Keys.codexVisibilityMigrated) {
+                defaults.set(visibleKinds.map(\.rawValue).sorted(), forKey: Keys.visibleKinds)
+                defaults.set(true, forKey: Keys.codexVisibilityMigrated)
+            }
         }
 
         var loadedMetrics: [MonitorKind: Set<MetricID>] = [:]
@@ -254,15 +258,23 @@ final class MonitorSettings: ObservableObject {
             if let stored = defaults.array(forKey: key) as? [String] {
                 let migrated = migrateMetrics(stored, for: kind)
                 loadedMetrics[kind] = Set(migrated)
+                if Set(stored) != Set(migrated.map(\.rawValue)) {
+                    defaults.set(migrated.map(\.rawValue).sorted(), forKey: key)
+                }
             }
         }
-        if !defaults.bool(forKey: Keys.codexActiveTasksMetricMigrated) {
+        let migrateActiveTasks = !defaults.bool(forKey: Keys.codexActiveTasksMetricMigrated)
+        let migrateWeeklyReset = !defaults.bool(forKey: Keys.codexWeeklyResetMetricMigrated)
+        if migrateActiveTasks {
             loadedMetrics[.codex, default: defaultMetricIds(for: .codex)].insert(.activeTasks)
-            defaults.set(true, forKey: Keys.codexActiveTasksMetricMigrated)
         }
-        if !defaults.bool(forKey: Keys.codexWeeklyResetMetricMigrated) {
+        if migrateWeeklyReset {
             loadedMetrics[.codex, default: defaultMetricIds(for: .codex)].insert(.weeklyReset)
-            defaults.set(true, forKey: Keys.codexWeeklyResetMetricMigrated)
+        }
+        if migrateActiveTasks || migrateWeeklyReset {
+            defaults.set(loadedMetrics[.codex]?.map(\.rawValue).sorted(), forKey: Keys.enabledMetricsPrefix + MonitorKind.codex.rawValue)
+            if migrateActiveTasks { defaults.set(true, forKey: Keys.codexActiveTasksMetricMigrated) }
+            if migrateWeeklyReset { defaults.set(true, forKey: Keys.codexWeeklyResetMetricMigrated) }
         }
         enabledMetrics = loadedMetrics
 
@@ -509,7 +521,7 @@ final class MonitorSettings: ObservableObject {
             .map(\.id)
             .filter(result.contains)
 
-        if filtered.isEmpty {
+        if filtered.isEmpty && !ids.isEmpty {
             return Array(defaultMetricIds(for: kind))
         }
 

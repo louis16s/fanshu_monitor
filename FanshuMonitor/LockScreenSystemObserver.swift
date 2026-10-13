@@ -28,16 +28,23 @@ final class LockScreenSystemObserver {
     private var sessionWatchdogTimer: Timer?
     private var powerSourceRunLoopSource: CFRunLoopSource?
     private var powerSourceHandler: Handler?
+    private let powerObservationOverride: ((Bool) -> Void)?
+    private let observesSystemNotifications: Bool
+
+    init(observesSystemNotifications: Bool = true, powerObservationOverride: ((Bool) -> Void)? = nil) {
+        self.observesSystemNotifications = observesSystemNotifications
+        self.powerObservationOverride = powerObservationOverride
+    }
 
     func start(using handlers: Handlers) {
+        powerSourceHandler = handlers.powerSourceChanged
+        setPowerSourceObserving(true)
+        guard observesSystemNotifications else { return }
         guard workspaceObservers.isEmpty,
               systemObservers.isEmpty,
               distributedObservers.isEmpty else {
             return
         }
-
-        powerSourceHandler = handlers.powerSourceChanged
-        setPowerSourceObserving(true)
 
         let workspaceCenter = NSWorkspace.shared.notificationCenter
         workspaceObservers = [
@@ -91,6 +98,10 @@ final class LockScreenSystemObserver {
     }
 
     func setPowerSourceObserving(_ enabled: Bool) {
+        if let powerObservationOverride {
+            powerObservationOverride(enabled)
+            return
+        }
         if !enabled {
             if let powerSourceRunLoopSource {
                 CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)

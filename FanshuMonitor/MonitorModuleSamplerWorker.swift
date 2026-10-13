@@ -7,17 +7,18 @@ actor MonitorModuleSamplerWorker {
     let kind: MonitorKind
     private let sampler: MonitorSampler
 
-    init(kind: MonitorKind) {
+    init(kind: MonitorKind, sampler: MonitorSampler? = nil) {
         self.kind = kind
-        sampler = Self.makeSampler(for: kind)
+        self.sampler = sampler ?? Self.makeSampler(for: kind)
         AppLogger.sampler.debug("Loaded sampler for \(kind.rawValue, privacy: .public)")
     }
 
     func sample(
         previous: MonitorModule?,
         context: MonitorSamplingContext
-    ) -> MonitorModule {
-        autoreleasepool {
+    ) -> MonitorModule? {
+        guard !Task.isCancelled else { return nil }
+        return autoreleasepool {
             var module = sampler.sample(previous: previous, context: context)
             if let previous {
                 module.samples = Array(

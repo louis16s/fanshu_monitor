@@ -7,14 +7,14 @@ nonisolated final class CPUSampler: MonitorSampler {
     var kind: MonitorKind { .cpu }
 
     private var previousCPUInfo: host_cpu_load_info?
-    private lazy var smcReader: SMCReader? = SMCReader()
+    private let temperatures = SMCTemperatureCache()
 
     func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
         let info = hostCPULoadInfo()
         let metrics: [MonitorMetric]
         let total: Double
         let temperature = context.shouldCollectExpensiveMetric("temperature")
-            ? cpuTemperatureText()
+            ? Self.temperatureText(temperatures.temperature(gpu: false), previous: previous)
             : previous?.metrics.first { $0.name == "temperature" }?.value ?? "--"
 
         if let info, let previousCPUInfo {
@@ -74,7 +74,15 @@ nonisolated final class CPUSampler: MonitorSampler {
         return info
     }
 
-    private func cpuTemperatureText() -> String {
-        smcReader?.cpuTemperature().map { "\(String(format: "%.0f", $0))°C" } ?? "--"
+    static func temperatureText(_ value: Double?, previous: MonitorModule?) -> String {
+        if let value, value.isFinite, value > 0 {
+            return "\(String(format: "%.0f", value))°C"
+        }
+        guard let text = previous?.metrics.first(where: { $0.name == "temperature" })?.value,
+              text.hasSuffix("°C"),
+              let oldValue = Double(text.dropLast(2)), oldValue.isFinite, oldValue > 0 else {
+            return "--"
+        }
+        return text
     }
 }

@@ -13,6 +13,18 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
     private var suspensionWaiters: [CheckedContinuation<Void, Never>] = []
     private var deviceOperationSuspensionCount = 0
     private var shouldResumeAfterDeviceOperation = false
+    private let workerOverride: (@Sendable () -> Void)?
+    private let restartScheduler: @Sendable (TimeInterval, @escaping @Sendable () -> Void) -> Void
+
+    init(
+        workerOverride: (@Sendable () -> Void)? = nil,
+        restartScheduler: @escaping @Sendable (TimeInterval, @escaping @Sendable () -> Void) -> Void = { delay, action in
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: action)
+        }
+    ) {
+        self.workerOverride = workerOverride
+        self.restartScheduler = restartScheduler
+    }
 
     deinit {
         stop()
@@ -38,7 +50,11 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
     private func launchWorker() {
         queue.async { [weak self] in
             guard let self else { return }
-            self.listen()
+            if let workerOverride = self.workerOverride {
+                workerOverride()
+            } else {
+                self.listen()
+            }
             self.workerDidExit()
         }
     }
@@ -146,6 +162,10 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
         stateLock.withLock { desiredRunning }
     }
 
+    var hasPendingDeviceOperation: Bool {
+        stateLock.withLock { !suspensionWaiters.isEmpty }
+    }
+
     private func workerDidExit() {
         let result = stateLock.withLock { () -> (TimeInterval?, [CheckedContinuation<Void, Never>]) in
             workerActive = false
@@ -160,13 +180,15 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
         }
         result.1.forEach { $0.resume() }
         if let restartDelay = result.0 {
-            queue.asyncAfter(deadline: .now() + restartDelay) { [weak self] in
+            restartScheduler(restartDelay) { [weak self] in
                 guard let self else { return }
-                guard self.shouldContinue else {
-                    self.stateLock.withLock { self.workerActive = false }
-                    return
+                self.queue.async {
+                    guard self.shouldContinue else {
+                        self.workerDidExit()
+                        return
+                    }
+                    self.launchWorker()
                 }
-                self.launchWorker()
             }
         }
     }

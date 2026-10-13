@@ -471,6 +471,164 @@ struct UpdateCheckerTests {
         #expect(UpdateChecker.resolveDownloadURL(from: release) == releaseURL)
     }
 
+    @Test(arguments: ["{}", "invalid", "1..2", "1.2oops", "999999999999999999999999"])
+    func invalidResponsePreservesValidCacheThenUses304(_ invalidVersion: String) async {
+        let suffix = "preserveCache.\(invalidVersion)"
+        let defaults = isolatedDefaults(suffix)
+        defer { defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.\(suffix)") }
+        let valid = releaseData()
+        let invalid = invalidVersion == "{}" ? Data("{}".utf8) : releaseData(version: invalidVersion)
+        var count = 0
+        let checker = UpdateChecker(currentVersionProvider: { "1.0.0" }, defaults: defaults, dataLoader: { request in
+            count += 1
+            if count > 1 {
+                #expect(request.value(forHTTPHeaderField: "If-None-Match") == "good")
+            }
+            return (
+                count == 1 ? valid : (count == 2 ? invalid : Data()),
+                HTTPURLResponse(url: request.url!, statusCode: count == 3 ? 304 : 200,
+                                httpVersion: nil, headerFields: ["ETag": count == 1 ? "good" : "bad"])!
+            )
+        })
+        await checker.checkForUpdates()
+        let stable = checker.state
+        await checker.checkForUpdates()
+        #expect(checker.lastError != nil)
+        #expect(defaults.data(forKey: "updates.releasePayload") == valid)
+        #expect(defaults.string(forKey: "updates.releaseETag") == "good")
+        await checker.checkForUpdates()
+        #expect(count == 3)
+        #expect(checker.state == stable)
+        #expect(checker.lastError == nil)
+        #expect(UpdateChecker(currentVersionProvider: { "1.0.0" }, defaults: defaults).state == stable)
+    }
+
+    @Test func successfulResponseWithoutETagRemovesOldConditionalHeader() async {
+        let suffix = "removeETag"
+        let defaults = isolatedDefaults(suffix)
+        defer { defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.\(suffix)") }
+        var count = 0
+        let checker = UpdateChecker(currentVersionProvider: { "1.0.0" }, defaults: defaults, dataLoader: { request in
+            count += 1
+            #expect(request.value(forHTTPHeaderField: "If-None-Match") == (count == 2 ? "old" : nil))
+            return (releaseData(version: count == 1 ? "v1.1.0" : "v1.2.0"),
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                                    headerFields: count == 1 ? ["ETag": "old"] : nil)!)
+        })
+        await checker.checkForUpdates()
+        await checker.checkForUpdates()
+        #expect(defaults.string(forKey: "updates.releaseETag") == nil)
+        #expect(defaults.data(forKey: "updates.releasePayload") == releaseData(version: "v1.2.0"))
+        await checker.checkForUpdates()
+        #expect(count == 3)
+    }
+
+    @Test(arguments: ["missing", "decode", "version", "url"])
+    func invalid304CacheRetriesUnconditionallyOnce(_ kind: String) async {
+        let suffix = "retry304.\(kind)"
+        let defaults = isolatedDefaults(suffix)
+        defer { defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.\(suffix)") }
+        defaults.set("https://api.github.com/repos/louis16s/fanshu_monitor/releases/latest", forKey: "updates.releaseSource")
+        defaults.set("stale", forKey: "updates.releaseETag")
+        switch kind {
+        case "decode": defaults.set(Data("{}".utf8), forKey: "updates.releasePayload")
+        case "version": defaults.set(releaseData(version: "invalid"), forKey: "updates.releasePayload")
+        case "url": defaults.set(releaseData(url: "file:///tmp/update.zip"), forKey: "updates.releasePayload")
+        default: break
+        }
+        var count = 0
+        let checker = UpdateChecker(currentVersionProvider: { "1.0.0" }, defaults: defaults, dataLoader: { request in
+            count += 1
+            #expect(request.value(forHTTPHeaderField: "If-None-Match") == (count == 1 ? "stale" : nil))
+            return (count == 1 ? Data() : releaseData(),
+                    HTTPURLResponse(url: request.url!, statusCode: count == 1 ? 304 : 200,
+                                    httpVersion: nil, headerFields: ["ETag": "fresh"])!)
+        })
+        #expect(checker.state == .idle)
+        await checker.checkForUpdates()
+        #expect(count == 2)
+        #expect(checker.lastError == nil)
+        #expect(defaults.string(forKey: "updates.releaseETag") == "fresh")
+        #expect(defaults.data(forKey: "updates.releasePayload") == releaseData())
+    }
+
+    @Test func repeated304StopsAfterOneUnconditionalRetry() async {
+        let suffix = "bounded304"
+        let defaults = isolatedDefaults(suffix)
+        defer { defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.\(suffix)") }
+        var count = 0
+        let checker = UpdateChecker(defaults: defaults, dataLoader: { request in
+            count += 1
+            #expect(request.value(forHTTPHeaderField: "If-None-Match") == nil)
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 304, httpVersion: nil, headerFields: nil)!)
+        })
+        await checker.checkForUpdates()
+        #expect(count == 2)
+        #expect(checker.state == .failed(String(localized: "update.parse-failed")))
+    }
+
+    @Test(arguments: [
+        "file:///tmp/update.zip",
+        "http://github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0",
+        "custom://github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0",
+        "https://github.com/test/test/releases/tag/v1.1.0",
+        "https://github.com/louis16s/fanshu_monitor-other/releases/tag/v1.1.0",
+        "https://github.com.evil.example/louis16s/fanshu_monitor/releases/tag/v1.1.0",
+        "https://user@github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0",
+        "https://github.com/louis16s/fanshu_monitor/releases/tag/%2e%2e",
+        "https://github.com/louis16s/fanshu_monitor/releases/tag/v1%2fother"
+    ])
+    func unsafeDownloadLinksAreRejectedByNetworkAndCache(_ url: String) async {
+        for asset in [false, true] {
+            let suffix = "unsafeURL.\(url.hashValue).\(asset)"
+            let defaults = isolatedDefaults(suffix)
+            defer { defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.\(suffix)") }
+            let data = releaseData(url: url, asset: asset)
+            let release = try? JSONDecoder().decode(GitHubRelease.self, from: data)
+            #expect(release != nil)
+            if let release { #expect(UpdateChecker.resolveDownloadURL(from: release) == nil) }
+            defaults.set("https://api.github.com/repos/louis16s/fanshu_monitor/releases/latest", forKey: "updates.releaseSource")
+            defaults.set(data, forKey: "updates.releasePayload")
+            let checker = UpdateChecker(currentVersionProvider: { "1.0.0" }, defaults: defaults, dataLoader: { request in
+                (data, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["ETag": "unsafe"])!)
+            })
+            #expect(checker.state == .idle)
+            defaults.removeObject(forKey: "updates.releasePayload")
+            await checker.checkForUpdates()
+            #expect(checker.state == .failed(String(localized: "update.parse-failed")))
+            #expect(defaults.data(forKey: "updates.releasePayload") == nil)
+            #expect(defaults.string(forKey: "updates.releaseETag") == nil)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func officialDownloadLinksSurviveNetworkCheckAndCacheRestore(_ asset: Bool) async {
+        let suffix = "officialURL.\(asset)"
+        let defaults = isolatedDefaults(suffix)
+        defer { defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.\(suffix)") }
+        let data = releaseData(asset: asset)
+        let checker = UpdateChecker(currentVersionProvider: { "1.0.0" }, defaults: defaults, dataLoader: { request in
+            (data, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        })
+        await checker.checkForUpdates()
+        let expectedURL = URL(string: asset
+            ? "https://github.com/louis16s/fanshu_monitor/releases/download/v1.1.0/FanshuMonitor.zip"
+            : "https://github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0")!
+        #expect(checker.state == .updateAvailable(latestVersion: "1.1.0", publishedAt: nil,
+                                                downloadURL: expectedURL, releaseNotes: nil))
+        #expect(UpdateChecker(currentVersionProvider: { "1.0.0" }, defaults: defaults).state == checker.state)
+    }
+
+    private func releaseData(version: String = "v1.1.0", url: String? = nil, asset: Bool = false) -> Data {
+        let page = "https://github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0"
+        var payload: [String: Any] = ["tag_name": version, "html_url": asset ? page : (url ?? page)]
+        if asset {
+            payload["assets"] = [["name": "FanshuMonitor.zip", "browser_download_url": url ??
+                "https://github.com/louis16s/fanshu_monitor/releases/download/v1.1.0/FanshuMonitor.zip"]]
+        }
+        return try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    }
+
     private func isolatedDefaults(_ suffix: String) -> UserDefaults {
         let suiteName = "FanshuMonitorTests.UpdateChecker.\(suffix)"
         let defaults = UserDefaults(suiteName: suiteName)!

@@ -52,6 +52,33 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
     )?
     private let debounceInterval: DispatchTimeInterval = .milliseconds(150)
     private let discoveryCacheInterval: TimeInterval = 2
+    private let lifecycleLock = NSLock()
+    private var writeGeneration: UInt64 = 0
+    private var recoveryGeneration: UInt64 = 0
+
+    func cancelPendingWrites() {
+        lifecycleLock.withLock { writeGeneration &+= 1 }
+        stateQueue.async {
+            for key in Array(self.pendingWrites.keys) { self.cancelPendingWrite(for: key) }
+            self.latestOrderedWrites.removeAll()
+        }
+    }
+
+    func cancelBuiltInRecovery() {
+        lifecycleLock.withLock { recoveryGeneration &+= 1 }
+    }
+
+    #if DEBUG
+    func flushPendingWritesForTesting() {
+        stateQueue.sync {
+            for key in Array(pendingWrites.keys) {
+                guard let request = pendingWrites[key] else { continue }
+                cancelPendingWrite(for: key)
+                perform(request, for: key)
+            }
+        }
+    }
+    #endif
 
     func refresh(
         service: DisplayControlService,
@@ -223,6 +250,10 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         applyBrightness: @escaping @Sendable (Float, CGDirectDisplayID) -> Bool,
         completion: @escaping @Sendable (BuiltInDisconnectRecoveryResult) -> Void
     ) {
+        let generation = lifecycleLock.withLock { recoveryGeneration }
+        let shouldContinue: @Sendable () -> Bool = { [self] in
+            lifecycleLock.withLock { recoveryGeneration == generation }
+        }
         topologyQueue.async {
             let brightness = Float(min(100, max(0, brightnessPercent)) / 100)
             self.restoreBuiltInTopology(
@@ -234,6 +265,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
                 hasExternalDisplay: hasExternalDisplay,
                 restoreTopology: restoreTopology,
                 applyBrightness: applyBrightness,
+                shouldContinue: shouldContinue,
                 completion: completion
             )
         }
@@ -248,6 +280,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         hasExternalDisplay: @escaping @Sendable () -> Bool,
         restoreTopology: @escaping @Sendable (Float) -> CGDirectDisplayID?,
         applyBrightness: @escaping @Sendable (Float, CGDirectDisplayID) -> Bool,
+        shouldContinue: @escaping @Sendable () -> Bool,
         completion: @escaping @Sendable (BuiltInDisconnectRecoveryResult) -> Void
     ) {
         guard retryIndex < topologyRetryDelays.count else {
@@ -255,6 +288,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
             return
         }
         topologyQueue.asyncAfter(deadline: .now() + topologyRetryDelays[retryIndex]) {
+            guard shouldContinue() else { completion(.cancelled); return }
             guard forceRestore || !hasExternalDisplay() else {
                 completion(.externalDisplayPresent)
                 return
@@ -269,6 +303,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
                     hasExternalDisplay: hasExternalDisplay,
                     restoreTopology: restoreTopology,
                     applyBrightness: applyBrightness,
+                    shouldContinue: shouldContinue,
                     completion: completion
                 )
                 return
@@ -279,6 +314,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
                 retryIndex: 0,
                 retryDelays: brightnessRetryDelays,
                 applyBrightness: applyBrightness,
+                shouldContinue: shouldContinue,
                 completion: completion
             )
         }
@@ -290,6 +326,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         retryIndex: Int,
         retryDelays: [TimeInterval],
         applyBrightness: @escaping @Sendable (Float, CGDirectDisplayID) -> Bool,
+        shouldContinue: @escaping @Sendable () -> Bool,
         completion: @escaping @Sendable (BuiltInDisconnectRecoveryResult) -> Void
     ) {
         guard retryIndex < retryDelays.count else {
@@ -297,6 +334,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
             return
         }
         topologyQueue.asyncAfter(deadline: .now() + retryDelays[retryIndex]) {
+            guard shouldContinue() else { completion(.cancelled); return }
             if applyBrightness(brightness, displayID) {
                 completion(.restored(displayID: displayID))
             } else {
@@ -306,6 +344,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
                     retryIndex: retryIndex + 1,
                     retryDelays: retryDelays,
                     applyBrightness: applyBrightness,
+                    shouldContinue: shouldContinue,
                     completion: completion
                 )
             }
@@ -344,7 +383,13 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         performWrite: @escaping @Sendable (Double) -> Bool,
         completion: @escaping @Sendable (DisplayWriteResult) -> Void
     ) {
+        let generation = lifecycleLock.withLock { writeGeneration }
+        let validWrite: @Sendable (Double) -> Bool = { [self] value in
+            guard lifecycleLock.withLock({ writeGeneration == generation }) else { return false }
+            return performWrite(value)
+        }
         stateQueue.async {
+            guard self.lifecycleLock.withLock({ self.writeGeneration == generation }) else { return }
             switch mode {
             case .ordered:
                 self.cancelPendingWrite(for: key)
@@ -352,7 +397,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
                     PendingWrite(
                         value: value,
                         sequence: sequence,
-                        performWrite: performWrite,
+                        performWrite: validWrite,
                         completion: completion
                     ),
                     for: key
@@ -363,7 +408,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
                     PendingWrite(
                         value: value,
                         sequence: sequence,
-                        performWrite: performWrite,
+                        performWrite: validWrite,
                         completion: completion
                     ),
                     for: key

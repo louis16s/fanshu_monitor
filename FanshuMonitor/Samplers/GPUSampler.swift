@@ -5,11 +5,19 @@ import OSLog
 
 nonisolated final class GPUSampler: MonitorSampler {
     var kind: MonitorKind { .gpu }
-    private lazy var smcReader = SMCReader()
+    private let temperatures = SMCTemperatureCache()
+    private let readGPU: (() -> GPUReading?)?
+    private let readTemperature: (() -> Double?)?
+    private var lastKnownDetails: [MetricID: String] = [:]
+
+    init(readGPU: (() -> GPUReading?)? = nil, readTemperature: (() -> Double?)? = nil) {
+        self.readGPU = readGPU
+        self.readTemperature = readTemperature
+    }
     private var lastUnavailableLogDate: Date?
 
     func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
-        guard let reading = gpuReading() else {
+        guard let reading = (readGPU != nil ? readGPU?() : gpuReading()) else {
             logUnavailable("gpuReading() returned nil, GPU data unavailable")
             return previous ?? MonitorModule.placeholder(kind: .gpu)
         }
@@ -22,7 +30,7 @@ nonisolated final class GPUSampler: MonitorSampler {
                     "gpu-memory",
                     freshValue: reading.usedMemory.map(bytes),
                     previous: previous,
-                    initialValue: "0 B"
+                    initialValue: "--"
                 )
             ),
             MonitorMetric(
@@ -31,7 +39,7 @@ nonisolated final class GPUSampler: MonitorSampler {
                     "allocated",
                     freshValue: reading.allocatedMemory.map(bytes),
                     previous: previous,
-                    initialValue: "0 B"
+                    initialValue: "--"
                 )
             )
         ]
@@ -42,13 +50,13 @@ nonisolated final class GPUSampler: MonitorSampler {
                 "render",
                 freshValue: reading.renderUtilization.map(percent),
                 previous: previous,
-                initialValue: "0%"
+                initialValue: "--"
             )
         ))
 
         if context.includes("temperature") {
             let temperature = context.shouldCollectExpensiveMetric("temperature")
-                ? gpuTemperatureText()
+                ? CPUSampler.temperatureText(readTemperature != nil ? readTemperature?() : temperatures.temperature(gpu: true), previous: previous)
                 : previous?.metrics.first { $0.name == "temperature" }?.value
             metrics.append(MonitorMetric(name: "temperature", value: temperature ?? "--"))
         }
@@ -60,7 +68,7 @@ nonisolated final class GPUSampler: MonitorSampler {
                     "tiler",
                     freshValue: reading.tilerUtilization.map(percent),
                     previous: previous,
-                    initialValue: "0%"
+                    initialValue: "--"
                 )
             ))
         }
@@ -143,23 +151,26 @@ nonisolated final class GPUSampler: MonitorSampler {
         return services
     }
 
-    private func gpuTemperatureText() -> String? {
-        smcReader?.gpuTemperature().map { "\(String(format: "%.0f", $0))°C" }
-    }
-
     private func retainedMetric(
         _ name: MetricID,
         freshValue: String?,
         previous: MonitorModule?,
         initialValue: String
     ) -> String {
-        freshValue
-            ?? previous?.metrics.first { $0.name == name }?.value
-            ?? initialValue
+        if let freshValue {
+            lastKnownDetails[name] = freshValue
+        }
+        if let cached = lastKnownDetails[name] { return cached }
+        if let prior = previous?.metrics.first(where: { $0.name == name })?.value,
+           !prior.isEmpty, prior != "--" {
+            lastKnownDetails[name] = prior
+            return prior
+        }
+        return initialValue
     }
 }
 
-nonisolated private struct GPUReading {
+nonisolated struct GPUReading {
     let utilization: Double
     let renderUtilization: Double?
     let tilerUtilization: Double?

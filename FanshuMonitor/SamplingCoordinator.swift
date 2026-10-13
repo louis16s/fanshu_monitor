@@ -72,7 +72,8 @@ actor SamplingCoordinator {
                 defaultInterval: refreshInterval,
                 adaptiveInterval: adaptiveRefreshInterval
             ),
-            scheduledResetRefreshDate: await codexSampler.scheduledResetRefreshDate()
+            scheduledResetRefreshDate: await codexSampler.scheduledResetRefreshDate(),
+            scheduledRetryRefreshDate: await codexSampler.scheduledRetryRefreshDate()
         )
     }
 
@@ -99,4 +100,5 @@ nonisolated struct CodexRefreshResult: Sendable {
     let module: MonitorModule
     let refreshInterval: TimeInterval
     let scheduledResetRefreshDate: Date?
+    let scheduledRetryRefreshDate: Date?
 }

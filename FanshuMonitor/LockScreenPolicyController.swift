@@ -105,7 +105,8 @@ final class LockScreenPolicyController: ObservableObject {
 
     private weak var settings: MonitorSettings?
     private var cancellables = Set<AnyCancellable>()
-    private let systemObserver = LockScreenSystemObserver()
+    private let systemObserver: LockScreenSystemObserver
+    private let nowProvider: @MainActor @Sendable () -> Date
     private var transitionTimer: Timer?
     private var idleLockTimer: Timer?
     private var lockAttemptTask: Task<Void, Never>?
@@ -141,7 +142,9 @@ final class LockScreenPolicyController: ObservableObject {
         attemptTiming: LockScreenAttemptTiming = .standard,
         recoveryDelay: Duration = .seconds(1),
         baselineRestoreRetryInterval: TimeInterval = 60,
-        environment: LockScreenSystemEnvironment? = nil
+        environment: LockScreenSystemEnvironment? = nil,
+        systemObserver: LockScreenSystemObserver? = nil,
+        nowProvider: @escaping @MainActor @Sendable () -> Date = { Date() }
     ) {
         let resolvedEnvironment = environment ?? .live()
         self.idleSecondsProvider = idleSecondsProvider
@@ -153,6 +156,8 @@ final class LockScreenPolicyController: ObservableObject {
         self.recoveryDelay = recoveryDelay
         self.baselineRestoreRetryInterval = baselineRestoreRetryInterval
         self.environment = resolvedEnvironment
+        self.systemObserver = systemObserver ?? LockScreenSystemObserver()
+        self.nowProvider = nowProvider
         systemSettings = resolvedEnvironment.readSettings()
     }
 
@@ -260,7 +265,8 @@ final class LockScreenPolicyController: ObservableObject {
         }
     }
 
-    func reevaluate(now: Date = Date()) {
+    func reevaluate(now suppliedNow: Date? = nil) {
+        let now = suppliedNow ?? nowProvider()
         guard let settings else { return }
 
         guard settings.lockScreenPoliciesEnabled else {
@@ -388,8 +394,7 @@ final class LockScreenPolicyController: ObservableObject {
     private func scheduleIdleLockRetry(after delay: TimeInterval) {
         idleLockTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, let policy = self.activePolicy else { return }
-                self.scheduleIdleLock(for: policy)
+                self?.handleIdleDeadline()
             }
         }
     }
@@ -399,8 +404,24 @@ final class LockScreenPolicyController: ObservableObject {
         idleLockTimer = nil
     }
 
+    func handleIdleDeadline() {
+        reevaluate()
+    }
+
+    private func canContinueLockAttempt(for policy: LockScreenPolicy) -> Bool {
+        guard let settings, settings.lockScreenPoliciesEnabled,
+              !isSleeping, isSessionActive, status == .locking else { return false }
+        let selected = LockScreenPolicyResolver.resolve(
+            policies: settings.lockScreenPolicies,
+            at: nowProvider(),
+            powerSource: powerSourceProvider()
+        ).selectedPolicy
+        return selected == policy
+    }
+
     private func startLockAttempt(for policyID: LockScreenPolicy.ID) {
         cancelLockAttempt()
+        guard let policy = activePolicy, policy.id == policyID else { return }
         lockAttemptTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let result = await LockScreenAttemptRunner.run(
@@ -409,9 +430,7 @@ final class LockScreenPolicyController: ObservableObject {
                 requestKeyboardLock: self.requestKeyboardLock,
                 isScreenLocked: self.screenLockedProvider,
                 shouldContinue: { [weak self] in
-                    self?.settings?.lockScreenPoliciesEnabled == true
-                        && self?.activePolicy?.id == policyID
-                        && self?.status == .locking
+                    self?.canContinueLockAttempt(for: policy) == true
                 }
             )
             guard !Task.isCancelled,
@@ -430,7 +449,9 @@ final class LockScreenPolicyController: ObservableObject {
                 AppLogger.lockScreen.error("The system did not confirm the lock request")
                 self.scheduleIdleLockRetry(after: self.attemptTiming.retryDelay)
             case .cancelled:
-                break
+                self.lockAttemptTask = nil
+                self.didRequestLockForCurrentIdlePeriod = false
+                self.reevaluate()
             }
         }
     }

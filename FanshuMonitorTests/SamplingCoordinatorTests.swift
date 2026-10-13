@@ -3,6 +3,25 @@ import Testing
 @testable import FanshuMonitor
 
 struct SamplingCoordinatorTests {
+    @Test func cancelledQueuedWorkerDoesNotReadSampler() async throws {
+        let sampler = BlockingFakeSampler()
+        let worker = MonitorModuleSamplerWorker(kind: .cpu, sampler: sampler)
+        let context = MonitorSamplingContext(enabledMetricIDs: ["temperature"], panelVisible: true)
+        let first = Task.detached { await worker.sample(previous: nil, context: context) }
+        defer { sampler.unblock.signal() }
+        for _ in 0..<1000 {
+            if sampler.callCount == 1 { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        #expect(sampler.callCount == 1)
+        let queued = Task.detached { await worker.sample(previous: nil, context: context) }
+        queued.cancel()
+        sampler.unblock.signal()
+        _ = await first.value
+        #expect(await queued.value == nil)
+        #expect(sampler.callCount == 1)
+    }
+
     @Test func codexUsesItsDedicatedSamplingPath() async {
         let coordinator = SamplingCoordinator()
 
@@ -106,5 +125,19 @@ struct SamplingCoordinatorTests {
             accessibilityGranted: true,
             inputMonitoringGranted: false
         ))
+    }
+}
+
+nonisolated private final class BlockingFakeSampler: MonitorSampler, @unchecked Sendable {
+    let kind = MonitorKind.cpu
+    let unblock = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var calls = 0
+    var callCount: Int { lock.withLock { calls } }
+
+    func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
+        lock.withLock { calls += 1 }
+        _ = unblock.wait(timeout: .now() + 5)
+        return MonitorModule.placeholder(kind: kind)
     }
 }

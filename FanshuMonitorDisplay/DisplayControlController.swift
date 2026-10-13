@@ -77,6 +77,8 @@ final class DisplayControlController: ObservableObject {
     private var latestWriteSequences: [ControlKey: UInt64] = [:]
     private var latestConfirmedWriteSequences: [ControlKey: UInt64] = [:]
     private var nextWriteSequence: UInt64 = 0
+    private var writeLifecycleGeneration: UInt64 = 0
+    private var nextUnavailableBrightnessProbeDate = Date.distantPast
     private var screenChangeObserver: NSObjectProtocol?
     private var didWakeObserver: NSObjectProtocol?
     private var screensDidWakeObserver: NSObjectProtocol?
@@ -90,6 +92,7 @@ final class DisplayControlController: ObservableObject {
     private var nativeBrightnessReadsInFlight: Set<CGDirectDisplayID> = []
     private var cachedBuiltInDisplay: ControlledDisplay?
     private var builtInDisconnectRecoveryPending = false
+    private var recoveryGeneration: UInt64 = 0
     private var builtInBlackoutSuspendedForMissingExternal = false
     private var builtInDisconnectWatchdogTask: Task<Void, Never>?
     private var builtInDisconnectWatchdogGeneration = 0
@@ -168,9 +171,12 @@ final class DisplayControlController: ObservableObject {
     }
 
     func refreshAsync() {
+        guard !isSystemSleeping else { return }
+        let generation = wakeRefreshGeneration
         let controls = activeControls
         worker.refresh(service: service, activeControls: controls) { detectedDisplays in
             DispatchQueue.main.async {
+                guard !self.isSystemSleeping, generation == self.wakeRefreshGeneration else { return }
                 AppLogger.ui.info("Display refresh completed, found \(detectedDisplays.count) displays")
                 if let builtInDisplay = detectedDisplays.first(where: \.isBuiltIn) {
                     self.cachedBuiltInDisplay = builtInDisplay
@@ -221,7 +227,10 @@ final class DisplayControlController: ObservableObject {
                     self.seedFallbackValues(for: display)
                 }
                 self.syncBuiltInBlackouts()
-                self.syncSoftwareDimming()
+                if !detectedDisplays.isEmpty {
+                    self.service.resumeSoftwareDimmingAfterDisplaySleep()
+                    self.syncSoftwareDimming()
+                }
                 self.configureNativeBrightnessSync()
             }
         }
@@ -238,6 +247,7 @@ final class DisplayControlController: ObservableObject {
     }
 
     func toggleBuiltInBlackout(displayID: CGDirectDisplayID) {
+        guard !isSystemSleeping else { return }
         guard let display = displays.first(where: { $0.id == displayID }),
               display.isBuiltIn
         else {
@@ -250,6 +260,7 @@ final class DisplayControlController: ObservableObject {
             AppLogger.ui.debug("Ignored duplicate built-in display topology request")
             return
         }
+        cancelBuiltInRecovery()
         builtInBlackoutActionFailed = false
         builtInBlackoutOperationPending = true
         AppLogger.ui.notice(
@@ -339,8 +350,15 @@ final class DisplayControlController: ObservableObject {
 
         if needsExternalMonitoring && powerEventBridge == nil {
             let topologyMaintenanceCoordinator = topologyMaintenanceCoordinator
+            let service = service
+            let worker = worker
             let bridge = DisplayPowerEventBridge(
                 earlyHandler: { event in
+                    if case .willSleep = event {
+                        service.suspendSoftwareDimmingForDisplaySleep()
+                        worker.cancelPendingWrites()
+                        worker.cancelBuiltInRecovery()
+                    }
                     topologyMaintenanceCoordinator.handle(event)
                 },
                 handler: { [weak self] event in
@@ -411,8 +429,11 @@ final class DisplayControlController: ObservableObject {
             CGDisplayRemoveReconfigurationCallback(displayReconfigurationCallback, Unmanaged.passUnretained(self).toOpaque())
             displayCallbackRegistered = false
         }
-        powerEventBridge?.stop()
-        powerEventBridge = nil
+        // Dimming outlives panel demand; keep its sleep/wake lifecycle active.
+        if !service.hasSoftwareDimmingRequests {
+            powerEventBridge?.stop()
+            powerEventBridge = nil
+        }
         topologyMaintenanceCoordinator.cancel()
         hardwareTopologyMonitor?.stop()
         hardwareTopologyMonitor = nil
@@ -422,6 +443,10 @@ final class DisplayControlController: ObservableObject {
     }
 
     func prepareForTermination() {
+        isSystemSleeping = true
+        writeLifecycleGeneration &+= 1
+        cancelBuiltInRecovery()
+        worker.cancelPendingWrites()
         wakeRefreshGeneration &+= 1
         refreshWorkItem?.cancel()
         builtInDisconnectWatchdogTask?.cancel()
@@ -509,6 +534,7 @@ final class DisplayControlController: ObservableObject {
     private func handleHardwareTopologyEvent(_ event: DisplayHardwareTopologyEvent) {
         switch event {
         case .externalServiceAdded:
+            cancelBuiltInRecovery()
             invalidateDisplayDiscovery(resetDDC: true)
             scheduleRefresh(delay: DisplayExternalConnectionPolicy.discoveryDelay)
             scheduleExternalConnectionMaintenance()
@@ -519,6 +545,7 @@ final class DisplayControlController: ObservableObject {
     }
 
     private func scheduleExternalConnectionMaintenance() {
+        guard !isSystemSleeping else { return }
         guard isBuiltInBlackoutDesired else { return }
         invalidateDisplayDiscovery()
         builtInBlackoutSuspendedForMissingExternal = false
@@ -554,6 +581,14 @@ final class DisplayControlController: ObservableObject {
         switch event {
         case .willSleep:
             isSystemSleeping = true
+            writeLifecycleGeneration &+= 1
+            wakeRefreshGeneration &+= 1
+            refreshWorkItem?.cancel()
+            cancelBuiltInRecovery()
+            worker.cancelPendingWrites()
+            latestWriteSequences.removeAll()
+            pendingValues.removeAll()
+            stopNativeBrightnessSync()
             hardwareTopologyMonitor?.setSystemSleeping(true)
             service.suspendSoftwareDimmingForDisplaySleep()
             guard isBuiltInBlackoutDesired else { return }
@@ -595,6 +630,7 @@ final class DisplayControlController: ObservableObject {
             AppLogger.ui.debug(
                 "Brightness key pass-through: primary external display \(primaryDisplayID) does not support brightness, reason: \(primaryDisplay.brightnessUnavailableReason ?? "unknown", privacy: .public)"
             )
+            retryUnavailableBrightnessDiscovery(for: primaryDisplay)
             return nil
         }
 
@@ -644,6 +680,13 @@ final class DisplayControlController: ObservableObject {
             )
         }
         return nil
+    }
+
+    private func retryUnavailableBrightnessDiscovery(for display: ControlledDisplay) {
+        guard !isSystemSleeping, display.kind == .externalDDC,
+              activeControls.contains(.brightness), Date() >= nextUnavailableBrightnessProbeDate else { return }
+        nextUnavailableBrightnessProbeDate = Date().addingTimeInterval(30)
+        refreshNow()
     }
 
     private func primaryDisplayIDUnderMouse() -> CGDirectDisplayID? {
@@ -756,6 +799,10 @@ final class DisplayControlController: ObservableObject {
         mode: DisplayWriteMode,
         markUnsupportedOnFailure: Bool
     ) {
+        guard !isSystemSleeping else { return }
+        if displays.first(where: { $0.id == displayID })?.isBuiltIn == true {
+            cancelBuiltInRecovery()
+        }
         let clampedValue = min(100, max(0, value))
         service.softwareDimmingEnabled = settings?.displaySoftwareDimmingEnabled ?? true
         guard let display = displays.first(where: { $0.id == displayID }) else {
@@ -770,6 +817,7 @@ final class DisplayControlController: ObservableObject {
         let key = ControlKey(displayID: displayID, control: control)
         nextWriteSequence &+= 1
         let sequence = nextWriteSequence
+        let generation = writeLifecycleGeneration
         latestWriteSequences[key] = sequence
         pendingValues[displayID, default: [:]][control] = clampedValue
         worker.setValue(
@@ -782,6 +830,7 @@ final class DisplayControlController: ObservableObject {
             }
         ) { [self] result in
             Task { @MainActor [self] in
+                guard generation == self.writeLifecycleGeneration else { return }
                 self.handleWriteResult(result, markUnsupportedOnFailure: markUnsupportedOnFailure)
             }
         }
@@ -833,6 +882,7 @@ final class DisplayControlController: ObservableObject {
     }
 
     private func configureNativeBrightnessSync() {
+        guard !isSystemSleeping else { stopNativeBrightnessSync(); return }
         guard DisplayNativeBrightnessSyncPolicy.shouldRun(
             panelVisible: controlDemand.panelControlsActive,
             moduleVisible: true,
@@ -915,6 +965,7 @@ final class DisplayControlController: ObservableObject {
     }
 
     private func handleWriteResult(_ result: DisplayWriteResult, markUnsupportedOnFailure: Bool) {
+        guard !isSystemSleeping else { return }
         let isCurrentResult = latestWriteSequences[result.key] == result.sequence
 
         let latestConfirmedSequence = latestConfirmedWriteSequences[result.key] ?? 0
@@ -958,6 +1009,7 @@ final class DisplayControlController: ObservableObject {
     }
 
     private func syncBuiltInBlackouts() {
+        guard !isSystemSleeping else { return }
         guard !builtInDisconnectRecoveryPending else { return }
         guard !topologyMaintenanceCoordinator.isRunning else { return }
         let externalDisplays = displays.filter { !$0.isBuiltIn }
@@ -1029,6 +1081,7 @@ final class DisplayControlController: ObservableObject {
         triggerDisplayID: CGDirectDisplayID,
         forceRestore: Bool = false
     ) {
+        guard !isSystemSleeping else { return }
         guard forceRestore ? requiresPhysicalBuiltInRestore : needsBuiltInDisconnectRecovery else {
             return
         }
@@ -1039,6 +1092,7 @@ final class DisplayControlController: ObservableObject {
         }
 
         builtInDisconnectRecoveryPending = true
+        let generation = recoveryGeneration
         if triggerDisplayID != 0 {
             AppLogger.ui.notice(
                 "Display removal detected for ID \(triggerDisplayID); checking emergency built-in restore"
@@ -1051,9 +1105,12 @@ final class DisplayControlController: ObservableObject {
             service: service
         ) { [self] result in
             Task { @MainActor [self] in
+                guard generation == self.recoveryGeneration, !self.isSystemSleeping else { return }
                 self.builtInDisconnectRecoveryPending = false
 
                 switch result {
+                case .cancelled:
+                    return
                 case .externalDisplayPresent:
                     if triggerDisplayID != 0 {
                         AppLogger.ui.debug("Skipped emergency built-in restore because an external display remains")
@@ -1090,6 +1147,12 @@ final class DisplayControlController: ObservableObject {
                 self.scheduleRefresh(delay: 0.12)
             }
         }
+    }
+
+    private func cancelBuiltInRecovery() {
+        recoveryGeneration &+= 1
+        worker.cancelBuiltInRecovery()
+        builtInDisconnectRecoveryPending = false
     }
 
     private func configureBuiltInDisconnectWatchdog() {

@@ -51,10 +51,15 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
     private var quantizationOverlayOpacity: [CGDirectDisplayID: Double] = [:]
     private var requestGenerations: [CGDirectDisplayID: UInt64] = [:]
     private var lifecycleGeneration: UInt64 = 0
+    private var suspended = false
+    private let isOnline: @Sendable (CGDirectDisplayID) -> Bool
+    private let isBuiltIn: @Sendable (CGDirectDisplayID) -> Bool
     @MainActor private var overlayWindows: [CGDirectDisplayID: NSWindow] = [:]
 
     init(gammaHardware: any DisplayGammaHardware = SystemDisplayGammaHardware()) {
         gamma = DisplayGammaService(hardware: gammaHardware)
+        isOnline = { gammaHardware.isOnline(displayID: $0) }
+        isBuiltIn = { gammaHardware.isBuiltIn(displayID: $0) }
     }
 
     #if DEBUG
@@ -65,10 +70,16 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
     }
     #endif
 
+    var hasRequests: Bool {
+        lock.withLock { !requestedBrightness.isEmpty }
+    }
+
     func userBrightness(
         for displayID: CGDirectDisplayID,
-        hardwareBrightness: Double?
+        hardwareBrightness: Double?,
+        enabled: Bool = true
     ) -> Double? {
+        guard enabled else { return hardwareBrightness }
         if let cached = cachedBrightness(for: displayID) {
             return cached
         }
@@ -89,6 +100,7 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         let clamped = min(100, max(0, userBrightness))
         let clampedAdditionalOpacity = min(1, max(0, additionalOverlayOpacity))
         lock.lock()
+        guard !suspended else { lock.unlock(); return }
         requestedBrightness[displayID] = clamped
         quantizationOverlayOpacity[displayID] = clampedAdditionalOpacity
         let token = nextApplyTokenLocked(for: displayID)
@@ -107,9 +119,11 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         let displayIDs = Set(displays.map(\.id))
 
         lock.lock()
-        requestedBrightness = requestedBrightness.filter { displayIDs.contains($0.key) }
-        quantizationOverlayOpacity = quantizationOverlayOpacity.filter { displayIDs.contains($0.key) }
-        requestGenerations = requestGenerations.filter { displayIDs.contains($0.key) }
+        guard !suspended else { lock.unlock(); return }
+        let retainedIDs = displayIDs.union(requestedBrightness.keys.filter { isOnline($0) })
+        requestedBrightness = requestedBrightness.filter { retainedIDs.contains($0.key) }
+        quantizationOverlayOpacity = quantizationOverlayOpacity.filter { retainedIDs.contains($0.key) }
+        requestGenerations = requestGenerations.filter { retainedIDs.contains($0.key) }
         let values = requestedBrightness
         let additionalOpacities = quantizationOverlayOpacity
         let requests = values.map { displayID, brightness in
@@ -124,7 +138,7 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
         gammaWorkQueue.async { [weak self] in
             guard let self, self.isCurrent(lifecycleGeneration: syncLifecycleGeneration) else { return }
             self.gamma.removeMissingDisplays(
-                keeping: Set(values.keys.filter { CGDisplayIsBuiltin($0) == 0 })
+                keeping: Set(values.keys.filter { !self.isBuiltIn($0) })
             )
             for request in requests where self.isCurrent(request.token, for: request.displayID) {
                 self.apply(
@@ -173,9 +187,14 @@ nonisolated final class DisplaySoftwareDimmingService: @unchecked Sendable {
     /// the requested brightness values for the first topology refresh after wake.
     func suspendForDisplaySleep() {
         lock.lock()
+        suspended = true
         lifecycleGeneration &+= 1
         enqueueRestoreAllLocked()
         lock.unlock()
+    }
+
+    func resumeAfterDisplaySleep() {
+        lock.withLock { suspended = false }
     }
 
     // Enqueue under the state lock so restore and apply preserve request order.

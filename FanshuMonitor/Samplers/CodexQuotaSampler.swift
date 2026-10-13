@@ -157,6 +157,10 @@ actor CodexQuotaSampler {
         nextResetRefreshDate
     }
 
+    func scheduledRetryRefreshDate() -> Date? {
+        retryNotBefore
+    }
+
     func release() {
         inFlightRefresh?.task.cancel()
         inFlightRefresh = nil

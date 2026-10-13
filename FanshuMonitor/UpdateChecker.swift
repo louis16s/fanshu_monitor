@@ -94,53 +94,57 @@ final class UpdateChecker {
         request.timeoutInterval = UpdateTransport.requestTimeout
 
         do {
-            let (data, response) = try await dataLoader(request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                reportFailure(String(localized: "update.temp-unavailable"))
-                return false
-            }
-
-            let releaseData: Data
-            if httpResponse.statusCode == 304,
-               let cachedData = defaults.data(forKey: Self.releasePayloadKey) {
-                releaseData = cachedData
-            } else if (200...299).contains(httpResponse.statusCode) {
-                releaseData = data
-                defaults.set(data, forKey: Self.releasePayloadKey)
-                if let etag = httpResponse.value(forHTTPHeaderField: "ETag") {
-                    defaults.set(etag, forKey: Self.releaseETagKey)
+            for attempt in 0...1 {
+                let (data, response) = try await dataLoader(request)
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    reportFailure(String(localized: "update.temp-unavailable"))
+                    return false
                 }
-            } else {
-                reportFailure(failureMessage(for: response, data: data))
-                return false
-            }
 
-            let release: GitHubRelease
-            do {
-                release = try JSONDecoder().decode(GitHubRelease.self, from: releaseData)
-            } catch {
-                reportFailure(String(localized: "update.parse-failed"))
-                return false
-            }
-            let latestVersion = VersionParser.normalize(release.tagName)
+                let releaseData: Data
+                if httpResponse.statusCode == 304 {
+                    guard let cachedData = defaults.data(forKey: Self.releasePayloadKey),
+                          (try? validatedState(from: cachedData)) != nil else {
+                        defaults.removeObject(forKey: Self.releasePayloadKey)
+                        defaults.removeObject(forKey: Self.releaseETagKey)
+                        defaults.removeObject(forKey: Self.lastAutomaticCheckKey)
+                        if attempt == 0 {
+                            request.setValue(nil, forHTTPHeaderField: "If-None-Match")
+                            continue
+                        }
+                        reportFailure(String(localized: "update.parse-failed"))
+                        return false
+                    }
+                    releaseData = cachedData
+                } else if (200...299).contains(httpResponse.statusCode) {
+                    releaseData = data
+                } else {
+                    reportFailure(failureMessage(for: response, data: data))
+                    return false
+                }
 
-            guard !latestVersion.isEmpty else {
-                reportFailure(String(localized: "update.version-parse-failed"))
-                return false
+                let newState: UpdateCheckState
+                do {
+                    newState = try validatedState(from: releaseData)
+                } catch ValidationError.invalidVersion {
+                    reportFailure(String(localized: "update.version-parse-failed"))
+                    return false
+                } catch {
+                    reportFailure(String(localized: "update.parse-failed"))
+                    return false
+                }
+                if httpResponse.statusCode != 304 {
+                    defaults.set(releaseData, forKey: Self.releasePayloadKey)
+                    if let etag = httpResponse.value(forHTTPHeaderField: "ETag"), !etag.isEmpty {
+                        defaults.set(etag, forKey: Self.releaseETagKey)
+                    } else {
+                        defaults.removeObject(forKey: Self.releaseETagKey)
+                    }
+                }
+                setStableState(newState)
+                return true
             }
-
-            if VersionParser.isNewer(latestVersion, than: currentVersion) {
-                let downloadURL = resolveDownloadURL(from: release)
-                setStableState(.updateAvailable(
-                    latestVersion: latestVersion,
-                    publishedAt: release.publishedAt,
-                    downloadURL: downloadURL,
-                    releaseNotes: release.body
-                ))
-            } else {
-                setStableState(.upToDate)
-            }
-            return true
+            return false
         } catch {
             reportFailure(String(localized: "update.network-error"))
             return false
@@ -165,22 +169,38 @@ final class UpdateChecker {
 
     private func restoreCachedReleaseIfAvailable() {
         guard let data = defaults.data(forKey: Self.releasePayloadKey),
-              let release = try? JSONDecoder().decode(GitHubRelease.self, from: data) else {
+              let restoredState = try? validatedState(from: data) else {
             return
         }
+        setStableState(restoredState)
+    }
+
+    private enum ValidationError: Error {
+        case invalidVersion
+        case invalidDownloadURL
+    }
+
+    private func validatedState(from data: Data) throws -> UpdateCheckState {
+        let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
         let latestVersion = VersionParser.normalize(release.tagName)
-        guard !latestVersion.isEmpty else { return }
+        let components = latestVersion.split(separator: ".", omittingEmptySubsequences: false)
+        guard !components.isEmpty, components.allSatisfy({ component in
+            !component.isEmpty && component.utf8.allSatisfy { (48...57).contains($0) }
+                && Int(component) != nil
+        }) else { throw ValidationError.invalidVersion }
+        guard let downloadURL = Self.resolveDownloadURL(from: release) else {
+            throw ValidationError.invalidDownloadURL
+        }
 
         if VersionParser.isNewer(latestVersion, than: currentVersion) {
-            setStableState(.updateAvailable(
+            return .updateAvailable(
                 latestVersion: latestVersion,
                 publishedAt: release.publishedAt,
-                downloadURL: resolveDownloadURL(from: release),
+                downloadURL: downloadURL,
                 releaseNotes: release.body
-            ))
-        } else {
-            setStableState(.upToDate)
+            )
         }
+        return .upToDate
     }
 
     private func prepareCacheForCurrentSource() {
@@ -193,20 +213,36 @@ final class UpdateChecker {
         defaults.set(source, forKey: Self.releaseSourceKey)
     }
 
-    static func resolveDownloadURL(from release: GitHubRelease) -> URL {
+    static func resolveDownloadURL(from release: GitHubRelease) -> URL? {
         if let assets = release.assets {
             for asset in assets {
                 let name = asset.name.lowercased()
                 if name.hasSuffix(".dmg") || name.hasSuffix(".zip") {
-                    return asset.browserDownloadURL
+                    return isOfficialReleaseURL(asset.browserDownloadURL, asset: true)
+                        ? asset.browserDownloadURL : nil
                 }
             }
         }
-        return release.htmlURL
+        return isOfficialReleaseURL(release.htmlURL, asset: false) ? release.htmlURL : nil
     }
 
-    private func resolveDownloadURL(from release: GitHubRelease) -> URL {
-        Self.resolveDownloadURL(from: release)
+    private static func isOfficialReleaseURL(_ url: URL, asset: Bool) -> Bool {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.scheme?.lowercased() == "https",
+              components.host?.lowercased() == "github.com",
+              components.user == nil, components.password == nil,
+              components.port == nil || components.port == 443,
+              components.query == nil, components.fragment == nil else { return false }
+        let encodedPath = components.percentEncodedPath.lowercased()
+        guard !encodedPath.contains("%2f"), !encodedPath.contains("%5c") else { return false }
+        let parts = components.path.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == (asset ? 7 : 6), parts[0].isEmpty,
+              parts[1] == "louis16s", parts[2] == "fanshu_monitor", parts[3] == "releases",
+              parts[4] == (asset ? "download" : "tag"),
+              parts.dropFirst().allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("\\") }) else {
+            return false
+        }
+        return true
     }
 
     private func failureMessage(for response: URLResponse, data: Data) -> String {

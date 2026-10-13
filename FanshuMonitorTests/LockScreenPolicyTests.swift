@@ -61,6 +61,93 @@ private final class LockAttemptProbe {
 
 @MainActor
 struct LockScreenPolicyTests {
+    @Test func powerObservationResumesAfterSleepAndUnlock() async {
+        let probe = LockAttemptProbe()
+        let settings = activeSettings(suite: "powerObservationResumesAfterSleepAndUnlock")
+        var observing = false
+        let observer = LockScreenSystemObserver(observesSystemNotifications: false) { observing = $0 }
+        let controller = LockScreenPolicyController(
+            idleSecondsProvider: { 0 }, requestNativeLock: { false }, requestKeyboardLock: { false },
+            screenLockedProvider: { probe.isLocked }, powerSourceProvider: { .connected },
+            recoveryDelay: .milliseconds(1), environment: probe.environment, systemObserver: observer
+        )
+        controller.configure(settings: settings)
+        #expect(observing)
+        controller.handleSystemWillSleep()
+        #expect(!observing)
+        controller.handleSystemDidWake()
+        for _ in 0..<100 where !observing { try? await Task.sleep(for: .milliseconds(2)) }
+        #expect(observing)
+        probe.isLocked = true
+        controller.handleScreenDidLock()
+        #expect(!observing)
+        probe.isLocked = false
+        controller.handleSessionDidBecomeActive()
+        #expect(observing)
+        settings.setLockScreenPoliciesEnabled(false)
+    }
+
+    @Test(arguments: [false, true]) func expiredIdleDeadlineAndFallbackDoNotLock(crossDay: Bool) async {
+        let probe = LockAttemptProbe()
+        let settings = activeSettings(suite: "expiredIdleDeadlineAndFallbackDoNotLock.\(crossDay)")
+        let day = Calendar.current.startOfDay(for: Date())
+        let startHour = crossDay ? 23 : 9
+        let endDay = crossDay ? Calendar.current.date(byAdding: .day, value: 1, to: day)! : day
+        let start = Calendar.current.date(bySettingHour: startHour, minute: 0, second: 0, of: day)!
+        let end = Calendar.current.date(bySettingHour: crossDay ? 1 : 10, minute: 0, second: 0, of: endDay)!
+        settings.updateLockScreenPolicy(id: settings.lockScreenPolicies[0].id) {
+            $0.startMinutes = startHour * 60
+            $0.endMinutes = (crossDay ? 25 : 10) * 60
+        }
+        var now = start
+        let observer = LockScreenSystemObserver(observesSystemNotifications: false, powerObservationOverride: { _ in })
+        let controller = LockScreenPolicyController(
+            idleSecondsProvider: { probe.idleSeconds },
+            requestNativeLock: { probe.nativeRequests += 1; now = end; return true },
+            requestKeyboardLock: { probe.keyboardRequests += 1; return true },
+            screenLockedProvider: { false }, powerSourceProvider: { .connected },
+            attemptTiming: testAttemptTiming, environment: probe.environment,
+            systemObserver: observer, nowProvider: { now }
+        )
+        controller.configure(settings: settings)
+        now = end
+        probe.idleSeconds = 120
+        controller.handleIdleDeadline()
+        await Task.yield()
+        #expect(probe.nativeRequests == 0)
+        now = start
+        controller.handleIdleDeadline()
+        for _ in 0..<100 where probe.nativeRequests == 0 { try? await Task.sleep(for: .milliseconds(2)) }
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(probe.nativeRequests == 1)
+        #expect(probe.keyboardRequests == 0)
+        #expect(controller.activePolicy == nil)
+        settings.setLockScreenPoliciesEnabled(false)
+    }
+
+    @Test func idleDeadlineRechecksPowerBeforeRequestingLock() async {
+        let probe = LockAttemptProbe()
+        let settings = activeSettings(suite: "idleDeadlineRechecksPowerBeforeRequestingLock")
+        settings.updateLockScreenPolicy(id: settings.lockScreenPolicies[0].id) { $0.powerCondition = .connected }
+        let controller = LockScreenPolicyController(
+            idleSecondsProvider: { probe.idleSeconds },
+            requestNativeLock: { probe.nativeRequests += 1; return true },
+            requestKeyboardLock: { probe.keyboardRequests += 1; return true },
+            screenLockedProvider: { false }, powerSourceProvider: { probe.powerSourceState },
+            environment: probe.environment,
+            systemObserver: LockScreenSystemObserver(observesSystemNotifications: false, powerObservationOverride: { _ in })
+        )
+        controller.configure(settings: settings)
+        probe.powerSourceState = .battery
+        probe.idleSeconds = 120
+        controller.handleIdleDeadline()
+        await Task.yield()
+        #expect(probe.nativeRequests == 0)
+        #expect(probe.keyboardRequests == 0)
+        #expect(controller.status == .waitingForPower(.connected))
+        settings.setLockScreenPoliciesEnabled(false)
+    }
+
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

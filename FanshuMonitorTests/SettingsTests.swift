@@ -310,6 +310,42 @@ struct SettingsTests {
         #expect(!reloaded.isMetricEnabled("active-tasks", for: .codex))
     }
 
+    @Test func migrationsSurviveReloadWithoutAnySettingsEdits() {
+        let suite = "migrationsSurviveReloadWithoutAnySettingsEdits"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(["cpu"], forKey: "settings.visibleKinds")
+        defaults.set(["five-hour", "weekly"], forKey: "settings.enabledMetrics.codex")
+
+        let initial = MonitorSettings(defaults: defaults)
+        let reloaded = MonitorSettings(defaults: defaults)
+        #expect(initial.visibleKinds == reloaded.visibleKinds)
+        #expect(reloaded.isVisible(.codex))
+        #expect(reloaded.isMetricEnabled(.activeTasks, for: .codex))
+        #expect(reloaded.isMetricEnabled(.weeklyReset, for: .codex))
+        #expect(initial.enabledMetrics == reloaded.enabledMetrics)
+    }
+
+    @Test func disablingEveryMetricSurvivesReload() {
+        let suite = "disablingEveryMetricSurvivesReload"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = MonitorSettings(defaults: defaults)
+        for kind in MonitorKind.allCases {
+            for metric in kind.availableMetrics {
+                settings.setMetric(metric.id, enabled: false, for: kind)
+            }
+        }
+
+        let reloaded = MonitorSettings(defaults: defaults)
+        for kind in MonitorKind.allCases {
+            #expect(reloaded.enabledMetrics[kind]?.isEmpty == true)
+            #expect(kind.availableMetrics.allSatisfy { !reloaded.isMetricEnabled($0.id, for: kind) })
+        }
+    }
+
     @Test func weeklyResetMetricIsEnabledAndMigratedForExistingCodexSelections() {
         let suite = "weeklyResetMetricIsEnabledAndMigratedForExistingCodexSelections"
         let defaults = UserDefaults(suiteName: suite)!
