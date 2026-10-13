@@ -2,6 +2,30 @@
   "version": "1.0",
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "当前模式": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前模式" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Current Mode" } }
+      }
+    },
+    "标准模式": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "标准模式" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Standard" } }
+      }
+    },
+    "切换失败": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "切换失败" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Could Not Switch" } }
+      }
+    },
+    "选择系统提供的 HiDPI 或标准显示模式": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择系统提供的 HiDPI 或标准显示模式" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Choose a HiDPI or standard display mode provided by macOS" } }
+      }
+    },
     "codex.task.running": {
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "执行中" } },

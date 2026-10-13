@@ -18,6 +18,8 @@ nonisolated struct ControlledDisplay: Equatable, Identifiable, Sendable {
     var volumeUnavailableReason: String?
     var contrastUnavailableReason: String?
     var capabilities: DisplayCapabilities?
+    var availableDisplayModes: [DisplayModeOption] = []
+    var currentDisplayModeID: String?
 
     func supports(_ control: DisplayControlKind) -> Bool {
         switch control {
@@ -60,6 +62,70 @@ nonisolated struct ControlledDisplay: Equatable, Identifiable, Sendable {
             supportsVolume = isSupported
         case .contrast:
             supportsContrast = isSupported
+        }
+    }
+}
+
+nonisolated struct DisplayModeOption: Equatable, Hashable, Identifiable, Sendable {
+    let id: String
+    let width: Int
+    let height: Int
+    let pixelWidth: Int
+    let pixelHeight: Int
+    let refreshRateHz: Double
+    let ioDisplayModeID: Int32
+    let ioFlags: UInt32
+
+    var isHiDPI: Bool {
+        pixelWidth > width || pixelHeight > height
+    }
+
+    var title: String {
+        let rate = refreshRateHz > 0 ? " · \(Int(refreshRateHz.rounded())) Hz" : ""
+        let hidpi = isHiDPI ? " · HiDPI" : ""
+        return "\(width)×\(height)\(rate)\(hidpi)"
+    }
+
+    init?(mode: CGDisplayMode) {
+        let width = Int(mode.width)
+        let height = Int(mode.height)
+        let pixelWidth = Int(mode.pixelWidth)
+        let pixelHeight = Int(mode.pixelHeight)
+        guard width > 0, height > 0, pixelWidth >= width, pixelHeight >= height,
+              mode.isUsableForDesktopGUI() else { return nil }
+
+        let refreshRateHz = mode.refreshRate.isFinite ? mode.refreshRate : 0
+        let ioDisplayModeID = mode.ioDisplayModeID
+        let ioFlags = mode.ioFlags
+        self.width = width
+        self.height = height
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+        self.refreshRateHz = refreshRateHz
+        self.ioDisplayModeID = ioDisplayModeID
+        self.ioFlags = ioFlags
+        id = "\(width)x\(height)-\(pixelWidth)x\(pixelHeight)-\(Int((refreshRateHz * 1000).rounded()))-\(ioDisplayModeID)-\(ioFlags)"
+    }
+}
+
+nonisolated enum DisplayModeCatalog {
+    static func modes(for displayID: CGDirectDisplayID) -> [DisplayModeOption] {
+        let options = [kCGDisplayShowDuplicateLowResolutionModes as String: true] as CFDictionary
+        guard let rawModes = CGDisplayCopyAllDisplayModes(displayID, options) as? [CGDisplayMode] else {
+            return []
+        }
+
+        var uniqueModes: [String: DisplayModeOption] = [:]
+        for rawMode in rawModes {
+            guard let mode = DisplayModeOption(mode: rawMode) else { continue }
+            uniqueModes[mode.id] = mode
+        }
+
+        return uniqueModes.values.sorted { lhs, rhs in
+            if lhs.width != rhs.width { return lhs.width > rhs.width }
+            if lhs.height != rhs.height { return lhs.height > rhs.height }
+            if lhs.refreshRateHz != rhs.refreshRateHz { return lhs.refreshRateHz > rhs.refreshRateHz }
+            return lhs.isHiDPI && !rhs.isHiDPI
         }
     }
 }

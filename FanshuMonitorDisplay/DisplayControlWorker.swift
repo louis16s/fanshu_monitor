@@ -187,6 +187,17 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         }
     }
 
+    func applyDisplayMode(
+        _ mode: DisplayModeOption,
+        displayID: CGDirectDisplayID,
+        service: DisplayControlService,
+        completion: @escaping @Sendable (Bool) -> Void
+    ) {
+        topologyQueue.async {
+            completion(service.applyDisplayMode(mode, displayID: displayID))
+        }
+    }
+
     func setBuiltInBlackout(
         _ enabled: Bool,
         display: ControlledDisplay,

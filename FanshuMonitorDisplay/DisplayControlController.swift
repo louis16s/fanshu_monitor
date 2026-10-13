@@ -67,6 +67,8 @@ final class DisplayControlController: ObservableObject {
     @Published private(set) var builtInBlackoutActionFailed = false
     @Published private(set) var builtInBlackoutOperationPending = false
     @Published private var pendingValues: [CGDirectDisplayID: [DisplayControlKind: Double]] = [:]
+    @Published private(set) var displayModeApplyingIDs: Set<CGDirectDisplayID> = []
+    @Published private(set) var displayModeFailureIDs: Set<CGDirectDisplayID> = []
 
     private static let builtInBlackoutPreferenceKey = "displayControl.builtInBlackoutDesired"
     private let service = DisplayControlService()
@@ -244,6 +246,31 @@ final class DisplayControlController: ObservableObject {
 
     func isBuiltInBlackoutEnabled(displayID: CGDirectDisplayID) -> Bool {
         builtInBlackoutDisplayIDs.contains(displayID)
+    }
+
+    func applyDisplayMode(_ mode: DisplayModeOption, displayID: CGDirectDisplayID) {
+        guard !isSystemSleeping,
+              let display = displays.first(where: { $0.id == displayID }),
+              !display.isBuiltIn,
+              display.availableDisplayModes.contains(mode),
+              !displayModeApplyingIDs.contains(displayID)
+        else { return }
+
+        displayModeFailureIDs.remove(displayID)
+        displayModeApplyingIDs.insert(displayID)
+        worker.applyDisplayMode(mode, displayID: displayID, service: service) { [weak self] succeeded in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.displayModeApplyingIDs.remove(displayID)
+                if succeeded {
+                    self.displayModeFailureIDs.remove(displayID)
+                    self.scheduleRefresh(delay: 0.35)
+                } else {
+                    self.displayModeFailureIDs.insert(displayID)
+                    AppLogger.ui.error("Failed to apply display mode for display \(displayID)")
+                }
+            }
+        }
     }
 
     func toggleBuiltInBlackout(displayID: CGDirectDisplayID) {

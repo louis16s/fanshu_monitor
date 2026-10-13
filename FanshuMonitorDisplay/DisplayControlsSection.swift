@@ -217,6 +217,15 @@ private struct DisplayControlGroup: View {
                         }
                 }
 
+                if display.availableDisplayModes.contains(where: \.isHiDPI) {
+                    DisplayModeControl(
+                        display: display,
+                        controller: controller,
+                        palette: palette,
+                        tint: tint
+                    )
+                }
+
                 if settings.displayCapabilitiesEnabled,
                    let capabilities = display.capabilities {
                     Text(capabilities.summary)
@@ -310,6 +319,106 @@ private struct DisplayControlGroup: View {
             : "关闭内建显示器"
     }
 
+}
+
+private struct DisplayModeControl: View {
+    let display: ControlledDisplay
+    @ObservedObject var controller: DisplayControlController
+    let palette: MonitorPalette
+    let tint: Color
+
+    private var hiDPIModes: [DisplayModeOption] {
+        display.availableDisplayModes.filter(\.isHiDPI)
+    }
+
+    private var standardModes: [DisplayModeOption] {
+        display.availableDisplayModes.filter { !$0.isHiDPI }
+    }
+
+    private var currentModeTitle: String {
+        guard let currentID = display.currentDisplayModeID,
+              let currentMode = display.availableDisplayModes.first(where: { $0.id == currentID })
+        else { return "当前模式" }
+        return currentMode.title
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "viewfinder")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 13)
+
+            Text("HiDPI")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(palette.secondaryText)
+
+            Spacer(minLength: 8)
+
+            if controller.displayModeApplyingIDs.contains(display.id) {
+                ProgressView()
+                    .controlSize(.mini)
+                    .frame(width: 18, height: 18)
+            }
+
+            Menu {
+                Section("HiDPI") {
+                    ForEach(hiDPIModes) { mode in
+                        modeButton(mode)
+                    }
+                }
+
+                if !standardModes.isEmpty {
+                    Section("标准模式") {
+                        ForEach(standardModes) { mode in
+                            modeButton(mode)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(currentModeTitle)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                }
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .foregroundStyle(palette.secondaryText)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(palette.displayBadgeFill, in: Capsule())
+            }
+            .menuStyle(.borderlessButton)
+            .buttonStyle(.borderless)
+            .disabled(controller.displayModeApplyingIDs.contains(display.id))
+            .help("选择系统提供的 HiDPI 或标准显示模式")
+        }
+        .opacity(controller.displayModeApplyingIDs.contains(display.id) ? 0.72 : 1)
+        .overlay(alignment: .bottomTrailing) {
+            if controller.displayModeFailureIDs.contains(display.id) {
+                Text("切换失败")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(.orange)
+                    .offset(y: 11)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func modeButton(_ mode: DisplayModeOption) -> some View {
+        Button {
+            controller.applyDisplayMode(mode, displayID: display.id)
+        } label: {
+            HStack {
+                Text(mode.title)
+                if mode.id == display.currentDisplayModeID {
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+        .disabled(controller.displayModeApplyingIDs.contains(display.id))
+    }
 }
 
 private struct ControlAvailabilityGrid: View {

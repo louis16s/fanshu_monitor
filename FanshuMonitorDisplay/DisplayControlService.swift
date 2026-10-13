@@ -91,6 +91,12 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
             let isBuiltIn = displayKind == .builtIn
             let usesNativeBrightness = displayKind == .builtIn || displayKind == .appleNative
             let usesDDC = displayKind == .externalDDC
+            let supportsPhysicalDisplayModes = !isBuiltIn
+                && (displayKind == .externalDDC || displayKind == .appleNative)
+            let availableDisplayModes = supportsPhysicalDisplayModes
+                ? DisplayModeCatalog.modes(for: id)
+                : []
+            let currentDisplayMode = CGDisplayCopyDisplayMode(id).flatMap(DisplayModeOption.init(mode:))
             let name = displayName(for: id, isBuiltIn: isBuiltIn)
             let storageID = displayStorageID(for: id, name: name, isBuiltIn: isBuiltIn)
             if usesDDC, let storedRange = ddcRangeStore.range(displayStorageID: storageID) {
@@ -183,9 +189,39 @@ nonisolated final class DisplayControlService: @unchecked Sendable {
                     hasDDCService: hasDDCService,
                     isTemporarilyDisabled: contrastTemporarilyDisabled
                 ),
-                capabilities: nil
+                capabilities: nil,
+                availableDisplayModes: availableDisplayModes,
+                currentDisplayModeID: currentDisplayMode?.id
             )
         }
+    }
+
+    func applyDisplayMode(_ selectedMode: DisplayModeOption, displayID: CGDirectDisplayID) -> Bool {
+        guard CGDisplayIsOnline(displayID) != 0, CGDisplayIsBuiltin(displayID) == 0 else {
+            return false
+        }
+
+        let options = [kCGDisplayShowDuplicateLowResolutionModes as String: true] as CFDictionary
+        guard let modes = CGDisplayCopyAllDisplayModes(displayID, options) as? [CGDisplayMode],
+              let mode = modes.first(where: { DisplayModeOption(mode: $0)?.id == selectedMode.id })
+        else {
+            return false
+        }
+
+        var configuration: CGDisplayConfigRef?
+        guard CGBeginDisplayConfiguration(&configuration) == .success,
+              let configuration
+        else {
+            return false
+        }
+
+        guard CGConfigureDisplayWithDisplayMode(configuration, displayID, mode, nil) == .success else {
+            CGCancelDisplayConfiguration(configuration)
+            return false
+        }
+
+        let result = CGCompleteDisplayConfiguration(configuration, .permanently)
+        return result == .success
     }
 
     func setValue(_ value: Double, for control: DisplayControlKind, display: ControlledDisplay) -> Bool {
