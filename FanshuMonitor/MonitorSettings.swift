@@ -123,6 +123,20 @@ enum CodexHeaderDetailPreference: String, CaseIterable, Identifiable {
     }
 }
 
+enum CodexUsageProxyType: String, CaseIterable, Identifiable {
+    case http
+    case socks5
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .http: "HTTP"
+        case .socks5: "SOCKS5"
+        }
+    }
+}
+
 @MainActor
 final class MonitorSettings: ObservableObject {
     @Published var launchAtLogin: Bool = false
@@ -143,6 +157,10 @@ final class MonitorSettings: ObservableObject {
     @Published var codexRefreshIntervalMinutes: Double = 5
     @Published var codexAdaptiveRefreshIntervalMinutes: Double = 1
     @Published var codexHeaderDetailPreference: CodexHeaderDetailPreference = .plan
+    @Published var codexLocalProxyEnabled = false
+    @Published var codexLocalProxyHost = "127.0.0.1"
+    @Published var codexLocalProxyPort = 10808
+    @Published var codexLocalProxyType: CodexUsageProxyType = .socks5
     @Published var updateChecksEnabled: Bool = true
     @Published var brightnessKeyInterceptionEnabled: Bool = true
     @Published var mouseControlEnabled: Bool = false
@@ -205,6 +223,13 @@ final class MonitorSettings: ObservableObject {
         codexHeaderDetailPreference = CodexHeaderDetailPreference(
             rawValue: defaults.string(forKey: Keys.codexHeaderDetailPreference) ?? ""
         ) ?? .plan
+        codexLocalProxyEnabled = defaults.object(forKey: Keys.codexLocalProxyEnabled) as? Bool ?? false
+        codexLocalProxyHost = defaults.string(forKey: Keys.codexLocalProxyHost) ?? "127.0.0.1"
+        let storedProxyPort = defaults.object(forKey: Keys.codexLocalProxyPort) as? Int ?? 10808
+        codexLocalProxyPort = min(65535, max(1, storedProxyPort))
+        codexLocalProxyType = CodexUsageProxyType(
+            rawValue: defaults.string(forKey: Keys.codexLocalProxyType) ?? ""
+        ) ?? .socks5
         updateChecksEnabled = defaults.object(forKey: Keys.updateChecksEnabled) as? Bool ?? true
         brightnessKeyInterceptionEnabled = defaults.object(forKey: Keys.brightnessKeyInterceptionEnabled) as? Bool ?? true
         mouseControlEnabled = defaults.object(forKey: Keys.mouseControlEnabled) as? Bool ?? false
@@ -554,6 +579,10 @@ final class MonitorSettings: ObservableObject {
         codexRefreshIntervalMinutes = 5
         codexAdaptiveRefreshIntervalMinutes = 1
         codexHeaderDetailPreference = .plan
+        codexLocalProxyEnabled = false
+        codexLocalProxyHost = "127.0.0.1"
+        codexLocalProxyPort = 10808
+        codexLocalProxyType = .socks5
         updateChecksEnabled = true
         brightnessKeyInterceptionEnabled = true
         mouseControlEnabled = false
@@ -593,6 +622,10 @@ enum Keys {
     static let codexRefreshIntervalMinutes = "settings.codexRefreshIntervalMinutes"
     static let codexAdaptiveRefreshIntervalMinutes = "settings.codexAdaptiveRefreshIntervalMinutes"
     static let codexHeaderDetailPreference = "settings.codex.headerDetailPreference"
+    static let codexLocalProxyEnabled = "settings.codex.localProxy.enabled"
+    static let codexLocalProxyHost = "settings.codex.localProxy.host"
+    static let codexLocalProxyPort = "settings.codex.localProxy.port"
+    static let codexLocalProxyType = "settings.codex.localProxy.type"
     static let updateChecksEnabled = "settings.updateChecksEnabled"
     static let brightnessKeyInterceptionEnabled = "settings.brightnessKeyInterceptionEnabled"
     static let mouseControlEnabled = "settings.mouse.controlEnabled"

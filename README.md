@@ -24,7 +24,7 @@
 
 番薯Monitor 是一个轻量常驻的菜单栏应用，用来观察 CPU、GPU、内存、电源、Codex 额度、鼠标和显示器状态。它会根据鼠标所在屏幕分配 F1/F2 亮度键，在可控外接屏上调整 DDC 亮度，也能按不同时间段直接锁定系统。
 
-当前版本：`0.3.3`
+当前版本：`0.3.4`
 
 ## 主要功能
 
@@ -46,7 +46,7 @@
 
 ## 截图
 
-下面是当前 `0.3.3` 官网与动态面板预览。可以直接访问 [官网](https://louis16s.github.io/fanshu_monitor/) 操作显示器、锁屏、鼠标和 Codex 演示。
+下面是当前 `0.3.4` 官网与动态面板预览。可以直接访问 [官网](https://louis16s.github.io/fanshu_monitor/) 操作显示器、锁屏、鼠标和 Codex 演示。
 
 <p align="center">
   <img src="docs/images/site-preview.png" width="900" alt="番薯Monitor 官网与动态面板预览">
@@ -72,6 +72,8 @@ sudo xattr -cr /Applications/番薯Monitor.app
 ```bash
 ./script/build_and_run.sh --verify
 ```
+
+版本号只需修改根目录的 [`VERSION`](VERSION)，运行构建脚本时会自动同步 Xcode、双语官网、README 和官网预览图；也可以单独运行 `node scripts/sync_version.js`。
 
 也可以直接使用 Xcode：
 

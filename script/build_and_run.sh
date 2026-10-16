@@ -147,6 +147,7 @@ open_app() {
 }
 
 validate_mode
+node "$ROOT_DIR/scripts/sync_version.js"
 build_release
 
 case "$MODE" in

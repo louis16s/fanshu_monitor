@@ -1664,6 +1664,36 @@
         }
       }
     },
+    "settings.codex-proxy": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本地代理" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Local Proxy" } }
+      }
+    },
+    "settings.codex-proxy.enabled": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "使用本地代理" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Use Local Proxy" } }
+      }
+    },
+    "settings.codex-proxy.enabled.subtitle": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仅用于刷新 Codex 限额，默认关闭" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Only used for Codex Limits refresh; off by default" } }
+      }
+    },
+    "settings.codex-proxy.address": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "代理地址" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Proxy Address" } }
+      }
+    },
+    "settings.codex-proxy.type": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "代理类型" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Proxy Type" } }
+      }
+    },
     "settings.minutes-format": {
       "localizations": {
         "zh-Hans": {

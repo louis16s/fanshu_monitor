@@ -52,6 +52,48 @@ struct ModuleSettingsView: View {
                         .fixedSize()
                     }
                 }
+
+                SettingsGroup(String(localized: "settings.codex-proxy")) {
+                    SettingsRow(
+                        title: String(localized: "settings.codex-proxy.enabled"),
+                        subtitle: String(localized: "settings.codex-proxy.enabled.subtitle")
+                    ) {
+                        Toggle("", isOn: $settings.codexLocalProxyEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+
+                    SettingsDivider()
+
+                    SettingsRow(title: String(localized: "settings.codex-proxy.address")) {
+                        HStack(spacing: 8) {
+                            TextField("127.0.0.1", text: $settings.codexLocalProxyHost)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 132)
+                            Text(":")
+                                .foregroundStyle(.secondary)
+                            TextField("10808", value: $settings.codexLocalProxyPort, format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 76)
+                                .onChange(of: settings.codexLocalProxyPort) { _, newValue in
+                                    let port = min(65535, max(1, newValue))
+                                    if port != newValue { settings.codexLocalProxyPort = port }
+                                }
+                        }
+                    }
+
+                    SettingsDivider()
+
+                    SettingsRow(title: String(localized: "settings.codex-proxy.type")) {
+                        Picker("", selection: $settings.codexLocalProxyType) {
+                            ForEach(CodexUsageProxyType.allCases) { proxyType in
+                                Text(proxyType.title).tag(proxyType)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 132)
+                    }
+                }
             }
 
             if kind == .battery {

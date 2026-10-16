@@ -24,7 +24,7 @@ A macOS menu bar system monitor, external display controller, and scheduled lock
 
 Fanshu Monitor is a lightweight menu bar app for CPU, GPU, memory, power, Codex quota, mouse, and display status. It routes F1/F2 brightness keys to the display under your pointer, controls compatible external displays through DDC, and can lock macOS directly on different schedules throughout the day.
 
-Current version: `0.3.3`
+Current version: `0.3.4`
 
 ## Highlights
 
@@ -46,7 +46,7 @@ Current version: `0.3.3`
 
 ## Screenshots
 
-This is the current `0.3.3` website and live panel preview. Open the [website](https://louis16s.github.io/fanshu_monitor/) to interact with the display, lock, mouse, and Codex demos.
+This is the current `0.3.4` website and live panel preview. Open the [website](https://louis16s.github.io/fanshu_monitor/) to interact with the display, lock, mouse, and Codex demos.
 
 <p align="center">
   <img src="images/site-preview.png" width="900" alt="Fanshu Monitor website and live panel preview">
@@ -72,6 +72,8 @@ Use the project script to build Release, refresh `outputs/番薯Monitor.app` and
 ```bash
 ./script/build_and_run.sh --verify
 ```
+
+Change the version only in the root [`VERSION`](../VERSION) file. The build script synchronizes the Xcode project, both website languages, READMEs, and the website preview image; run `node scripts/sync_version.js` to update them without building the app.
 
 Or build with Xcode directly:
 

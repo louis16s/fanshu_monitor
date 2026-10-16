@@ -1,4 +1,5 @@
 import Foundation
+import CFNetwork
 
 nonisolated enum CodexQuotaRefreshSchedule {
     static func nextRefreshDate(resetDates: [Date], now: Date) -> Date? {
@@ -424,37 +425,21 @@ nonisolated struct CodexUsageClient: Sendable {
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, HTTPURLResponse)
     static let requestTimeout: TimeInterval = 12
 
-    private static let liveSession: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.urlCache = nil
-        configuration.httpCookieStorage = nil
-        configuration.timeoutIntervalForRequest = requestTimeout
-        configuration.timeoutIntervalForResource = requestTimeout
-        configuration.waitsForConnectivity = false
-        return URLSession(configuration: configuration)
-    }()
-
-    static let liveTransport: Transport = { request in
-        let (data, response) = try await liveSession.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw CodexUsageError.invalidResponse(-1)
-        }
-        return (data, httpResponse)
-    }
-
     var authFileURL: URL
     var usageURL: URL
-    private let transport: Transport
+    private let transport: Transport?
+    private let proxySettings: @Sendable () -> CodexUsageProxySettings
 
     init(
         authFileURL: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/auth.json"),
         usageURL: URL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!,
-        transport: @escaping Transport = CodexUsageClient.liveTransport
+        transport: Transport? = nil,
+        proxySettings: @escaping @Sendable () -> CodexUsageProxySettings = { CodexUsageProxySettings.load() }
     ) {
         self.authFileURL = authFileURL
         self.usageURL = usageURL
         self.transport = transport
+        self.proxySettings = proxySettings
     }
 
     func load() async throws -> CodexQuotaReport {
@@ -473,7 +458,7 @@ nonisolated struct CodexUsageClient: Sendable {
         let data: Data
         let response: HTTPURLResponse
         do {
-            (data, response) = try await transport(request)
+            (data, response) = try await send(request)
         } catch let error as CodexUsageError {
             throw error
         } catch {
@@ -485,6 +470,28 @@ nonisolated struct CodexUsageClient: Sendable {
         }
 
         return try Self.parseUsage(data, now: Date())
+    }
+
+    private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        if let transport {
+            return try await transport(request)
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.timeoutIntervalForRequest = Self.requestTimeout
+        configuration.timeoutIntervalForResource = Self.requestTimeout
+        configuration.waitsForConnectivity = false
+        configuration.connectionProxyDictionary = proxySettings().connectionProxyDictionary
+        let session = URLSession(configuration: configuration)
+        defer { session.finishTasksAndInvalidate() }
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CodexUsageError.invalidResponse(-1)
+        }
+        return (data, httpResponse)
     }
 
     static func mapTransportError(_ error: Error) -> CodexUsageError {
@@ -538,6 +545,44 @@ nonisolated struct CodexUsageClient: Sendable {
         } catch {
             throw CodexUsageError.invalidAuthFile
         }
+    }
+}
+
+nonisolated struct CodexUsageProxySettings: Sendable {
+    let enabled: Bool
+    let host: String
+    let port: Int
+    let type: String
+
+    static func load(defaults: UserDefaults = .standard) -> Self {
+        Self(
+            enabled: defaults.object(forKey: "settings.codex.localProxy.enabled") as? Bool ?? false,
+            host: defaults.string(forKey: "settings.codex.localProxy.host") ?? "127.0.0.1",
+            port: defaults.object(forKey: "settings.codex.localProxy.port") as? Int ?? 10808,
+            type: defaults.string(forKey: "settings.codex.localProxy.type") ?? "socks5"
+        )
+    }
+
+    var connectionProxyDictionary: [AnyHashable: Any]? {
+        let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard enabled, !normalizedHost.isEmpty, (1...65535).contains(port) else { return nil }
+
+        if type == "socks5" {
+            return [
+                kCFNetworkProxiesSOCKSEnable as String: 1,
+                kCFNetworkProxiesSOCKSProxy as String: normalizedHost,
+                kCFNetworkProxiesSOCKSPort as String: port
+            ]
+        }
+
+        return [
+            kCFNetworkProxiesHTTPEnable as String: 1,
+            kCFNetworkProxiesHTTPProxy as String: normalizedHost,
+            kCFNetworkProxiesHTTPPort as String: port,
+            kCFNetworkProxiesHTTPSEnable as String: 1,
+            kCFNetworkProxiesHTTPSProxy as String: normalizedHost,
+            kCFNetworkProxiesHTTPSPort as String: port
+        ]
     }
 }
 

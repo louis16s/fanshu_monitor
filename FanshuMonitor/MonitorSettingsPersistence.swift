@@ -131,6 +131,35 @@ extension MonitorSettings {
                     self?.persist(newValue.rawValue, forKey: Keys.codexHeaderDetailPreference)
                 }
                 .store(in: &cancellables)
+
+            $codexLocalProxyEnabled
+                .dropFirst()
+                .sink { [weak self] newValue in
+                    self?.persist(newValue, forKey: Keys.codexLocalProxyEnabled)
+                }
+                .store(in: &cancellables)
+
+            $codexLocalProxyHost
+                .dropFirst()
+                .sink { [weak self] newValue in
+                    self?.persist(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Keys.codexLocalProxyHost)
+                }
+                .store(in: &cancellables)
+
+            $codexLocalProxyPort
+                .dropFirst()
+                .sink { [weak self] newValue in
+                    let port = min(65535, max(1, newValue))
+                    self?.persist(port, forKey: Keys.codexLocalProxyPort)
+                }
+                .store(in: &cancellables)
+
+            $codexLocalProxyType
+                .dropFirst()
+                .sink { [weak self] newValue in
+                    self?.persist(newValue.rawValue, forKey: Keys.codexLocalProxyType)
+                }
+                .store(in: &cancellables)
     
             $updateChecksEnabled
                 .dropFirst()
