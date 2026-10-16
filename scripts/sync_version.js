@@ -10,6 +10,9 @@ if (!/^\d+\.\d+\.\d+$/.test(version)) {
 
 const projectPath = join(root, "番薯monitor.xcodeproj/project.pbxproj");
 const project = readFileSync(projectPath, "utf8");
+const currentVersion = project.match(/MARKETING_VERSION = (\d+\.\d+\.\d+);/)?.[1];
+if (!currentVersion) throw new Error("Could not find MARKETING_VERSION in the Xcode project");
+const escapedCurrentVersion = currentVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const updatedProject = project.replace(/(MARKETING_VERSION = )\d+\.\d+\.\d+(;)/g, `$1${version}$2`);
 if (updatedProject !== project) writeFileSync(projectPath, updatedProject);
 
@@ -24,7 +27,7 @@ let websiteChanged = false;
 for (const relativePath of websiteFiles) {
   const path = join(root, relativePath);
   const source = readFileSync(path, "utf8");
-  const updated = source.replace(/\d+\.\d+\.\d+/g, version);
+  const updated = source.replace(new RegExp(escapedCurrentVersion, "g"), version);
   if (updated !== source) {
     writeFileSync(path, updated);
     if (relativePath.startsWith("docs/zh/") || relativePath.startsWith("docs/en/")) websiteChanged = true;

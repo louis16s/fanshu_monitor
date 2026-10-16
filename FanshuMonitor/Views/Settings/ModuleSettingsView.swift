@@ -54,44 +54,46 @@ struct ModuleSettingsView: View {
                 }
 
                 SettingsGroup(String(localized: "settings.codex-proxy")) {
-                    SettingsRow(
-                        title: String(localized: "settings.codex-proxy.enabled"),
-                        subtitle: String(localized: "settings.codex-proxy.enabled.subtitle")
-                    ) {
-                        Toggle("", isOn: $settings.codexLocalProxyEnabled)
-                            .toggleStyle(.switch)
+                    SettingsRow(title: String(localized: "settings.codex-proxy.enabled")) {
+                        HStack(spacing: 12) {
+                            Picker("", selection: $settings.codexLocalProxyType) {
+                                ForEach(CodexUsageProxyType.allCases) { proxyType in
+                                    Text(proxyType.title).tag(proxyType)
+                                }
+                            }
                             .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .frame(width: 142)
+
+                            Toggle("", isOn: $settings.codexLocalProxyEnabled)
+                                .toggleStyle(.switch)
+                                .labelsHidden()
+                        }
                     }
 
-                    SettingsDivider()
+                    if settings.codexLocalProxyEnabled {
+                        SettingsDivider()
 
-                    SettingsRow(title: String(localized: "settings.codex-proxy.address")) {
-                        HStack(spacing: 8) {
-                            TextField("127.0.0.1", text: $settings.codexLocalProxyHost)
+                        SettingsRow(title: String(localized: "settings.codex-proxy.address")) {
+                            HStack(spacing: 8) {
+                                TextField("127.0.0.1", text: $settings.codexLocalProxyHost)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 112)
+                                Text(":")
+                                    .foregroundStyle(.secondary)
+                                TextField(
+                                    "10808",
+                                    value: $settings.codexLocalProxyPort,
+                                    format: IntegerFormatStyle<Int>.number.grouping(.never)
+                                )
                                 .textFieldStyle(.roundedBorder)
-                                .frame(width: 132)
-                            Text(":")
-                                .foregroundStyle(.secondary)
-                            TextField("10808", value: $settings.codexLocalProxyPort, format: .number)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 76)
+                                .frame(width: 68)
                                 .onChange(of: settings.codexLocalProxyPort) { _, newValue in
                                     let port = min(65535, max(1, newValue))
                                     if port != newValue { settings.codexLocalProxyPort = port }
                                 }
-                        }
-                    }
-
-                    SettingsDivider()
-
-                    SettingsRow(title: String(localized: "settings.codex-proxy.type")) {
-                        Picker("", selection: $settings.codexLocalProxyType) {
-                            ForEach(CodexUsageProxyType.allCases) { proxyType in
-                                Text(proxyType.title).tag(proxyType)
                             }
                         }
-                        .labelsHidden()
-                        .frame(width: 132)
                     }
                 }
             }

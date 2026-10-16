@@ -6,9 +6,11 @@ final class PreviewRenderer: NSObject, NSApplicationDelegate, WKNavigationDelega
     private let window: NSWindow
     private let webView: WKWebView
     private let outputURL: URL
+    private let rootURL: URL
     private var hasRendered = false
 
     init(root: URL) {
+        rootURL = root
         outputURL = root.appendingPathComponent("docs/images/site-preview.png")
         let configuration = WKWebViewConfiguration()
         webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 720), configuration: configuration)
@@ -31,8 +33,7 @@ final class PreviewRenderer: NSObject, NSApplicationDelegate, WKNavigationDelega
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         window.makeKeyAndOrderFront(nil)
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        webView.loadFileURL(root.appendingPathComponent("docs/zh/index.html"), allowingReadAccessTo: root)
+        webView.loadFileURL(rootURL.appendingPathComponent("docs/zh/index.html"), allowingReadAccessTo: rootURL)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
