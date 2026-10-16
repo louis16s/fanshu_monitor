@@ -1213,6 +1213,33 @@ struct BuiltInDisplayRecoverySnapshotTests {
 struct DisplayControlWorkerTests {
     private let key = ControlKey(displayID: 1, control: .brightness)
 
+    @Test func blockedSliderWriteRetainsOnlyTheLatestOfOneThousandUpdates() {
+        let worker = DisplayControlWorker()
+        let recorder = ThreadSafeValues()
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        worker.setValue(0, for: key, sequence: 1, mode: .coalesced, performWrite: { value in
+            started.signal()
+            _ = release.wait(timeout: .now() + 5)
+            recorder.append(value)
+            return true
+        }, completion: { _ in })
+        worker.flushPendingWritesForTesting()
+        #expect(started.wait(timeout: .now() + 1) == .success)
+        for value in 1...1_000 {
+            worker.setValue(Double(value), for: key, sequence: UInt64(value + 1), mode: .coalesced,
+                            performWrite: { recorder.append($0); return true }, completion: { result in
+                if result.sequence == 1_001 { finished.signal() }
+            })
+            worker.flushPendingWritesForTesting()
+        }
+        release.signal()
+        #expect(finished.wait(timeout: .now() + 2) == .success)
+        #expect(recorder.values == [0, 1_000])
+    }
+
     @Test func mixedWriteModesEndAtTheLatestKeyboardRequestWithAQueuedSliderWrite() {
         let worker = DisplayControlWorker()
         let recorder = ThreadSafeValues()
@@ -1235,7 +1262,7 @@ struct DisplayControlWorkerTests {
         worker.flushPendingWritesForTesting()
         release.signal()
         #expect(finished.wait(timeout: .now() + 2) == .success)
-        #expect(recorder.values == [10, 20, 30])
+        #expect(recorder.values == [10, 30])
     }
 
     @Test func sleepCancellationDropsDebouncedAndQueuedHardwareWrites() {

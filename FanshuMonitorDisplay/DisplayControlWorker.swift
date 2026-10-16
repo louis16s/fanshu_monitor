@@ -39,8 +39,8 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
     private var pendingWrites: [ControlKey: PendingWrite] = [:]
     private var debounceTimers: [ControlKey: DispatchWorkItem] = [:]
     private var debounceGenerations: [ControlKey: UInt64] = [:]
-    private var activeOrderedWriteKeys: Set<ControlKey> = []
-    private var latestOrderedWrites: [ControlKey: PendingWrite] = [:]
+    private var activeWriteKeys: Set<ControlKey> = []
+    private var latestWrites: [ControlKey: PendingWrite] = [:]
     private var discoveryGeneration: UInt64 = 0
     private var nextDiscoveryID: UInt64 = 0
     private var activeDiscovery: ActiveDiscovery?
@@ -60,7 +60,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         lifecycleLock.withLock { writeGeneration &+= 1 }
         stateQueue.async {
             for key in Array(self.pendingWrites.keys) { self.cancelPendingWrite(for: key) }
-            self.latestOrderedWrites.removeAll()
+            self.latestWrites.removeAll()
         }
     }
 
@@ -74,7 +74,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
             for key in Array(pendingWrites.keys) {
                 guard let request = pendingWrites[key] else { continue }
                 cancelPendingWrite(for: key)
-                perform(request, for: key)
+                scheduleWrite(request, for: key)
             }
         }
     }
@@ -404,7 +404,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
             switch mode {
             case .ordered:
                 self.cancelPendingWrite(for: key)
-                self.scheduleOrderedWrite(
+                self.scheduleWrite(
                     PendingWrite(
                         value: value,
                         sequence: sequence,
@@ -414,7 +414,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
                     for: key
                 )
             case .coalesced:
-                self.latestOrderedWrites[key] = nil
+                self.latestWrites[key] = nil
                 self.scheduleCoalescedWrite(
                     PendingWrite(
                         value: value,
@@ -444,7 +444,7 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
             self.debounceTimers[key] = nil
             self.debounceGenerations[key] = nil
 
-            self.perform(latestRequest, for: key)
+            self.scheduleWrite(latestRequest, for: key)
         }
         debounceTimers[key] = timer
         stateQueue.asyncAfter(deadline: .now() + debounceInterval, execute: timer)
@@ -457,16 +457,17 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
         pendingWrites[key] = nil
     }
 
-    private func scheduleOrderedWrite(_ request: PendingWrite, for key: ControlKey) {
-        guard !activeOrderedWriteKeys.contains(key) else {
-            latestOrderedWrites[key] = request
+    private func scheduleWrite(_ request: PendingWrite, for key: ControlKey) {
+        // Both input modes share a bounded slot when hardware falls behind.
+        guard !activeWriteKeys.contains(key) else {
+            latestWrites[key] = request
             return
         }
-        activeOrderedWriteKeys.insert(key)
-        performOrderedWrite(request, for: key)
+        activeWriteKeys.insert(key)
+        performWrite(request, for: key)
     }
 
-    private func performOrderedWrite(_ request: PendingWrite, for key: ControlKey) {
+    private func performWrite(_ request: PendingWrite, for key: ControlKey) {
         let writeQueue = writeQueue(for: key.displayID)
         writeQueue.async {
             let success = request.performWrite(request.value)
@@ -479,27 +480,12 @@ nonisolated final class DisplayControlWorker: @unchecked Sendable {
                 )
             )
             self.stateQueue.async {
-                if let latest = self.latestOrderedWrites.removeValue(forKey: key) {
-                    self.performOrderedWrite(latest, for: key)
+                if let latest = self.latestWrites.removeValue(forKey: key) {
+                    self.performWrite(latest, for: key)
                 } else {
-                    self.activeOrderedWriteKeys.remove(key)
+                    self.activeWriteKeys.remove(key)
                 }
             }
-        }
-    }
-
-    private func perform(_ request: PendingWrite, for key: ControlKey) {
-        let writeQueue = writeQueue(for: key.displayID)
-        writeQueue.async {
-            let success = request.performWrite(request.value)
-            request.completion(
-                DisplayWriteResult(
-                    key: key,
-                    value: request.value,
-                    sequence: request.sequence,
-                    success: success
-                )
-            )
         }
     }
 

@@ -27,6 +27,7 @@ actor CodexTaskProgressReader {
     static let staleTaskTimeout: TimeInterval = 120
     private static let readChunkBytes = 256 * 1_024
     private static let maximumRecordBytes = 1_024 * 1_024
+    static let maximumRolloutReadBytes: UInt64 = 2 * 1_024 * 1_024
     private static let maximumCandidates = 12
     private static let maximumCachedTitles = 256
 
@@ -242,7 +243,8 @@ actor CodexTaskProgressReader {
                 state.lines.isDroppingPartialLine = try handle.read(upToCount: 1) != Data([0x0A])
             }
             try handle.seek(toOffset: readOffset)
-            _ = try readChunks(handle: handle, fileSize: fileSize) { data, offset in
+            let readLimit = readOffset + min(Self.maximumRolloutReadBytes, fileSize - readOffset)
+            _ = try readChunks(handle: handle, fileSize: readLimit) { data, offset in
                 var lines = state.lines
                 lines.consume(data) { line in
                     process(line: line, state: &state, now: now)

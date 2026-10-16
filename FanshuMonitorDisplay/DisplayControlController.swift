@@ -96,6 +96,8 @@ final class DisplayControlController: ObservableObject {
     private var powerEventBridge: DisplayPowerEventBridge?
     private var hardwareTopologyMonitor: DisplayHardwareTopologyMonitor?
     private var refreshWorkItem: DispatchWorkItem?
+    private var discoveryRefreshInFlight = false
+    private var discoveryRefreshPending = false
     private var wakeRefreshGeneration = 0
     private var displayCallbackRegistered = false
     private var nativeBrightnessSyncTask: Task<Void, Never>?
@@ -183,10 +185,24 @@ final class DisplayControlController: ObservableObject {
 
     func refreshAsync() {
         guard !isSystemSleeping else { return }
+        guard !discoveryRefreshInFlight else {
+            discoveryRefreshPending = true
+            return
+        }
+        discoveryRefreshInFlight = true
+        discoveryRefreshPending = false
         let generation = wakeRefreshGeneration
         let controls = activeControls
         worker.refresh(service: service, activeControls: controls) { detectedDisplays in
             DispatchQueue.main.async {
+                defer {
+                    self.discoveryRefreshInFlight = false
+                    if self.discoveryRefreshPending,
+                       self.controlDemand.controllerRequired,
+                       !self.isSystemSleeping {
+                        self.refreshAsync()
+                    }
+                }
                 guard !self.isSystemSleeping, generation == self.wakeRefreshGeneration else { return }
                 AppLogger.ui.info("Display refresh completed, found \(detectedDisplays.count) displays")
                 if let builtInDisplay = detectedDisplays.first(where: \.isBuiltIn) {

@@ -3,6 +3,28 @@ import Testing
 @testable import FanshuMonitor
 
 struct CodexTaskProgressReaderTests {
+    @Test func largeIncrementalRolloutIsReadInBoundedPassesWithoutLosingItsTerminalEvent() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = "81234567-89ab-cdef-0123-456789abcdef"
+        let rollout = root.appendingPathComponent("rollout-\(id).jsonl")
+        let start = #"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"#
+        try Data((start + "\n").utf8).write(to: rollout)
+        let reader = CodexTaskProgressReader(sessionsRoot: root, sessionIndexURL: root.appendingPathComponent("index"))
+        let now = Date()
+        #expect(await reader.load(now: now).map(\.id) == [id])
+        let skippedBytes = Int(CodexTaskProgressReader.maximumRolloutReadBytes) * 3
+        try append(Data(repeating: 0x0A, count: skippedBytes), to: rollout)
+        let terminal = #"{"type":"event_msg","payload":{"type":"task_aborted","turn_id":"turn"}}"#
+        try append(Data((terminal + "\n").utf8), to: rollout)
+
+        for pass in 1...3 {
+            #expect(await reader.load(now: now.addingTimeInterval(Double(pass))).map(\.id) == [id])
+        }
+        #expect(await reader.load(now: now.addingTimeInterval(4)).isEmpty)
+    }
+
     @Test func largeRolloutPreservesAlignedLifecycleAndSkipsPartialLine() async throws {
         let chunk = 1_024 * 1_024
         for partial in [false, true] {
