@@ -53,49 +53,7 @@ struct ModuleSettingsView: View {
                     }
                 }
 
-                SettingsGroup(String(localized: "settings.codex-proxy")) {
-                    SettingsRow(title: String(localized: "settings.codex-proxy.enabled")) {
-                        HStack(spacing: 12) {
-                            Picker("", selection: $settings.codexLocalProxyType) {
-                                ForEach(CodexUsageProxyType.allCases) { proxyType in
-                                    Text(proxyType.title).tag(proxyType)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.segmented)
-                            .frame(width: 142)
-
-                            Toggle("", isOn: $settings.codexLocalProxyEnabled)
-                                .toggleStyle(.switch)
-                                .labelsHidden()
-                        }
-                    }
-
-                    if settings.codexLocalProxyEnabled {
-                        SettingsDivider()
-
-                        SettingsRow(title: String(localized: "settings.codex-proxy.address")) {
-                            HStack(spacing: 8) {
-                                TextField("127.0.0.1", text: $settings.codexLocalProxyHost)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 112)
-                                Text(":")
-                                    .foregroundStyle(.secondary)
-                                TextField(
-                                    "10808",
-                                    value: $settings.codexLocalProxyPort,
-                                    format: IntegerFormatStyle<Int>.number.grouping(.never)
-                                )
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 68)
-                                .onChange(of: settings.codexLocalProxyPort) { _, newValue in
-                                    let port = min(65535, max(1, newValue))
-                                    if port != newValue { settings.codexLocalProxyPort = port }
-                                }
-                            }
-                        }
-                    }
-                }
+                CodexProxySettingsGroup(settings: settings)
             }
 
             if kind == .battery {
@@ -185,6 +143,131 @@ struct ModuleSettingsView: View {
             format: String(localized: "settings.minutes-format"),
             Int(settings.codexAdaptiveRefreshIntervalMinutes)
         )
+    }
+}
+
+private struct CodexProxySettingsGroup: View {
+    @ObservedObject var settings: MonitorSettings
+    @State private var validationState: ValidationState?
+    @State private var validationTask: Task<Void, Never>?
+
+    private enum ValidationState: Equatable {
+        case checking
+        case connected
+        case failed
+    }
+
+    var body: some View {
+        SettingsGroup(String(localized: "settings.codex-proxy")) {
+            SettingsRow(title: String(localized: "settings.codex-proxy.enabled")) {
+                HStack(spacing: 12) {
+                    Picker("", selection: $settings.codexLocalProxyType) {
+                        ForEach(CodexUsageProxyType.allCases) { proxyType in
+                            Text(proxyType.title).tag(proxyType)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 142)
+
+                    Toggle("", isOn: Binding(
+                        get: { settings.codexLocalProxyEnabled },
+                        set: setProxyEnabled
+                    ))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                }
+            }
+
+            if settings.codexLocalProxyEnabled {
+                SettingsDivider()
+
+                SettingsRow(title: String(localized: "settings.codex-proxy.address")) {
+                    HStack(spacing: 8) {
+                        TextField("127.0.0.1", text: $settings.codexLocalProxyHost)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 112)
+                            .onSubmit(validateCurrentConfiguration)
+                        Text(":")
+                            .foregroundStyle(.secondary)
+                        TextField(
+                            "10808",
+                            value: $settings.codexLocalProxyPort,
+                            format: IntegerFormatStyle<Int>.number.grouping(.never)
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 68)
+                        .onChange(of: settings.codexLocalProxyPort) { _, newValue in
+                            let port = min(65535, max(1, newValue))
+                            if port != newValue { settings.codexLocalProxyPort = port }
+                        }
+                        .onSubmit(validateCurrentConfiguration)
+                    }
+                }
+            }
+
+            if let validationState {
+                SettingsDivider()
+                HStack(spacing: 8) {
+                    if validationState == .checking {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: validationState == .connected ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                            .foregroundStyle(validationState == .connected ? .green : .orange)
+                    }
+                    Text(validationMessage(for: validationState))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+            }
+        }
+        .onChange(of: settings.codexLocalProxyType) { _, _ in
+            if settings.codexLocalProxyEnabled { validateCurrentConfiguration() }
+        }
+        .onDisappear {
+            validationTask?.cancel()
+            if validationState == .checking { settings.codexLocalProxyEnabled = false }
+        }
+    }
+
+    private func setProxyEnabled(_ enabled: Bool) {
+        validationTask?.cancel()
+        validationState = nil
+        guard enabled else {
+            settings.codexLocalProxyEnabled = false
+            return
+        }
+        settings.codexLocalProxyEnabled = true
+        validateCurrentConfiguration()
+    }
+
+    private func validateCurrentConfiguration() {
+        validationTask?.cancel()
+        validationState = .checking
+        let configuration = CodexUsageProxySettings(
+            enabled: true,
+            host: settings.codexLocalProxyHost,
+            port: settings.codexLocalProxyPort,
+            type: settings.codexLocalProxyType.rawValue
+        )
+        validationTask = Task {
+            let isValid = await CodexProxyValidator.validate(configuration)
+            guard !Task.isCancelled else { return }
+            settings.codexLocalProxyEnabled = isValid
+            validationState = isValid ? .connected : .failed
+        }
+    }
+
+    private func validationMessage(for state: ValidationState) -> String {
+        switch state {
+        case .checking: String(localized: "settings.codex-proxy.checking")
+        case .connected: String(localized: "settings.codex-proxy.connected")
+        case .failed: String(localized: "settings.codex-proxy.failed")
+        }
     }
 }
 

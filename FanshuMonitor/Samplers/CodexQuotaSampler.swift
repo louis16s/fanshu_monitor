@@ -424,6 +424,7 @@ nonisolated enum CodexUsageError: LocalizedError, Equatable {
 nonisolated struct CodexUsageClient: Sendable {
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, HTTPURLResponse)
     static let requestTimeout: TimeInterval = 12
+    static let usageEndpoint = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 
     var authFileURL: URL
     var usageURL: URL
@@ -432,7 +433,7 @@ nonisolated struct CodexUsageClient: Sendable {
 
     init(
         authFileURL: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/auth.json"),
-        usageURL: URL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!,
+        usageURL: URL = CodexUsageClient.usageEndpoint,
         transport: Transport? = nil,
         proxySettings: @escaping @Sendable () -> CodexUsageProxySettings = { CodexUsageProxySettings.load() }
     ) {
@@ -583,6 +584,32 @@ nonisolated struct CodexUsageProxySettings: Sendable {
             kCFNetworkProxiesHTTPSProxy as String: normalizedHost,
             kCFNetworkProxiesHTTPSPort as String: port
         ]
+    }
+}
+
+nonisolated enum CodexProxyValidator {
+    static func validate(_ settings: CodexUsageProxySettings) async -> Bool {
+        guard let proxyDictionary = settings.connectionProxyDictionary else { return false }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.connectionProxyDictionary = proxyDictionary
+        configuration.timeoutIntervalForRequest = 6
+        configuration.timeoutIntervalForResource = 6
+        configuration.waitsForConnectivity = false
+
+        var request = URLRequest(url: CodexUsageClient.usageEndpoint)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 6
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let session = URLSession(configuration: configuration)
+        defer { session.finishTasksAndInvalidate() }
+        do {
+            let (_, response) = try await session.data(for: request)
+            guard let response = response as? HTTPURLResponse else { return false }
+            return (200..<500).contains(response.statusCode) && response.statusCode != 407
+        } catch {
+            return false
+        }
     }
 }
 

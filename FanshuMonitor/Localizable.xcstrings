@@ -1682,6 +1682,24 @@
         "en": { "stringUnit": { "state": "translated", "value": "Proxy Address" } }
       }
     },
+    "settings.codex-proxy.checking": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在验证代理连接" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Checking proxy connection" } }
+      }
+    },
+    "settings.codex-proxy.connected": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "代理连接正常" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Proxy connection verified" } }
+      }
+    },
+    "settings.codex-proxy.failed": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "代理验证失败，已自动关闭" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Proxy check failed; proxy disabled" } }
+      }
+    },
     "settings.minutes-format": {
       "localizations": {
         "zh-Hans": {
