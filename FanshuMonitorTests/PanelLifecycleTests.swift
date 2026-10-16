@@ -191,6 +191,19 @@ struct DisplayControlDemandPolicyTests {
         #expect(!resolved.capabilitiesRequested)
     }
 
+    @Test func collapsedBuiltInPanelKeepsOnlyLightweightNativeBrightnessSampling() {
+        let resolved = demand(
+            panelVisible: true,
+            sectionExpanded: false,
+            hasExternalDisplay: false
+        )
+
+        #expect(resolved.activeControls == [.brightness])
+        #expect(resolved.nativeBrightnessSyncActive)
+        #expect(!resolved.panelControlsActive)
+        #expect(!resolved.capabilitiesRequested)
+    }
+
     @Test func missingExternalDisplayDoesNotDisableBuiltInRecovery() {
         let resolved = demand(panelVisible: false, sectionExpanded: false,
                               hasExternalDisplay: false, needsMaintenance: true)
@@ -221,6 +234,7 @@ struct DisplayControlDemandPolicyTests {
 
         #expect(demand.controllerRequired)
         #expect(demand.activeControls.isEmpty)
+        #expect(!demand.nativeBrightnessSyncActive)
         #expect(!demand.capabilitiesRequested)
     }
 

@@ -9,12 +9,14 @@ nonisolated struct DisplayControlDemand: Equatable {
     let activeControls: Set<DisplayControlKind>
     let capabilitiesRequested: Bool
     let panelControlsActive: Bool
+    let nativeBrightnessSyncActive: Bool
 
     static let inactive = DisplayControlDemand(
         controllerRequired: false,
         activeControls: [],
         capabilitiesRequested: false,
-        panelControlsActive: false
+        panelControlsActive: false,
+        nativeBrightnessSyncActive: false
     )
 }
 
@@ -32,8 +34,14 @@ nonisolated enum DisplayControlDemandPolicy {
         hasExternalDisplay: Bool = true
     ) -> DisplayControlDemand {
         let panelControlsActive = panelVisible && displayModuleVisible && displaySectionExpanded
+        let nativeBrightnessSyncActive = panelVisible
+            && displayModuleVisible
+            && brightnessControlEnabled
+            && !hasExternalDisplay
         var activeControls: Set<DisplayControlKind> = []
-        if (hasExternalDisplay && brightnessKeyInterceptionEnabled) || (panelControlsActive && brightnessControlEnabled) {
+        if (hasExternalDisplay && brightnessKeyInterceptionEnabled)
+            || (panelControlsActive && brightnessControlEnabled)
+            || nativeBrightnessSyncActive {
             activeControls.insert(.brightness)
         }
         if hasExternalDisplay && panelControlsActive && volumeControlEnabled {
@@ -49,7 +57,8 @@ nonisolated enum DisplayControlDemandPolicy {
                 || (panelVisible && displayModuleVisible),
             activeControls: activeControls,
             capabilitiesRequested: hasExternalDisplay && panelControlsActive && capabilitiesEnabled,
-            panelControlsActive: panelControlsActive
+            panelControlsActive: panelControlsActive,
+            nativeBrightnessSyncActive: nativeBrightnessSyncActive
         )
     }
 }
@@ -874,6 +883,17 @@ final class DisplayControlController: ObservableObject {
     private func mergedDisplayValues(for display: ControlledDisplay) -> ControlledDisplay {
         pruneExpiredRecentValues()
         var mergedDisplay = display
+        if display.usesNativeBrightness,
+           !display.supportsBrightness,
+           let previousDisplay = displays.first(where: { $0.id == display.id }),
+           previousDisplay.usesNativeBrightness,
+           previousDisplay.supportsBrightness {
+            // A transient DisplayServices read failure must not replace the
+            // last confirmed system brightness with the placeholder default.
+            mergedDisplay.brightness = previousDisplay.brightness
+            mergedDisplay.supportsBrightness = true
+            mergedDisplay.brightnessUnavailableReason = nil
+        }
         for control in DisplayControlKind.allCases {
             let key = ControlKey(displayID: display.id, control: control)
             if let pendingValue = pendingValues[display.id]?[control] {
@@ -911,7 +931,7 @@ final class DisplayControlController: ObservableObject {
     private func configureNativeBrightnessSync() {
         guard !isSystemSleeping else { stopNativeBrightnessSync(); return }
         guard DisplayNativeBrightnessSyncPolicy.shouldRun(
-            panelVisible: controlDemand.panelControlsActive,
+            panelVisible: controlDemand.nativeBrightnessSyncActive || controlDemand.panelControlsActive,
             moduleVisible: true,
             brightnessControlEnabled: controlDemand.activeControls.contains(.brightness),
             hasNativeBrightnessDisplay: displays.contains {
