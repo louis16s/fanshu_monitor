@@ -10,13 +10,17 @@ final class MouseButtonEventTap {
     private let permissionProvider: () -> Bool
     private let startOverride: (() -> Bool)?
     private let stopOverride: (() -> Void)?
+    private let executeAction: (MouseButtonMapping) -> Void
+    private var consumedButtons: Set<Int64> = []
 
     init(settings: MonitorSettings, permissionProvider: @escaping () -> Bool = { AXIsProcessTrusted() },
-         startOverride: (() -> Bool)? = nil, stopOverride: (() -> Void)? = nil) {
+         startOverride: (() -> Bool)? = nil, stopOverride: (() -> Void)? = nil,
+         executeAction: @escaping (MouseButtonMapping) -> Void = { MouseActionExecutor.execute($0) }) {
         self.settings = settings
         self.permissionProvider = permissionProvider
         self.startOverride = startOverride
         self.stopOverride = stopOverride
+        self.executeAction = executeAction
     }
 
     deinit {
@@ -87,6 +91,7 @@ final class MouseButtonEventTap {
     }
 
     func stop() {
+        consumedButtons.removeAll()
         if isRunning { stopOverride?() }
         isRunning = false
         if let eventTap {
@@ -117,12 +122,20 @@ final class MouseButtonEventTap {
         start()
     }
 
-    private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        guard type == .otherMouseDown || type == .otherMouseUp,
+              event.getIntegerValueField(.eventSourceUserData) != MouseActionExecutor.generatedEventMarker else {
+            return Unmanaged.passUnretained(event)
+        }
+        let buttonNumber = event.getIntegerValueField(.mouseEventButtonNumber)
+        if type == .otherMouseUp {
+            return consumedButtons.remove(buttonNumber) != nil ? nil : Unmanaged.passUnretained(event)
+        }
+        if consumedButtons.contains(buttonNumber) { return nil }
         guard settings?.mouseControlEnabled == true else {
             return Unmanaged.passUnretained(event)
         }
 
-        let buttonNumber = event.getIntegerValueField(.mouseEventButtonNumber)
         let slot: MouseButtonSlot?
         switch buttonNumber {
         case 2: slot = .middle
@@ -141,12 +154,8 @@ final class MouseButtonEventTap {
             return Unmanaged.passUnretained(event)
         }
 
-        if type == .otherMouseDown {
-            AppLogger.mouse.debug("Mouse button \(slot.rawValue, privacy: .public) mapped to \(mapping.action.rawValue, privacy: .public)")
-            Task { @MainActor in
-                MouseActionExecutor.execute(mapping)
-            }
-        }
+        consumedButtons.insert(buttonNumber)
+        executeAction(mapping)
         return nil
     }
 
@@ -154,9 +163,12 @@ final class MouseButtonEventTap {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let userInfo {
                 let tap = Unmanaged<MouseButtonEventTap>.fromOpaque(userInfo).takeUnretainedValue()
+                tap.consumedButtons.removeAll()
                 if let eventTap = tap.eventTap {
-                    CGEvent.tapEnable(tap: eventTap, enable: true)
-                    AppLogger.mouse.info("Mouse button tap re-enabled by callback")
+                    // Leave the input path open after a timeout. Activation or
+                    // an explicit settings refresh can safely recreate it.
+                    CGEvent.tapEnable(tap: eventTap, enable: false)
+                    AppLogger.mouse.error("Mouse button tap disabled by system; waiting for activation to retry")
                 }
             }
             return Unmanaged.passUnretained(event)

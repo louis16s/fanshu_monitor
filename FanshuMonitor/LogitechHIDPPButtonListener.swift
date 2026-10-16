@@ -131,9 +131,7 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
                 guard let self else { return }
                 let mapping = self.currentGestureMapping
                 guard mapping.isExecutable else { return }
-                Task { @MainActor in
-                    MouseActionExecutor.execute(mapping)
-                }
+                MouseActionExecutor.execute(mapping)
             }
 
             AppLogger.mouse.info("HID++ gesture button listener started")
@@ -239,6 +237,7 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
         }
 
         func close() {
+            lock.withLock { gestureHandler = nil }
             if let gestureCID, let reprogFeature {
                 let hi = UInt8((gestureCID >> 8) & 0xFF)
                 let lo = UInt8(gestureCID & 0xFF)
@@ -357,6 +356,8 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
 
         private func handleGestureReport(_ report: [UInt8], handler: (@Sendable () -> Void)?) {
             guard let parsed = HIDPPResponse(report: report),
+                  parsed.deviceIndex == deviceIndex,
+                  parsed.softwareID == 0,
                   parsed.featureIndex == reprogFeature,
                   parsed.function == 0,
                   let gestureCID else {
@@ -390,6 +391,7 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
         }
 
         private struct HIDPPResponse {
+            let deviceIndex: UInt8
             let featureIndex: UInt8
             let function: UInt8
             let softwareID: UInt8
@@ -399,6 +401,7 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
                 guard report.count >= 4 else { return nil }
                 let offset = (report[0] == 0x10 || report[0] == 0x11) ? 1 : 0
                 guard report.count > offset + 3 else { return nil }
+                deviceIndex = report[offset]
                 featureIndex = report[offset + 1]
                 let functionAndSoftware = report[offset + 2]
                 function = (functionAndSoftware >> 4) & 0x0F
