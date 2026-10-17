@@ -337,7 +337,6 @@ nonisolated final class BuiltInDisplayBlackoutService: @unchecked Sendable {
         CGConfigureDisplayMirrorOfDisplay(config, displayID, target)
         let result = CGCompleteDisplayConfiguration(config, .forSession)
         if result != .success {
-            CGCancelDisplayConfiguration(config)
             return false
         }
         return true

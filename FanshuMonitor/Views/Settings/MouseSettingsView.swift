@@ -106,7 +106,7 @@ private struct MouseDPIControl: View {
                     }
 
                 Button(isApplying ? "设定中" : "设定") {
-                    apply(Int(dpi.rounded()))
+                    commitDPIText()
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
@@ -224,6 +224,14 @@ private struct MouseDPITrackSlider: View {
                         value = (rawValue / step).rounded() * step
                     }
             )
+            .accessibilityElement()
+            .accessibilityLabel("鼠标 DPI")
+            .accessibilityValue("\(Int(clamped.rounded()))")
+            .accessibilityAdjustableAction { direction in
+                guard isEnabled else { return }
+                let delta = direction == .increment ? step : -step
+                value = min(range.upperBound, max(range.lowerBound, value + delta))
+            }
         }
         .frame(minWidth: 80)
         .opacity(isEnabled ? 1 : 0.52)

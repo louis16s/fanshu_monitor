@@ -654,7 +654,9 @@ nonisolated enum CodexQuotaCache {
            let cachedReport = try? JSONDecoder().decode(CodexQuotaReport.self, from: cachedData),
            cachedReport.planType == report.planType,
            cachedReport.periods == report.periods,
-           cachedReport.resetCredits == report.resetCredits {
+           cachedReport.resetCredits == report.resetCredits,
+           cachedReport.fetchedAt.map({ makeQuotaTimeFormatter().string(from: $0) })
+            == report.fetchedAt.map({ makeQuotaTimeFormatter().string(from: $0) }) {
             return
         }
         defaults.set(data, forKey: key)

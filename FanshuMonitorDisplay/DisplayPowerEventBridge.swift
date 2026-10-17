@@ -21,6 +21,7 @@ nonisolated final class DisplayPowerEventBridge: @unchecked Sendable {
         label: "fanshu.display-control.power-events",
         qos: .userInteractive
     )
+    private let deliveryQueueKey = DispatchSpecificKey<UInt8>()
     private var rootPort: io_connect_t = 0
     private var notificationPort: IONotificationPortRef?
     private var notifier: io_object_t = 0
@@ -31,6 +32,7 @@ nonisolated final class DisplayPowerEventBridge: @unchecked Sendable {
     ) {
         self.earlyHandler = earlyHandler
         self.handler = handler
+        deliveryQueue.setSpecific(key: deliveryQueueKey, value: 1)
     }
 
     func start() {
@@ -62,6 +64,10 @@ nonisolated final class DisplayPowerEventBridge: @unchecked Sendable {
         if notifier != 0 {
             IODeregisterForSystemPower(&notifier)
             notifier = 0
+        }
+        // Drain callbacks before releasing the refcon owner or closing rootPort.
+        if DispatchQueue.getSpecific(key: deliveryQueueKey) == nil {
+            deliveryQueue.sync {}
         }
         if rootPort != 0 {
             IOServiceClose(rootPort)

@@ -161,6 +161,30 @@ enum ScreenSaverLockPreferences {
     }
 
     @discardableResult
+    static func applyChanges(
+        idleSeconds: Int?,
+        requirePassword: Bool?,
+        passwordDelaySeconds: Int?
+    ) -> Bool {
+        var succeeded = true
+        if let idleSeconds {
+            succeeded = set(idleSeconds, for: "idleTime", host: true) && succeeded
+        }
+        if let requirePassword {
+            succeeded = set(requirePassword, for: "askForPassword", host: false) && succeeded
+        }
+        if let passwordDelaySeconds {
+            succeeded = set(passwordDelaySeconds, for: "askForPasswordDelay", host: false) && succeeded
+        }
+
+        let current = read()
+        return succeeded
+            && (idleSeconds == nil || current.idleTime == idleSeconds)
+            && (requirePassword == nil || current.askForPassword == requirePassword)
+            && (passwordDelaySeconds == nil || current.askForPasswordDelay == passwordDelaySeconds)
+    }
+
+    @discardableResult
     static func prepareDirectLockFallback(idleSeconds: Int) -> Bool {
         var succeeded = set(max(60, idleSeconds), for: "idleTime", host: true)
         succeeded = set(true, for: "askForPassword", host: false) && succeeded

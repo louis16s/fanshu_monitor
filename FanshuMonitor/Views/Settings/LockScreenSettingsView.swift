@@ -7,7 +7,9 @@ struct LockScreenSettingsView: View {
     @State private var systemRequirePassword = true
     @State private var systemPasswordDelayText = "0"
     @State private var systemApplyTask: Task<Void, Never>?
-    @State private var isSyncingSystemSettings = false
+    @State private var idleSettingChanged = false
+    @State private var passwordSettingChanged = false
+    @State private var passwordDelayChanged = false
     @State private var systemSettingsExpanded = false
     @State private var showsRestoreConfirmation = false
     @State private var dropTargetPolicyID: LockScreenPolicy.ID?
@@ -54,7 +56,7 @@ struct LockScreenSettingsView: View {
 
                     SettingsRow(title: "屏保启动时间", subtitle: "与关闭显示器时间分开") {
                         HStack(spacing: 6) {
-                            TextField("分钟", text: $systemIdleMinutesText)
+                            TextField("分钟", text: systemIdleMinutesBinding)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 58)
                                 .multilineTextAlignment(.trailing)
@@ -69,7 +71,7 @@ struct LockScreenSettingsView: View {
                     SettingsDivider()
 
                     SettingsRow(title: "要求密码") {
-                        Toggle("", isOn: $systemRequirePassword)
+                        Toggle("", isOn: systemRequirePasswordBinding)
                             .toggleStyle(.switch)
                             .labelsHidden()
                             .disabled(settings.lockScreenPoliciesEnabled)
@@ -80,7 +82,7 @@ struct LockScreenSettingsView: View {
 
                         SettingsRow(title: "密码延迟", subtitle: "屏保启动后多久要求密码") {
                             HStack(spacing: 6) {
-                                TextField("秒", text: $systemPasswordDelayText)
+                                TextField("秒", text: systemPasswordDelayBinding)
                                     .textFieldStyle(.roundedBorder)
                                     .frame(width: 58)
                                     .multilineTextAlignment(.trailing)
@@ -160,9 +162,6 @@ struct LockScreenSettingsView: View {
         .onChange(of: controller.systemSettings) { _, newValue in
             syncSystemSettings(newValue)
         }
-        .onChange(of: systemIdleMinutesText) { scheduleSystemSettingsApply() }
-        .onChange(of: systemRequirePassword) { scheduleSystemSettingsApply() }
-        .onChange(of: systemPasswordDelayText) { scheduleSystemSettingsApply() }
         .confirmationDialog(
             "恢复系统锁屏设置",
             isPresented: $showsRestoreConfirmation,
@@ -319,7 +318,6 @@ struct LockScreenSettingsView: View {
 
     private func syncSystemSettings(_ systemSettings: ScreenSaverLockBaseline) {
         systemApplyTask?.cancel()
-        isSyncingSystemSettings = true
         if let minutes = systemSettings.idleMinutes {
             systemIdleMinutesText = String(minutes)
         }
@@ -329,13 +327,13 @@ struct LockScreenSettingsView: View {
         if let delay = systemSettings.askForPasswordDelay {
             systemPasswordDelayText = String(delay)
         }
-        DispatchQueue.main.async {
-            isSyncingSystemSettings = false
-        }
+        idleSettingChanged = false
+        passwordSettingChanged = false
+        passwordDelayChanged = false
     }
 
     private func scheduleSystemSettingsApply() {
-        guard !isSyncingSystemSettings, !settings.lockScreenPoliciesEnabled else { return }
+        guard !settings.lockScreenPoliciesEnabled else { return }
         systemApplyTask?.cancel()
         systemApplyTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(350))
@@ -345,17 +343,64 @@ struct LockScreenSettingsView: View {
     }
 
     private func applySystemSettingsIfValid() {
-        guard !settings.lockScreenPoliciesEnabled,
-              let idleMinutes = Int(systemIdleMinutesText),
-              (1...1_440).contains(idleMinutes),
-              let passwordDelaySeconds = Int(systemPasswordDelayText),
-              (0...86_400).contains(passwordDelaySeconds) else {
+        guard !settings.lockScreenPoliciesEnabled else {
             return
         }
+        let idleMinutes: Int? = {
+            guard idleSettingChanged,
+                  let value = Int(systemIdleMinutesText),
+                  (0...1_440).contains(value) else { return nil }
+            return value
+        }()
+        let requirePassword = passwordSettingChanged ? systemRequirePassword : nil
+        let passwordDelaySeconds: Int? = {
+            guard passwordDelayChanged,
+                  let value = Int(systemPasswordDelayText),
+                  (0...86_400).contains(value) else { return nil }
+            return value
+        }()
+
+        guard idleMinutes != nil || requirePassword != nil || passwordDelaySeconds != nil else { return }
         controller.applySystemSettings(
             idleMinutes: idleMinutes,
-            requirePassword: systemRequirePassword,
+            requirePassword: requirePassword,
             passwordDelaySeconds: passwordDelaySeconds
+        )
+        idleSettingChanged = false
+        passwordSettingChanged = false
+        passwordDelayChanged = false
+    }
+
+    private var systemIdleMinutesBinding: Binding<String> {
+        Binding(
+            get: { systemIdleMinutesText },
+            set: {
+                systemIdleMinutesText = $0
+                idleSettingChanged = true
+                scheduleSystemSettingsApply()
+            }
+        )
+    }
+
+    private var systemRequirePasswordBinding: Binding<Bool> {
+        Binding(
+            get: { systemRequirePassword },
+            set: {
+                systemRequirePassword = $0
+                passwordSettingChanged = true
+                scheduleSystemSettingsApply()
+            }
+        )
+    }
+
+    private var systemPasswordDelayBinding: Binding<String> {
+        Binding(
+            get: { systemPasswordDelayText },
+            set: {
+                systemPasswordDelayText = $0
+                passwordDelayChanged = true
+                scheduleSystemSettingsApply()
+            }
         )
     }
 }

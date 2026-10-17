@@ -4,8 +4,8 @@ import SwiftUI
 
 struct GeneralSettingsView: View {
     @ObservedObject var settings: MonitorSettings
-    @State private var accessibilityTrusted = AXIsProcessTrusted()
-    @State private var inputMonitoringTrusted = CGPreflightListenEventAccess()
+    @State private var accessibilityTrusted = false
+    @State private var inputMonitoringTrusted = false
     @State private var showsResetConfirmation = false
 
     var body: some View {

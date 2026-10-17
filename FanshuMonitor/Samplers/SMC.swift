@@ -187,10 +187,13 @@ nonisolated final class SMCReader: SMCTemperatureSource {
     }
 
     private func fourCharCodeToString(_ code: UInt32) -> String {
-        String(describing: UnicodeScalar(code >> 24 & 0xff)!) +
-        String(describing: UnicodeScalar(code >> 16 & 0xff)!) +
-        String(describing: UnicodeScalar(code >> 8 & 0xff)!) +
-        String(describing: UnicodeScalar(code & 0xff)!)
+        let bytes = [
+            UInt8(truncatingIfNeeded: code >> 24),
+            UInt8(truncatingIfNeeded: code >> 16),
+            UInt8(truncatingIfNeeded: code >> 8),
+            UInt8(truncatingIfNeeded: code)
+        ]
+        return String(bytes: bytes, encoding: .macOSRoman) ?? String(decoding: bytes, as: UTF8.self)
     }
 }
 

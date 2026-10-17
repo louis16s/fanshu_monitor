@@ -67,7 +67,7 @@ enum LockScreenAttemptRunner {
 
 struct LockScreenSystemEnvironment {
     let readSettings: @MainActor () -> ScreenSaverLockBaseline
-    let applySettings: @MainActor (Int, Bool, Int) -> Bool
+    let applySettings: @MainActor (Int?, Bool?, Int?) -> Bool
     let prepareIdleLockFallback: @MainActor (Int) -> Bool
     let idleLockFallbackMatches: @MainActor (Int) -> Bool
     let restoreSettings: @MainActor (ScreenSaverLockBaseline) -> Bool
@@ -80,7 +80,7 @@ struct LockScreenSystemEnvironment {
         return LockScreenSystemEnvironment(
             readSettings: ScreenSaverLockPreferences.read,
             applySettings: { idleSeconds, requirePassword, delay in
-                ScreenSaverLockPreferences.apply(
+                ScreenSaverLockPreferences.applyChanges(
                     idleSeconds: idleSeconds,
                     requirePassword: requirePassword,
                     passwordDelaySeconds: delay
@@ -240,20 +240,21 @@ final class LockScreenPolicyController: ObservableObject {
     }
 
     func applySystemSettings(
-        idleMinutes: Int,
-        requirePassword: Bool,
-        passwordDelaySeconds: Int
+        idleMinutes: Int?,
+        requirePassword: Bool?,
+        passwordDelaySeconds: Int?
     ) {
         guard let settings else { return }
+        guard idleMinutes != nil || requirePassword != nil || passwordDelaySeconds != nil else { return }
         guard !settings.lockScreenPoliciesEnabled else {
             status = .systemSettingsBlocked
             return
         }
 
         let succeeded = environment.applySettings(
-            min(1_440, max(1, idleMinutes)) * 60,
+            idleMinutes.map { min(1_440, max(0, $0)) * 60 },
             requirePassword,
-            min(86_400, max(0, passwordDelaySeconds))
+            passwordDelaySeconds.map { min(86_400, max(0, $0)) }
         )
         refreshSystemSettings()
         if succeeded {

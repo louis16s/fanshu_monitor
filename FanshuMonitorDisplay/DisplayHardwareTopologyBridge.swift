@@ -146,6 +146,7 @@ nonisolated final class DisplayHardwareTopologyBridge: @unchecked Sendable {
     private var notificationPort: IONotificationPortRef?
     private var iterators: [io_iterator_t: ServiceEvent] = [:]
     private var knownLocations: [UInt64: DisplayHardwareServiceLocation] = [:]
+    private var retainedCallbackRefcon: UnsafeMutableRawPointer?
 
     init(handler: @escaping @MainActor @Sendable (DisplayHardwareTopologyEvent) -> Void) {
         self.handler = handler
@@ -161,6 +162,8 @@ nonisolated final class DisplayHardwareTopologyBridge: @unchecked Sendable {
 
         notificationPort = port
         IONotificationPortSetDispatchQueue(port, .main)
+        let callbackRefcon = Unmanaged.passRetained(self).toOpaque()
+        retainedCallbackRefcon = callbackRefcon
 
         for event in [ServiceEvent.matched, .terminated] {
             guard let matching = IOServiceMatching(Self.serviceClass) else { continue }
@@ -170,7 +173,7 @@ nonisolated final class DisplayHardwareTopologyBridge: @unchecked Sendable {
                 event.notificationName,
                 matching,
                 displayHardwareMatchingCallback,
-                Unmanaged.passUnretained(self).toOpaque(),
+                callbackRefcon,
                 &iterator
             )
             guard result == KERN_SUCCESS else {
@@ -199,6 +202,16 @@ nonisolated final class DisplayHardwareTopologyBridge: @unchecked Sendable {
         if let notificationPort {
             IONotificationPortDestroy(notificationPort)
             self.notificationPort = nil
+        }
+        if let retainedCallbackRefcon {
+            self.retainedCallbackRefcon = nil
+            let refconAddress = UInt(bitPattern: retainedCallbackRefcon)
+            DispatchQueue.main.async {
+                guard let refcon = UnsafeMutableRawPointer(bitPattern: refconAddress) else { return }
+                Unmanaged<DisplayHardwareTopologyBridge>
+                    .fromOpaque(refcon)
+                    .release()
+            }
         }
     }
 

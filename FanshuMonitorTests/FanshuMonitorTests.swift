@@ -813,6 +813,34 @@ struct FanshuMonitorTests {
         #expect(module?.metrics.first { $0.name == "reset-credits" }?.value == "2 张")
     }
 
+    @Test func codexQuotaCacheRefreshesFetchTimeWhenQuotaValuesAreUnchanged() throws {
+        let suiteName = "FanshuMonitorTests.codexQuotaCacheFetchTime"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let firstFetch = Date(timeIntervalSince1970: 1_800_000_000)
+        let nextFetch = firstFetch.addingTimeInterval(60)
+        let firstReport = CodexQuotaReport(
+            planType: "plus",
+            periods: [],
+            resetCredits: 1,
+            fetchedAt: firstFetch
+        )
+        let refreshedReport = CodexQuotaReport(
+            planType: "plus",
+            periods: [],
+            resetCredits: 1,
+            fetchedAt: nextFetch
+        )
+
+        CodexQuotaCache.save(firstReport, defaults: defaults)
+        CodexQuotaCache.save(refreshedReport, defaults: defaults)
+        let data = try #require(defaults.data(forKey: "codex.quota.lastSuccessfulReport"))
+        let cached = try JSONDecoder().decode(CodexQuotaReport.self, from: data)
+
+        #expect(cached.fetchedAt == nextFetch)
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
     @Test func codexRefreshFailureKeepsTheCachedPlanAndQuota() {
         let cachedModule = MonitorModule(
             kind: .codex,

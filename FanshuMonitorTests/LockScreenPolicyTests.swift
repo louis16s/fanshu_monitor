@@ -16,6 +16,7 @@ private final class LockAttemptProbe {
     var assertionReleases = 0
     var restoreSucceeds = true
     var restoreRequests = 0
+    var appliedSettings: [(Int?, Bool?, Int?)] = []
     var baseline = ScreenSaverLockBaseline(idleTime: 600, askForPassword: true, askForPasswordDelay: 0)
     var restoredBaseline: ScreenSaverLockBaseline?
     var powerSourceState = SystemPowerSourceState.connected
@@ -30,7 +31,10 @@ private final class LockAttemptProbe {
                     askForPasswordDelay: 0
                 )
             },
-            applySettings: { _, _, _ in true },
+            applySettings: { idleSeconds, requirePassword, delay in
+                self.appliedSettings.append((idleSeconds, requirePassword, delay))
+                return true
+            },
             prepareIdleLockFallback: { idleSeconds in
                 guard self.screenSaverWriteSucceeds else { return false }
                 self.screenSaverDisabled = true
@@ -61,6 +65,24 @@ private final class LockAttemptProbe {
 
 @MainActor
 struct LockScreenPolicyTests {
+    @Test func systemSettingsCanDisableScreensaverWithoutRewritingUntouchedValues() {
+        let probe = LockAttemptProbe()
+        let suite = "systemSettingsCanDisableScreensaverWithoutRewritingUntouchedValues"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = MonitorSettings(defaults: defaults)
+        let controller = LockScreenPolicyController(environment: probe.environment)
+        controller.configure(settings: settings)
+
+        controller.applySystemSettings(idleMinutes: 0, requirePassword: nil, passwordDelaySeconds: nil)
+
+        #expect(probe.appliedSettings.count == 1)
+        #expect(probe.appliedSettings[0].0 == 0)
+        #expect(probe.appliedSettings[0].1 == nil)
+        #expect(probe.appliedSettings[0].2 == nil)
+        defaults.removePersistentDomain(forName: suite)
+    }
+
     @Test func powerObservationResumesAfterSleepAndUnlock() async {
         let probe = LockAttemptProbe()
         let settings = activeSettings(suite: "powerObservationResumesAfterSleepAndUnlock")
