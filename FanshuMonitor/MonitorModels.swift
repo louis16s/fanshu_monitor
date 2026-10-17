@@ -303,9 +303,12 @@ nonisolated struct MonitorModule: Equatable, Identifiable, Sendable {
         case .codex:
             summary = "--"
             metrics = [
-                MonitorMetric(name: "current", value: "--"),
-                MonitorMetric(name: "average", value: "--"),
-                MonitorMetric(name: "peak", value: "--")
+                MonitorMetric(name: "plan", value: "--"),
+                MonitorMetric(name: "five-hour", value: "--"),
+                MonitorMetric(name: "weekly", value: "--"),
+                MonitorMetric(name: "five-hour-reset", value: "--"),
+                MonitorMetric(name: "weekly-reset", value: "--"),
+                MonitorMetric(name: "reset-credits", value: "--")
             ]
             pressure = nil
         }

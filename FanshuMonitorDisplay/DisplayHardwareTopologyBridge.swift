@@ -25,6 +25,14 @@ nonisolated enum DisplayHardwareServiceLocation: Sendable, Equatable {
     }
 }
 
+nonisolated private final class DisplayHardwareTopologyCallbackContext: @unchecked Sendable {
+    weak var bridge: DisplayHardwareTopologyBridge?
+
+    init(bridge: DisplayHardwareTopologyBridge) {
+        self.bridge = bridge
+    }
+}
+
 /// Converts low-level IOKit events into stable topology notifications. The
 /// controller never needs to reason about registry timing or service location.
 @MainActor
@@ -162,7 +170,9 @@ nonisolated final class DisplayHardwareTopologyBridge: @unchecked Sendable {
 
         notificationPort = port
         IONotificationPortSetDispatchQueue(port, .main)
-        let callbackRefcon = Unmanaged.passRetained(self).toOpaque()
+        let callbackRefcon = Unmanaged.passRetained(
+            DisplayHardwareTopologyCallbackContext(bridge: self)
+        ).toOpaque()
         retainedCallbackRefcon = callbackRefcon
 
         for event in [ServiceEvent.matched, .terminated] {
@@ -194,6 +204,9 @@ nonisolated final class DisplayHardwareTopologyBridge: @unchecked Sendable {
     }
 
     func stop() {
+        if let notificationPort {
+            IONotificationPortSetDispatchQueue(notificationPort, nil)
+        }
         for iterator in iterators.keys {
             IOObjectRelease(iterator)
         }
@@ -208,7 +221,7 @@ nonisolated final class DisplayHardwareTopologyBridge: @unchecked Sendable {
             let refconAddress = UInt(bitPattern: retainedCallbackRefcon)
             DispatchQueue.main.async {
                 guard let refcon = UnsafeMutableRawPointer(bitPattern: refconAddress) else { return }
-                Unmanaged<DisplayHardwareTopologyBridge>
+                Unmanaged<DisplayHardwareTopologyCallbackContext>
                     .fromOpaque(refcon)
                     .release()
             }
@@ -305,8 +318,9 @@ nonisolated(unsafe) private let displayHardwareMatchingCallback: IOServiceMatchi
     iterator
 in
     guard let refcon else { return }
-    Unmanaged<DisplayHardwareTopologyBridge>
+    Unmanaged<DisplayHardwareTopologyCallbackContext>
         .fromOpaque(refcon)
         .takeUnretainedValue()
+        .bridge?
         .receive(iterator: iterator)
 }

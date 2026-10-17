@@ -14,6 +14,15 @@ nonisolated enum DisplayPowerEvent: Sendable {
     case hasPoweredOn
 }
 
+nonisolated private final class DisplayPowerEventCallbackContext: @unchecked Sendable {
+    weak var bridge: DisplayPowerEventBridge?
+    var rootPort: io_connect_t = 0
+
+    init(bridge: DisplayPowerEventBridge) {
+        self.bridge = bridge
+    }
+}
+
 nonisolated final class DisplayPowerEventBridge: @unchecked Sendable {
     private let earlyHandler: @Sendable (DisplayPowerEvent) -> Void
     private let handler: @MainActor @Sendable (DisplayPowerEvent) -> Void
@@ -21,10 +30,10 @@ nonisolated final class DisplayPowerEventBridge: @unchecked Sendable {
         label: "fanshu.display-control.power-events",
         qos: .userInteractive
     )
-    private let deliveryQueueKey = DispatchSpecificKey<UInt8>()
     private var rootPort: io_connect_t = 0
     private var notificationPort: IONotificationPortRef?
     private var notifier: io_object_t = 0
+    private var retainedCallbackRefcon: UnsafeMutableRawPointer?
 
     init(
         earlyHandler: @escaping @Sendable (DisplayPowerEvent) -> Void = { _ in },
@@ -32,7 +41,6 @@ nonisolated final class DisplayPowerEventBridge: @unchecked Sendable {
     ) {
         self.earlyHandler = earlyHandler
         self.handler = handler
-        deliveryQueue.setSpecific(key: deliveryQueueKey, value: 1)
     }
 
     func start() {
@@ -40,20 +48,25 @@ nonisolated final class DisplayPowerEventBridge: @unchecked Sendable {
 
         var port: IONotificationPortRef?
         var notification: io_object_t = 0
+        let context = DisplayPowerEventCallbackContext(bridge: self)
+        let callbackRefcon = Unmanaged.passRetained(context).toOpaque()
         let connection = IORegisterForSystemPower(
-            Unmanaged.passUnretained(self).toOpaque(),
+            callbackRefcon,
             &port,
             displayPowerCallback,
             &notification
         )
         guard connection != 0, let port else {
+            Unmanaged<DisplayPowerEventCallbackContext>.fromOpaque(callbackRefcon).release()
             AppLogger.ui.error("Unable to register early display power notifications")
             return
         }
 
+        context.rootPort = connection
         rootPort = connection
         notificationPort = port
         notifier = notification
+        retainedCallbackRefcon = callbackRefcon
         IONotificationPortSetDispatchQueue(port, deliveryQueue)
     }
 
@@ -65,21 +78,29 @@ nonisolated final class DisplayPowerEventBridge: @unchecked Sendable {
             IODeregisterForSystemPower(&notifier)
             notifier = 0
         }
-        // Drain callbacks before releasing the refcon owner or closing rootPort.
-        if DispatchQueue.getSpecific(key: deliveryQueueKey) == nil {
-            deliveryQueue.sync {}
-        }
-        if rootPort != 0 {
-            IOServiceClose(rootPort)
-            rootPort = 0
-        }
+        let rootPortToClose = rootPort
+        rootPort = 0
         if let notificationPort {
             IONotificationPortDestroy(notificationPort)
             self.notificationPort = nil
         }
+        guard let retainedCallbackRefcon else { return }
+        self.retainedCallbackRefcon = nil
+        let refconAddress = UInt(bitPattern: retainedCallbackRefcon)
+        deliveryQueue.async {
+            if rootPortToClose != 0 {
+                IOServiceClose(rootPortToClose)
+            }
+            guard let refcon = UnsafeMutableRawPointer(bitPattern: refconAddress) else { return }
+            Unmanaged<DisplayPowerEventCallbackContext>.fromOpaque(refcon).release()
+        }
     }
 
-    fileprivate func receive(messageType: natural_t, argument: UnsafeMutableRawPointer?) {
+    fileprivate func receive(
+        messageType: natural_t,
+        argument: UnsafeMutableRawPointer?,
+        rootPort: io_connect_t
+    ) {
         switch messageType {
         case messageCanSystemSleep, messageSystemWillSleep:
             if messageType == messageSystemWillSleep {
@@ -116,8 +137,12 @@ nonisolated(unsafe) private let displayPowerCallback: IOServiceInterestCallback 
     messageArgument
 in
     guard let refcon else { return }
-    Unmanaged<DisplayPowerEventBridge>
+    let context = Unmanaged<DisplayPowerEventCallbackContext>
         .fromOpaque(refcon)
         .takeUnretainedValue()
-        .receive(messageType: messageType, argument: messageArgument)
+    context.bridge?.receive(
+            messageType: messageType,
+            argument: messageArgument,
+            rootPort: context.rootPort
+        )
 }

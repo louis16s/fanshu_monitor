@@ -74,6 +74,7 @@ struct FanshuMonitorTests {
         let gpu = MonitorModule.placeholder(kind: .gpu)
         let memory = MonitorModule.placeholder(kind: .memory)
         let power = MonitorModule.placeholder(kind: .battery)
+        let codex = MonitorModule.placeholder(kind: .codex)
 
         #expect(cpu.summary == "0%")
         #expect(cpu.metrics.map(\.name) == ["system", "user", "idle", "temperature"])
@@ -83,6 +84,9 @@ struct FanshuMonitorTests {
         #expect(memory.metrics.map(\.name) == ["used", "pressure", "compressed", "app-memory", "cached", "total"])
         #expect(power.summary == "0%")
         #expect(power.metrics.first { $0.name == "power" }?.value == "--")
+        #expect(codex.metrics.map(\.name) == [
+            "plan", "five-hour", "weekly", "five-hour-reset", "weekly-reset", "reset-credits"
+        ])
     }
 
     @Test func aLateCodexRefreshCannotReplaceFreshHardwareModules() {

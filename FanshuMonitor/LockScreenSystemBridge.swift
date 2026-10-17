@@ -141,26 +141,6 @@ enum ScreenSaverLockPreferences {
     }
 
     @discardableResult
-    static func apply(
-        idleSeconds: Int,
-        requirePassword: Bool,
-        passwordDelaySeconds: Int = 0
-    ) -> Bool {
-        var succeeded = set(idleSeconds, for: "idleTime", host: true)
-        if requirePassword {
-            succeeded = set(true, for: "askForPassword", host: false) && succeeded
-            succeeded = set(passwordDelaySeconds, for: "askForPasswordDelay", host: false) && succeeded
-        } else {
-            succeeded = set(false, for: "askForPassword", host: false) && succeeded
-        }
-        let current = read()
-        return succeeded
-            && current.idleTime == idleSeconds
-            && current.askForPassword == requirePassword
-            && (!requirePassword || current.askForPasswordDelay == passwordDelaySeconds)
-    }
-
-    @discardableResult
     static func applyChanges(
         idleSeconds: Int?,
         requirePassword: Bool?,

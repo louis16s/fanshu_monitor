@@ -336,7 +336,7 @@ actor CodexQuotaSampler {
                 MonitorMetric(name: "weekly-reset", value: weeklyResetText),
                 MonitorMetric(name: "reset-credits", value: resetCreditsText(report.resetCredits)),
                 MonitorMetric(name: "status", value: report.fetchedAt.map {
-                    String(localized: "codex.updated-at") + " " + makeQuotaTimeFormatter().string(from: $0)
+                    String(localized: "codex.updated-at") + " " + quotaTimeFormatter.string(from: $0)
                 } ?? String(localized: "codex.cached-quota"))
             ],
             samples: seedSamples(fiveHourRemainingValue)
@@ -349,7 +349,7 @@ actor CodexQuotaSampler {
     }
 
     private static func formattedFiveHourReset(_ date: Date?) -> String {
-        date.map { makeQuotaTimeFormatter().string(from: $0) } ?? "--"
+        date.map { quotaTimeFormatter.string(from: $0) } ?? "--"
     }
 
     private static func formattedWeeklyReset(_ date: Date?) -> String {
@@ -378,12 +378,13 @@ actor CodexQuotaSampler {
     }
 }
 
-nonisolated private func makeQuotaTimeFormatter() -> DateFormatter {
+nonisolated private let quotaTimeFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "zh_CN")
+    formatter.timeZone = .autoupdatingCurrent
     formatter.dateFormat = "MM/dd HH:mm"
     return formatter
-}
+}()
 
 nonisolated private func makeQuotaDateFormatter() -> DateFormatter {
     let formatter = DateFormatter()
@@ -430,17 +431,20 @@ nonisolated struct CodexUsageClient: Sendable {
     var usageURL: URL
     private let transport: Transport?
     private let proxySettings: @Sendable () -> CodexUsageProxySettings
+    private let nowProvider: @Sendable () -> Date
 
     init(
         authFileURL: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/auth.json"),
         usageURL: URL = CodexUsageClient.usageEndpoint,
         transport: Transport? = nil,
-        proxySettings: @escaping @Sendable () -> CodexUsageProxySettings = { CodexUsageProxySettings.load() }
+        proxySettings: @escaping @Sendable () -> CodexUsageProxySettings = { CodexUsageProxySettings.load() },
+        now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.authFileURL = authFileURL
         self.usageURL = usageURL
         self.transport = transport
         self.proxySettings = proxySettings
+        nowProvider = now
     }
 
     func load() async throws -> CodexQuotaReport {
@@ -470,7 +474,7 @@ nonisolated struct CodexUsageClient: Sendable {
             throw CodexUsageError.invalidResponse(response.statusCode)
         }
 
-        return try Self.parseUsage(data, now: Date())
+        return try Self.parseUsage(data, now: nowProvider())
     }
 
     private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
@@ -655,8 +659,8 @@ nonisolated enum CodexQuotaCache {
            cachedReport.planType == report.planType,
            cachedReport.periods == report.periods,
            cachedReport.resetCredits == report.resetCredits,
-           cachedReport.fetchedAt.map({ makeQuotaTimeFormatter().string(from: $0) })
-            == report.fetchedAt.map({ makeQuotaTimeFormatter().string(from: $0) }) {
+           cachedReport.fetchedAt.map({ quotaTimeFormatter.string(from: $0) })
+            == report.fetchedAt.map({ quotaTimeFormatter.string(from: $0) }) {
             return
         }
         defaults.set(data, forKey: key)

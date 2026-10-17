@@ -3,7 +3,7 @@ import SwiftUI
 struct LockScreenSettingsView: View {
     @ObservedObject var settings: MonitorSettings
     @ObservedObject var controller: LockScreenPolicyController
-    @State private var systemIdleMinutesText = "10"
+    @State private var systemIdleMinutesText = ""
     @State private var systemRequirePassword = true
     @State private var systemPasswordDelayText = "0"
     @State private var systemApplyTask: Task<Void, Never>?
@@ -56,7 +56,7 @@ struct LockScreenSettingsView: View {
 
                     SettingsRow(title: "屏保启动时间", subtitle: "与关闭显示器时间分开") {
                         HStack(spacing: 6) {
-                            TextField("分钟", text: systemIdleMinutesBinding)
+                            TextField("系统默认", text: systemIdleMinutesBinding)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 58)
                                 .multilineTextAlignment(.trailing)
@@ -318,9 +318,7 @@ struct LockScreenSettingsView: View {
 
     private func syncSystemSettings(_ systemSettings: ScreenSaverLockBaseline) {
         systemApplyTask?.cancel()
-        if let minutes = systemSettings.idleMinutes {
-            systemIdleMinutesText = String(minutes)
-        }
+        systemIdleMinutesText = systemSettings.idleMinutes.map(String.init) ?? ""
         if let requiresPassword = systemSettings.askForPassword {
             systemRequirePassword = requiresPassword
         }

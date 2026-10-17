@@ -77,6 +77,31 @@ struct CodexQuotaSamplerRetryTests {
         #expect(report.fetchedAt != nil)
     }
 
+    @Test func codexUsageClientUsesItsInjectedClockForFetchedAt() async throws {
+        let auth = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data(#"{"tokens":{"access_token":"test"}}"#.utf8).write(to: auth)
+        defer { try? FileManager.default.removeItem(at: auth) }
+        let expectedNow = Date(timeIntervalSince1970: 1_800_000_000)
+        let client = CodexUsageClient(
+            authFileURL: auth,
+            transport: { request in
+                let url = try #require(request.url)
+                let response = try #require(HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                ))
+                return (Data(#"{"plan_type":"plus"}"#.utf8), response)
+            },
+            now: { expectedNow }
+        )
+
+        let report = try await client.load()
+
+        #expect(report.fetchedAt == expectedNow)
+    }
+
     @Test func schedulesTheEarlierQuotaResetAtTheNextMinute() {
         let now = Date(timeIntervalSince1970: 1_000)
         let fiveHourReset = Date(timeIntervalSince1970: 1_055)
