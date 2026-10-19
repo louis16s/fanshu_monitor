@@ -299,11 +299,10 @@ actor CodexTaskProgressReader {
             return
         }
 
-        if state.isTaskActive {
-            // Any valid rollout record means the task is still making
-            // progress, even when the record is not a plan update.
-            state.lastActivityAt = now
-        }
+        let eventTime = (root["timestamp"] as? String).flatMap {
+            (try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse($0))
+                ?? (try? Date.ISO8601FormatStyle().parse($0))
+        } ?? now
 
         if root["type"] as? String == "event_msg" {
             switch payloadType {
@@ -311,24 +310,32 @@ actor CodexTaskProgressReader {
                 state.resetTask()
                 state.isTaskActive = true
                 state.currentTurnID = payload["turn_id"] as? String
-                state.lastActivityAt = now
+                state.lastActivityAt = eventTime
             case let type where Self.terminalTaskEventTypes.contains(type):
                 let completedTurnID = payload["turn_id"] as? String
-                if state.currentTurnID == nil || completedTurnID == state.currentTurnID {
+                if state.currentTurnID == nil || completedTurnID == nil || completedTurnID == state.currentTurnID {
                     state.resetTask()
                 }
             default:
+                if state.isTaskActive,
+                   ["agent_message", "agent_reasoning", "token_count"].contains(payloadType) {
+                    state.lastActivityAt = eventTime
+                }
                 break
             }
             return
         }
 
-        guard state.isTaskActive,
-              root["type"] as? String == "response_item",
-              let input = planInput(payload: payload, payloadType: payloadType) else {
+        guard state.isTaskActive, root["type"] as? String == "response_item" else { return }
+        if payloadType == "message", payload["role"] as? String == "assistant",
+           payload["channel"] as? String == "final" {
+            state.resetTask()
             return
         }
-        state.lastActivityAt = now
+        if payloadType != "message" || payload["role"] as? String == "assistant" {
+            state.lastActivityAt = eventTime
+        }
+        guard let input = planInput(payload: payload, payloadType: payloadType) else { return }
         applyPlan(from: input, state: &state)
     }
 

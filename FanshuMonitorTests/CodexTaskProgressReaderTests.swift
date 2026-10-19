@@ -3,6 +3,36 @@ import Testing
 @testable import FanshuMonitor
 
 struct CodexTaskProgressReaderTests {
+    @Test(arguments: [
+        #"{"type":"event_msg","payload":{"type":"task_aborted"}}"#,
+        #"{"type":"event_msg","payload":{"type":"session_end"}}"#,
+        #"{"type":"response_item","payload":{"type":"message","role":"assistant","channel":"final"}}"#
+    ])
+    func terminalWithoutTurnIDClearsRunningTask(terminal: String) async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let rollout = root.appendingPathComponent("rollout-61234567-89ab-cdef-0123-456789abcdef.jsonl")
+        try Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"current"}}"# + "\n").utf8).write(to: rollout)
+        let reader = CodexTaskProgressReader(sessionsRoot: root, sessionIndexURL: root.appendingPathComponent("index"))
+        let now = Date()
+        #expect(await reader.load(now: now).count == 1)
+        try append(Data((terminal + "\n").utf8), to: rollout)
+        #expect(await reader.load(now: now.addingTimeInterval(1)).isEmpty)
+    }
+
+    @Test func recentlyTouchedHistoricalRolloutDoesNotReviveAnAbandonedTask() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let rollout = root.appendingPathComponent("rollout-71234567-89ab-cdef-0123-456789abcdef.jsonl")
+        try Data((#"{"timestamp":"2026-01-01T00:00:00.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"old"}}"# + "\n").utf8).write(to: rollout)
+        for _ in 0..<2 {
+            let reader = CodexTaskProgressReader(sessionsRoot: root, sessionIndexURL: root.appendingPathComponent("index"))
+            #expect(await reader.load(now: Date()).isEmpty)
+        }
+    }
+
     @Test func largeIncrementalRolloutIsReadInBoundedPassesWithoutLosingItsTerminalEvent() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
