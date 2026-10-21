@@ -5,14 +5,29 @@ import OSLog
 nonisolated final class MemorySampler: MonitorSampler {
     var kind: MonitorKind { .memory }
 
-    private let totalMemorySize = MemorySampler.memoryTotalSize()
+    private let hostPort: mach_port_t
+    private let totalMemorySize: Double
+    private let pageSize: Double
+
+    init() {
+        let hostPort = mach_host_self()
+        self.hostPort = hostPort
+        totalMemorySize = Self.memoryTotalSize(hostPort: hostPort)
+        var kernelPageSize: vm_size_t = 0
+        let result = host_page_size(hostPort, &kernelPageSize)
+        pageSize = Double(result == KERN_SUCCESS ? kernelPageSize : vm_page_size)
+    }
+
+    deinit {
+        mach_port_deallocate(mach_task_self_, hostPort)
+    }
 
     func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
         var stats = vm_statistics64()
         var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
         let result = withUnsafeMutablePointer(to: &stats) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
+                host_statistics64(hostPort, HOST_VM_INFO64, $0, &count)
             }
         }
 
@@ -21,9 +36,6 @@ nonisolated final class MemorySampler: MonitorSampler {
             return previous ?? MonitorModule.placeholder(kind: .memory)
         }
 
-        var kernelPageSize: vm_size_t = 0
-        let pageSizeResult = host_page_size(mach_host_self(), &kernelPageSize)
-        let pageSize = Double(pageSizeResult == KERN_SUCCESS ? kernelPageSize : 16_384)
         let active = Double(stats.active_count) * pageSize
         let speculative = Double(stats.speculative_count) * pageSize
         let inactive = Double(stats.inactive_count) * pageSize
@@ -66,12 +78,12 @@ nonisolated final class MemorySampler: MonitorSampler {
         )
     }
 
-    private static func memoryTotalSize() -> Double {
+    private static func memoryTotalSize(hostPort: mach_port_t) -> Double {
         var info = host_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<host_basic_info_data_t>.size / MemoryLayout<integer_t>.size)
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                host_info(mach_host_self(), HOST_BASIC_INFO, $0, &count)
+                host_info(hostPort, HOST_BASIC_INFO, $0, &count)
             }
         }
         guard result == KERN_SUCCESS else {

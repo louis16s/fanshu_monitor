@@ -246,6 +246,7 @@ struct UpdateCheckerTests {
             "https://api.github.com/repos/louis16s/fanshu_monitor/releases/latest",
             forKey: "updates.releaseSource"
         )
+        defaults.set(Date(), forKey: "updates.releaseFetchedAt")
 
         let checker = UpdateChecker(
             currentVersionProvider: { "1.0.0" },
@@ -257,6 +258,52 @@ struct UpdateCheckerTests {
             return
         }
         #expect(latestVersion == "1.1.0")
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    @Test func expiredCachedReleaseIsDiscardedAndCurrentGitHubReleaseWins() async {
+        let suiteName = "FanshuMonitorTests.UpdateChecker.expiredRelease"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let source = "https://api.github.com/repos/louis16s/fanshu_monitor/releases/latest"
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        defaults.set(source, forKey: "updates.releaseSource")
+        defaults.set("stale-v1", forKey: "updates.releaseETag")
+        defaults.set(now.addingTimeInterval(-48 * 60 * 60), forKey: "updates.releaseFetchedAt")
+        defaults.set(Data("""
+        {
+            "tag_name": "v1.1.0",
+            "html_url": "https://github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0"
+        }
+        """.utf8), forKey: "updates.releasePayload")
+
+        let checker = UpdateChecker(
+            currentVersionProvider: { "0.3.3" },
+            defaults: defaults,
+            now: { now },
+            dataLoader: { request in
+                #expect(request.value(forHTTPHeaderField: "If-None-Match") == nil)
+                let json = """
+                {
+                    "tag_name": "v0.3.3",
+                    "html_url": "https://github.com/louis16s/fanshu_monitor/releases/tag/v0.3.3"
+                }
+                """
+                return (
+                    Data(json.utf8),
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                )
+            }
+        )
+
+        #expect(checker.state == .idle)
+        #expect(defaults.data(forKey: "updates.releasePayload") == nil)
+        #expect(defaults.string(forKey: "updates.releaseETag") == nil)
+
+        await checker.checkAutomaticallyIfNeeded(enabled: true)
+
+        #expect(checker.state == .upToDate)
+        #expect(defaults.object(forKey: "updates.releaseFetchedAt") as? Date == now)
         defaults.removePersistentDomain(forName: suiteName)
     }
 
@@ -471,6 +518,37 @@ struct UpdateCheckerTests {
         #expect(UpdateChecker.resolveDownloadURL(from: release) == releaseURL)
     }
 
+    @Test func validOfficialAssetAfterAnUntrustedCandidateIsStillFound() throws {
+        let data = Data(#"{"tag_name":"v1.1.0","html_url":"https://github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0","assets":[{"name":"first.zip","browser_download_url":"https://example.com/first.zip"},{"name":"FanshuMonitor.zip","browser_download_url":"https://github.com/louis16s/fanshu_monitor/releases/download/v1.1.0/FanshuMonitor.zip"}]}"#.utf8)
+        let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+
+        #expect(UpdateChecker.resolveDownloadURL(from: release)?.host == "github.com")
+        #expect(UpdateChecker.resolveDownloadURL(from: release)?.lastPathComponent == "FanshuMonitor.zip")
+    }
+
+    @Test func expiredPayloadDoesNotEraseAutomaticCheckThrottle() async {
+        let suffix = "expiredPayloadThrottle"
+        let defaults = isolatedDefaults(suffix)
+        defer { defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.\(suffix)") }
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let lastCheck = now.addingTimeInterval(-60)
+        defaults.set("https://api.github.com/repos/louis16s/fanshu_monitor/releases/latest", forKey: "updates.releaseSource")
+        defaults.set(releaseData(), forKey: "updates.releasePayload")
+        defaults.set(now.addingTimeInterval(-172_800), forKey: "updates.releaseFetchedAt")
+        defaults.set(lastCheck, forKey: "updates.lastAutomaticCheckAt")
+        var requests = 0
+        let checker = UpdateChecker(defaults: defaults, now: { now }, dataLoader: { _ in
+            requests += 1
+            throw URLError(.notConnectedToInternet)
+        })
+
+        await checker.checkAutomaticallyIfNeeded(enabled: true)
+
+        #expect(defaults.data(forKey: "updates.releasePayload") == nil)
+        #expect(defaults.object(forKey: "updates.lastAutomaticCheckAt") as? Date == lastCheck)
+        #expect(requests == 0)
+    }
+
     @Test(arguments: ["{}", "invalid", "1..2", "1.2oops", "999999999999999999999999"])
     func invalidResponsePreservesValidCacheThenUses304(_ invalidVersion: String) async {
         let suffix = "preserveCache.\(invalidVersion)"
@@ -530,6 +608,7 @@ struct UpdateCheckerTests {
         defer { defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.\(suffix)") }
         defaults.set("https://api.github.com/repos/louis16s/fanshu_monitor/releases/latest", forKey: "updates.releaseSource")
         defaults.set("stale", forKey: "updates.releaseETag")
+        defaults.set(Date(), forKey: "updates.releaseFetchedAt")
         switch kind {
         case "decode": defaults.set(Data("{}".utf8), forKey: "updates.releasePayload")
         case "version": defaults.set(releaseData(version: "invalid"), forKey: "updates.releasePayload")

@@ -7,7 +7,12 @@ nonisolated final class CPUSampler: MonitorSampler {
     var kind: MonitorKind { .cpu }
 
     private var previousCPUInfo: host_cpu_load_info?
+    private let hostPort = mach_host_self()
     private let temperatures = SMCTemperatureCache()
+
+    deinit {
+        mach_port_deallocate(mach_task_self_, hostPort)
+    }
 
     func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
         let info = hostCPULoadInfo()
@@ -64,7 +69,7 @@ nonisolated final class CPUSampler: MonitorSampler {
         var info = host_cpu_load_info()
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, $0, &size)
+                host_statistics(hostPort, HOST_CPU_LOAD_INFO, $0, &size)
             }
         }
         guard result == KERN_SUCCESS else {

@@ -39,6 +39,7 @@ final class UpdateChecker {
     private static let lastAutomaticCheckKey = "updates.lastAutomaticCheckAt"
     private static let releaseETagKey = "updates.releaseETag"
     private static let releasePayloadKey = "updates.releasePayload"
+    private static let releaseFetchedAtKey = "updates.releaseFetchedAt"
 
     init(
         latestReleaseURL: URL = URL(string: "https://api.github.com/repos/louis16s/fanshu_monitor/releases/latest")!,
@@ -57,6 +58,7 @@ final class UpdateChecker {
         self.now = now
         self.dataLoader = dataLoader
         prepareCacheForCurrentSource()
+        discardExpiredReleaseCache()
         restoreCachedReleaseIfAvailable()
     }
 
@@ -82,6 +84,7 @@ final class UpdateChecker {
 
     private func performCheck() async -> Bool {
         guard !state.isChecking else { return false }
+        discardExpiredReleaseCache()
         state = .checking
         lastError = nil
 
@@ -141,6 +144,7 @@ final class UpdateChecker {
                         defaults.removeObject(forKey: Self.releaseETagKey)
                     }
                 }
+                defaults.set(now(), forKey: Self.releaseFetchedAtKey)
                 setStableState(newState)
                 return true
             }
@@ -210,19 +214,49 @@ final class UpdateChecker {
         defaults.removeObject(forKey: Self.lastAutomaticCheckKey)
         defaults.removeObject(forKey: Self.releaseETagKey)
         defaults.removeObject(forKey: Self.releasePayloadKey)
+        defaults.removeObject(forKey: Self.releaseFetchedAtKey)
         defaults.set(source, forKey: Self.releaseSourceKey)
     }
 
+    /// A cached GitHub response is useful for a quick About-pane render, but
+    /// must not leave an obsolete release advertised indefinitely. In
+    /// particular, old installations may have cached a release that GitHub no
+    /// longer considers latest.
+    private func discardExpiredReleaseCache() {
+        guard defaults.data(forKey: Self.releasePayloadKey) != nil else { return }
+        guard let fetchedAt = defaults.object(forKey: Self.releaseFetchedAtKey) as? Date else {
+            clearReleaseCache()
+            return
+        }
+        let age = now().timeIntervalSince(fetchedAt)
+        guard age >= 0, age < Self.automaticCheckInterval else {
+            clearReleaseCache()
+            return
+        }
+    }
+
+    private func clearReleaseCache() {
+        defaults.removeObject(forKey: Self.releasePayloadKey)
+        defaults.removeObject(forKey: Self.releaseETagKey)
+        defaults.removeObject(forKey: Self.releaseFetchedAtKey)
+        lastStableState = nil
+        if !state.isChecking { state = .idle }
+    }
+
     static func resolveDownloadURL(from release: GitHubRelease) -> URL? {
+        var hasInstallableAsset = false
         if let assets = release.assets {
             for asset in assets {
                 let name = asset.name.lowercased()
                 if name.hasSuffix(".dmg") || name.hasSuffix(".zip") {
-                    return isOfficialReleaseURL(asset.browserDownloadURL, asset: true)
-                        ? asset.browserDownloadURL : nil
+                    hasInstallableAsset = true
+                    if isOfficialReleaseURL(asset.browserDownloadURL, asset: true) {
+                        return asset.browserDownloadURL
+                    }
                 }
             }
         }
+        guard !hasInstallableAsset else { return nil }
         return isOfficialReleaseURL(release.htmlURL, asset: false) ? release.htmlURL : nil
     }
 

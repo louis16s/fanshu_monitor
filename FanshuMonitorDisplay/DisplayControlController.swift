@@ -98,6 +98,7 @@ final class DisplayControlController: ObservableObject {
     private var refreshWorkItem: DispatchWorkItem?
     private var discoveryRefreshInFlight = false
     private var discoveryRefreshPending = false
+    private var nextMissingBrightnessProbeDate = Date.distantPast
     private var wakeRefreshGeneration = 0
     private var displayCallbackRegistered = false
     private var nativeBrightnessSyncTask: Task<Void, Never>?
@@ -660,13 +661,13 @@ final class DisplayControlController: ObservableObject {
         if let primaryDisplayID = primaryDisplayIDUnderMouse() {
             if displays.isEmpty {
                 AppLogger.ui.debug("Brightness key target list is empty; scheduling display refresh")
-                refreshNow()
+                refreshMissingBrightnessTargetIfNeeded()
                 return nil
             }
 
             guard let primaryDisplay = displays.first(where: { $0.id == primaryDisplayID }) else {
                 AppLogger.ui.debug("Brightness key primary display \(primaryDisplayID) is not in controller list; scheduling display refresh")
-                refreshNow()
+                refreshMissingBrightnessTargetIfNeeded()
                 return nil
             }
 
@@ -693,7 +694,7 @@ final class DisplayControlController: ObservableObject {
         }
         if displays.isEmpty {
             AppLogger.ui.debug("Brightness key target list is empty; scheduling display refresh")
-            refreshNow()
+            refreshMissingBrightnessTargetIfNeeded()
             return nil
         }
 
@@ -702,7 +703,7 @@ final class DisplayControlController: ObservableObject {
         }
 
         AppLogger.ui.debug("Brightness key target not ready; scheduling display refresh")
-        refreshNow()
+        refreshMissingBrightnessTargetIfNeeded()
 
         if candidateIDs.contains(where: { candidateID in
             displays.first(where: { $0.id == candidateID })?.isBuiltIn == true
@@ -738,6 +739,13 @@ final class DisplayControlController: ObservableObject {
         guard !isSystemSleeping, display.kind == .externalDDC,
               activeControls.contains(.brightness), Date() >= nextUnavailableBrightnessProbeDate else { return }
         nextUnavailableBrightnessProbeDate = Date().addingTimeInterval(30)
+        refreshNow()
+    }
+
+    private func refreshMissingBrightnessTargetIfNeeded() {
+        let now = Date()
+        guard !isSystemSleeping, now >= nextMissingBrightnessProbeDate else { return }
+        nextMissingBrightnessProbeDate = now.addingTimeInterval(2)
         refreshNow()
     }
 
