@@ -251,6 +251,10 @@ final class LockScreenPolicyController: ObservableObject {
             return
         }
 
+        guard settings.lockScreenBaseline == nil || restoreBaseline(using: settings) else {
+            return
+        }
+
         let succeeded = environment.applySettings(
             idleMinutes.map { min(1_440, max(0, $0)) * 60 },
             requirePassword,

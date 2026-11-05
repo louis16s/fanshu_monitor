@@ -65,6 +65,29 @@ private final class LockAttemptProbe {
 
 @MainActor
 struct LockScreenPolicyTests {
+    @Test func systemEditPreservesBaselineWhenRestorationFails() {
+        let probe = LockAttemptProbe()
+        let suite = "LockScreenPolicyTests.pendingBaselineSystemEdit"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = MonitorSettings(defaults: defaults)
+        let controller = LockScreenPolicyController(environment: probe.environment)
+        controller.configure(settings: settings)
+        settings.lockScreenBaseline = probe.baseline
+        probe.restoreSucceeds = false
+
+        controller.applySystemSettings(idleMinutes: nil, requirePassword: false, passwordDelaySeconds: nil)
+
+        #expect(settings.lockScreenBaseline == probe.baseline)
+        #expect(probe.appliedSettings.isEmpty)
+        #expect(controller.status == .environmentFailed(reason: "无法恢复系统原设置"))
+        probe.restoreSucceeds = true
+        controller.applySystemSettings(idleMinutes: nil, requirePassword: false, passwordDelaySeconds: nil)
+        #expect(settings.lockScreenBaseline == nil)
+        #expect(probe.appliedSettings.count == 1)
+    }
+
     @Test func systemSettingsCanDisableScreensaverWithoutRewritingUntouchedValues() {
         let probe = LockAttemptProbe()
         let suite = "systemSettingsCanDisableScreensaverWithoutRewritingUntouchedValues"
