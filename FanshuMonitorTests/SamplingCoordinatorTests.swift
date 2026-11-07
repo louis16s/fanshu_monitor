@@ -56,18 +56,38 @@ struct SamplingCoordinatorTests {
         #expect(releasedKinds.isEmpty)
     }
 
-    @Test func samplingLoadsEveryRequestedWorkerAndNothingElse() async {
+    @Test func samplingLoadsEveryRequestedWorkerAndNothingElse() async throws {
         let coordinator = SamplingCoordinator()
-        for kind in [MonitorKind.cpu, .memory, .battery] {
-            _ = await coordinator.sampleModule(
+        let requestedKinds: Set<MonitorKind> = [.cpu, .gpu, .memory, .battery]
+        for kind in requestedKinds {
+            let module = await coordinator.sampleModule(
                 kind: kind,
                 previous: MonitorModule.placeholder(kind: kind),
                 enabledMetricIDs: Set(kind.availableMetrics.map(\.id)),
                 panelVisible: false
             )
+            #expect(module?.kind == kind)
+            #expect(module?.value.isFinite == true)
+            #expect((module?.value ?? -1) >= 0 && (module?.value ?? 101) <= 100)
         }
         let loadedKinds = await coordinator.loadedSamplerKinds()
-        #expect(loadedKinds == [.cpu, .memory, .battery])
+        #expect(loadedKinds == requestedKinds)
+
+        let cpu = await coordinator.sampleModule(
+            kind: .cpu,
+            previous: MonitorModule.placeholder(kind: .cpu),
+            enabledMetricIDs: [],
+            panelVisible: false
+        )
+        try await Task.sleep(for: .milliseconds(80))
+        let measuredCPU = await coordinator.sampleModule(
+            kind: .cpu,
+            previous: cpu,
+            enabledMetricIDs: [],
+            panelVisible: false
+        )
+        #expect(measuredCPU?.value.isFinite == true)
+        #expect((measuredCPU?.value ?? -1) >= 0 && (measuredCPU?.value ?? 101) <= 100)
     }
 
     @Test func staleResidencyRequestCannotUnloadCurrentWorkers() async {
