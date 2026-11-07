@@ -68,6 +68,7 @@ actor CodexQuotaSampler {
     private let saveReport: @Sendable (CodexQuotaReport) -> Void
     private var cachedModule: MonitorModule?
     private var lastPresentedModule: MonitorModule?
+    private var lastObservedDate: Date?
     private var lastSuccessfulRefreshDate: Date?
     private var retryNotBefore: Date?
     private var consecutiveFailures = 0
@@ -93,6 +94,17 @@ actor CodexQuotaSampler {
         refreshInterval: TimeInterval = 300,
         adaptiveRefreshInterval: TimeInterval = 60
     ) async -> MonitorModule {
+        let sampleDate = now()
+        if let lastObservedDate, sampleDate < lastObservedDate {
+            // Deadlines are wall-clock dates. Discard stale reservations after
+            // a clock rollback so regular refresh and retry can recover now.
+            lastSuccessfulRefreshDate = nil
+            retryNotBefore = nil
+            nextResetRefreshDate = nil
+            consecutiveFailures = 0
+        }
+        lastObservedDate = sampleDate
+
         if lastQuotaSnapshot == nil {
             lastQuotaSnapshot = QuotaUsageSnapshot(module: previous)
         }
@@ -167,6 +179,7 @@ actor CodexQuotaSampler {
         inFlightRefresh = nil
         cachedModule = nil
         lastPresentedModule = nil
+        lastObservedDate = nil
         lastSuccessfulRefreshDate = nil
         retryNotBefore = nil
         consecutiveFailures = 0

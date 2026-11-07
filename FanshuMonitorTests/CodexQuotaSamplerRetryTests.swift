@@ -177,6 +177,48 @@ struct CodexQuotaSamplerRetryTests {
         #expect(counter.value == 4)
     }
 
+    @Test func clockRollbackClearsCodexRefreshAndRetryDeadlines() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let authURL = root.appendingPathComponent("auth.json")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data(#"{"tokens":{"access_token":"test-token"}}"#.utf8).write(to: authURL)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let clock = CodexRetryClock()
+        let counter = CodexRetryCounter()
+        let client = CodexUsageClient(
+            authFileURL: authURL,
+            usageURL: try #require(URL(string: "https://example.com/usage")),
+            transport: { request in
+                let attempt = counter.increment()
+                if attempt == 1 { throw URLError(.timedOut) }
+                let url = try #require(request.url)
+                let response = try #require(HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                ))
+                return (Data(#"{"plan_type":"plus"}"#.utf8), response)
+            }
+        )
+        let sampler = CodexQuotaSampler(client: client, now: clock.now, saveReport: { _ in })
+
+        _ = await sampler.sample(previous: nil)
+        #expect(await sampler.scheduledRetryRefreshDate() == clock.now().addingTimeInterval(15))
+        clock.set(Date(timeIntervalSince1970: 900))
+        let recovered = await sampler.sample(previous: nil, refreshInterval: 600)
+        #expect(counter.value == 2)
+        #expect(recovered.summary == "Plus")
+
+        // A successful refresh deadline is also invalidated by the same correction.
+        clock.set(Date(timeIntervalSince1970: 800))
+        _ = await sampler.sample(previous: recovered, refreshInterval: 600)
+        #expect(counter.value == 3)
+        await sampler.release()
+    }
+
     @Test func quotaDecreaseTemporarilyUsesFastRefreshUntilTwoUnchangedResults() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -231,6 +273,10 @@ private final class CodexRetryClock: @unchecked Sendable {
 
     func advance(by interval: TimeInterval) {
         lock.withLock { date = date.addingTimeInterval(interval) }
+    }
+
+    func set(_ date: Date) {
+        lock.withLock { self.date = date }
     }
 }
 

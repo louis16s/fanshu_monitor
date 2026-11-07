@@ -55,7 +55,9 @@ final class MonitorRefreshSchedule {
                 return true
             }
 
-            return date.timeIntervalSince(lastRefreshDate) >= interval
+            // A wall-clock correction must not leave a module reserved until
+            // the old timestamp is reached again.
+            return date < lastRefreshDate || date.timeIntervalSince(lastRefreshDate) >= interval
         }
         markRefreshed(dueKinds, at: date)
         return dueKinds

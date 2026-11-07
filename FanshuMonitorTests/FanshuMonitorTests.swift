@@ -230,6 +230,19 @@ struct FanshuMonitorTests {
         ) == [.cpu])
     }
 
+    @Test func clockRollbackMakesReservedModulesDueImmediately() {
+        let schedule = MonitorRefreshSchedule()
+        let start = Date(timeIntervalSinceReferenceDate: 4_000)
+        #expect(schedule.dueKinds(at: start, visibleKinds: [.cpu]) == [.cpu])
+
+        let corrected = start.addingTimeInterval(-3_600)
+        #expect(schedule.dueKinds(at: corrected, visibleKinds: [.cpu]) == [.cpu])
+        #expect(schedule.dueKinds(
+            at: corrected.addingTimeInterval(0.1),
+            visibleKinds: [.cpu]
+        ).isEmpty)
+    }
+
     @Test func expensiveMetricsRequireSelectionAndAVisiblePanel() {
         let visible = MonitorSamplingContext(
             enabledMetricIDs: ["temperature"],
