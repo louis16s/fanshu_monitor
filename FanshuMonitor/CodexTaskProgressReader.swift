@@ -114,6 +114,7 @@ actor CodexTaskProgressReader {
     private var titleOrder: UInt64 = 0
     private var missingTitleIDs: Set<String> = []
     private var lastDiscovery = Date.distantPast
+    private var lastObservedDate: Date?
     private var sessionIndexOffset: UInt64 = 0
     private var sessionIndexIdentity: FileIdentity?
     private var sessionIndexLines = JSONLineBuffer()
@@ -130,6 +131,16 @@ actor CodexTaskProgressReader {
 
     func load(now: Date = Date()) -> [CodexTaskProgress] {
         guard !Task.isCancelled else { return [] }
+        if let lastObservedDate, now < lastObservedDate {
+            lastDiscovery = .distantPast
+            for url in Array(statesByURL.keys) {
+                guard var state = statesByURL[url], state.isTaskActive else { continue }
+                state.lastActivityAt = now
+                statesByURL[url] = state
+            }
+        }
+        lastObservedDate = now
+
         if now.timeIntervalSince(lastDiscovery) >= 30 {
             discoverRecentRollouts(now: now)
         }

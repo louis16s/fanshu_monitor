@@ -240,6 +240,28 @@ struct CodexTaskProgressReaderTests {
         #expect(await reader.load(now: staleAt).isEmpty)
     }
 
+    @Test func interruptedTaskStillExpiresAfterClockRollback() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let threadID = "61234567-89ab-cdef-0123-456789abcdef"
+        let rollout = sessions.appendingPathComponent("rollout-\(threadID).jsonl")
+        try Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"# + "\n").utf8)
+            .write(to: rollout)
+        let reader = CodexTaskProgressReader(sessionsRoot: sessions, sessionIndexURL: root.appendingPathComponent("index"))
+        let start = Date()
+        #expect(await reader.load(now: start).count == 1)
+
+        let correctedTime = start.addingTimeInterval(-3_600)
+        #expect(await reader.load(now: correctedTime).count == 1)
+        #expect(await reader.load(
+            now: correctedTime.addingTimeInterval(CodexTaskProgressReader.staleTaskTimeout + 1)
+        ).isEmpty)
+    }
+
     @Test func missingRolloutKeepsLastStateUntilTheNextDiscoveryPass() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
