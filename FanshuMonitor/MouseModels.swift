@@ -1,6 +1,6 @@
 import Foundation
 
-enum MouseLocalization {
+nonisolated enum MouseLocalization {
     static func string(_ key: String, locale: Locale) -> String {
         let language = locale.language.languageCode?.identifier
         let localizedBundle = Bundle.main.path(forResource: locale.identifier, ofType: "lproj")
