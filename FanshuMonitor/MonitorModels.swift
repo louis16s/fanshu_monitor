@@ -252,16 +252,16 @@ nonisolated struct MonitorModule: Equatable, Identifiable, Sendable {
 
         switch kind {
         case .cpu:
-            summary = "0%"
+            summary = "--"
             metrics = [
-                MonitorMetric(name: "system", value: "0%"),
-                MonitorMetric(name: "user", value: "0%"),
-                MonitorMetric(name: "idle", value: "100%"),
+                MonitorMetric(name: "system", value: "--"),
+                MonitorMetric(name: "user", value: "--"),
+                MonitorMetric(name: "idle", value: "--"),
                 MonitorMetric(name: "temperature", value: "--")
             ]
             pressure = nil
         case .gpu:
-            summary = "0%"
+            summary = "--"
             metrics = [
                 MonitorMetric(name: "gpu-memory", value: "--"),
                 MonitorMetric(name: "allocated", value: "--"),
@@ -271,25 +271,25 @@ nonisolated struct MonitorModule: Equatable, Identifiable, Sendable {
             ]
             pressure = nil
         case .memory:
-            summary = "0%"
+            summary = "--"
             metrics = [
-                MonitorMetric(name: "used", value: "0 B"),
-                MonitorMetric(name: "pressure", value: "normal"),
-                MonitorMetric(name: "compressed", value: "0 B"),
-                MonitorMetric(name: "app-memory", value: "0 B"),
-                MonitorMetric(name: "cached", value: "0 B"),
+                MonitorMetric(name: "used", value: "--"),
+                MonitorMetric(name: "pressure", value: "--"),
+                MonitorMetric(name: "compressed", value: "--"),
+                MonitorMetric(name: "app-memory", value: "--"),
+                MonitorMetric(name: "cached", value: "--"),
                 MonitorMetric(
                     name: "total",
                     value: memoryBytes(Double(ProcessInfo.processInfo.physicalMemory))
                 )
             ]
-            pressure = .normal
+            pressure = .unknown
         case .battery:
-            summary = "0%"
+            summary = "--"
             metrics = [
-                MonitorMetric(name: "type", value: "battery"),
+                MonitorMetric(name: "type", value: "unknown"),
                 MonitorMetric(name: "status", value: "unknown"),
-                MonitorMetric(name: "adapter", value: "not-connected"),
+                MonitorMetric(name: "adapter", value: "--"),
                 MonitorMetric(name: "charging-power", value: "--"),
                 MonitorMetric(name: "power", value: "--"),
                 MonitorMetric(name: "adapter-input", value: "--"),
@@ -319,7 +319,7 @@ nonisolated struct MonitorModule: Equatable, Identifiable, Sendable {
             value: 0,
             summary: summary,
             metrics: metrics,
-            samples: Array(repeating: 0, count: 28),
+            samples: [],
             pressure: pressure
         )
     }

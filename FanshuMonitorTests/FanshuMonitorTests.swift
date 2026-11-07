@@ -76,14 +76,18 @@ struct FanshuMonitorTests {
         let power = MonitorModule.placeholder(kind: .battery)
         let codex = MonitorModule.placeholder(kind: .codex)
 
-        #expect(cpu.summary == "0%")
+        #expect(cpu.summary == "--")
+        #expect(cpu.metrics.allSatisfy { $0.value == "--" })
         #expect(cpu.metrics.map(\.name) == ["system", "user", "idle", "temperature"])
-        #expect(gpu.summary == "0%")
+        #expect(gpu.summary == "--")
         #expect(gpu.metrics.map(\.name) == ["gpu-memory", "allocated", "render", "temperature", "tiler"])
-        #expect(memory.summary == "0%")
+        #expect(memory.summary == "--")
+        #expect(memory.pressure == .unknown)
         #expect(memory.metrics.map(\.name) == ["used", "pressure", "compressed", "app-memory", "cached", "total"])
-        #expect(power.summary == "0%")
+        #expect(power.summary == "--")
+        #expect(power.metrics.first { $0.name == "type" }?.value == "unknown")
         #expect(power.metrics.first { $0.name == "power" }?.value == "--")
+        #expect([cpu, gpu, memory, power].allSatisfy { $0.samples.isEmpty })
         #expect(codex.metrics.map(\.name) == [
             "plan", "five-hour", "weekly", "five-hour-reset", "weekly-reset", "reset-credits"
         ])

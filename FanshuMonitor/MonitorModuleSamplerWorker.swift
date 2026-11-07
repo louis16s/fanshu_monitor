@@ -20,7 +20,9 @@ actor MonitorModuleSamplerWorker {
         guard !Task.isCancelled else { return nil }
         return autoreleasepool {
             var module = sampler.sample(previous: previous, context: context)
-            if let previous {
+            if module.summary == "--" {
+                module.samples = []
+            } else if let previous {
                 module.samples = Array(
                     (previous.samples + [module.value])
                         .suffix(MonitorConstants.sparklineMaxPoints)

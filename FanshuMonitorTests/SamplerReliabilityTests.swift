@@ -22,6 +22,7 @@ struct SamplerReliabilityTests {
         let missing = GPUSampler(readGPU: {
             GPUReading(utilization: 10, renderUtilization: nil, tilerUtilization: nil, usedMemory: nil, allocatedMemory: nil)
         }, readTemperature: { nil }).sample(previous: previous, context: context)
+        #expect(missing.summary == "10%")
         #expect(missing.metrics.first { $0.name == "temperature" }?.value == "55°C")
         for id: MetricID in ["gpu-memory", "allocated", "render", "tiler"] {
             #expect(missing.metrics.first { $0.name == id }?.value == "--")
@@ -34,6 +35,7 @@ struct SamplerReliabilityTests {
         let placeholder = GPUSampler(readGPU: {
             GPUReading(utilization: 10, renderUtilization: nil, tilerUtilization: nil, usedMemory: nil, allocatedMemory: nil)
         }, readTemperature: { nil }).sample(previous: .placeholder(kind: .gpu), context: context)
+        #expect(placeholder.summary == "10%")
         #expect(placeholder.metrics.first { $0.name == "render" }?.value == "--")
         var reading = GPUReading(utilization: 0, renderUtilization: 0, tilerUtilization: 0, usedMemory: 0, allocatedMemory: 0)
         let sampler = GPUSampler(readGPU: { reading }, readTemperature: { nil })

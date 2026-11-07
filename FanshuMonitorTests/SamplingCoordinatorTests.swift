@@ -56,6 +56,17 @@ struct SamplingCoordinatorTests {
         #expect(releasedKinds.isEmpty)
     }
 
+    @Test func unavailableFirstSampleDoesNotCreateAZeroSparkline() async {
+        let worker = MonitorModuleSamplerWorker(kind: .cpu, sampler: UnavailableFakeSampler())
+        let module = await worker.sample(
+            previous: nil,
+            context: MonitorSamplingContext(enabledMetricIDs: [], panelVisible: false)
+        )
+
+        #expect(module?.summary == "--")
+        #expect(module?.samples.isEmpty == true)
+    }
+
     @Test func samplingLoadsEveryRequestedWorkerAndNothingElse() async throws {
         let coordinator = SamplingCoordinator()
         let requestedKinds: Set<MonitorKind> = [.cpu, .gpu, .memory, .battery]
@@ -159,5 +170,13 @@ nonisolated private final class BlockingFakeSampler: MonitorSampler, @unchecked 
         lock.withLock { calls += 1 }
         _ = unblock.wait(timeout: .now() + 5)
         return MonitorModule.placeholder(kind: kind)
+    }
+}
+
+nonisolated private struct UnavailableFakeSampler: MonitorSampler {
+    let kind = MonitorKind.cpu
+
+    func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
+        MonitorModule.placeholder(kind: kind)
     }
 }
