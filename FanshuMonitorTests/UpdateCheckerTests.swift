@@ -337,6 +337,11 @@ struct UpdateCheckerTests {
     @Test func checkForUpdatesReportsAvailableRelease() async throws {
         let defaults = isolatedDefaults("availableRelease")
         defer { defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.availableRelease") }
+        let standardDefaults = UserDefaults.standard
+        let standardReleasePayload = standardDefaults.data(forKey: "updates.releasePayload")
+        let standardReleaseETag = standardDefaults.string(forKey: "updates.releaseETag")
+        let standardReleaseSource = standardDefaults.string(forKey: "updates.releaseSource")
+        let standardReleaseFetchedAt = standardDefaults.object(forKey: "updates.releaseFetchedAt") as? Date
         let releaseURL = URL(string: "https://github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0")!
         let assetURL = URL(string: "https://github.com/louis16s/fanshu_monitor/releases/download/v1.1.0/番薯Monitor.dmg")!
         let checker = UpdateChecker(
@@ -377,6 +382,10 @@ struct UpdateCheckerTests {
             downloadURL: assetURL,
             releaseNotes: nil
         ))
+        #expect(standardDefaults.data(forKey: "updates.releasePayload") == standardReleasePayload)
+        #expect(standardDefaults.string(forKey: "updates.releaseETag") == standardReleaseETag)
+        #expect(standardDefaults.string(forKey: "updates.releaseSource") == standardReleaseSource)
+        #expect(standardDefaults.object(forKey: "updates.releaseFetchedAt") as? Date == standardReleaseFetchedAt)
     }
 
     @Test func checkForUpdatesReportsUpToDate() async {
