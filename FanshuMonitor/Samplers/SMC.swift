@@ -12,6 +12,7 @@ nonisolated final class SMCTemperatureCache {
     private let now: () -> Date
     private var source: SMCTemperatureSource?
     private var retryAt: Date?
+    private var lastObservedDate: Date?
     private var failures = 0
 
     init(makeSource: @escaping () -> SMCTemperatureSource? = { SMCReader() }, now: @escaping () -> Date = Date.init) {
@@ -21,8 +22,14 @@ nonisolated final class SMCTemperatureCache {
 
     func temperature(gpu: Bool) -> Double? {
         guard !Task.isCancelled else { return nil }
+        let currentDate = now()
+        if let lastObservedDate, currentDate < lastObservedDate {
+            retryAt = nil
+        }
+        lastObservedDate = currentDate
+
         if source == nil {
-            guard retryAt.map({ now() >= $0 }) ?? true else { return nil }
+            guard retryAt.map({ currentDate >= $0 }) ?? true else { return nil }
             source = makeSource()
             guard source != nil else {
                 deferReconnect()

@@ -150,6 +150,21 @@ struct SamplerReliabilityTests {
         #expect(cache.temperature(gpu: true) == 60)
         #expect(attempts == 3)
     }
+
+    @Test func smcConnectionRetryRecoversAfterWallClockRollback() {
+        var date = Date(timeIntervalSince1970: 10_000)
+        var attempts = 0
+        let source = FakeTemperatureSource()
+        let cache = SMCTemperatureCache(makeSource: {
+            attempts += 1
+            return attempts == 1 ? nil : source
+        }, now: { date })
+
+        #expect(cache.temperature(gpu: false) == nil)
+        date = date.addingTimeInterval(-3_600)
+        #expect(cache.temperature(gpu: false) == 55)
+        #expect(attempts == 2)
+    }
 }
 
 nonisolated private final class FakeTemperatureSource: SMCTemperatureSource {
