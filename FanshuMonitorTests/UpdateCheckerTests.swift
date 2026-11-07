@@ -151,6 +151,39 @@ struct UpdateCheckerTests {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
+    @Test func automaticCheckRetriesWhenWallClockMovesBehindLastCheck() async {
+        let suiteName = "FanshuMonitorTests.UpdateChecker.clockRollback"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        defaults.set(now.addingTimeInterval(60 * 60), forKey: "updates.lastAutomaticCheckAt")
+        var requestCount = 0
+        let checker = UpdateChecker(
+            currentVersionProvider: { "1.0.0" },
+            defaults: defaults,
+            now: { now },
+            dataLoader: { request in
+                requestCount += 1
+                let json = """
+                {
+                    "tag_name": "v1.0.0",
+                    "html_url": "https://github.com/louis16s/fanshu_monitor/releases/tag/v1.0.0"
+                }
+                """
+                return (
+                    Data(json.utf8),
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                )
+            }
+        )
+
+        await checker.checkAutomaticallyIfNeeded(enabled: true)
+
+        #expect(requestCount == 1)
+        #expect(checker.state == .upToDate)
+    }
+
     @Test func failedAutomaticCheckCanRetryWithoutWaitingOneDay() async {
         let suiteName = "FanshuMonitorTests.UpdateChecker.failureRetry"
         let defaults = UserDefaults(suiteName: suiteName)!

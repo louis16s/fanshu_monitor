@@ -73,9 +73,11 @@ final class UpdateChecker {
     func checkAutomaticallyIfNeeded(enabled: Bool) async {
         guard enabled else { return }
         let currentDate = now()
-        if let lastCheck = defaults.object(forKey: Self.lastAutomaticCheckKey) as? Date,
-           currentDate.timeIntervalSince(lastCheck) < Self.automaticCheckInterval {
-            return
+        if let lastCheck = defaults.object(forKey: Self.lastAutomaticCheckKey) as? Date {
+            let elapsed = currentDate.timeIntervalSince(lastCheck)
+            if elapsed >= 0, elapsed < Self.automaticCheckInterval {
+                return
+            }
         }
         if await performCheck() {
             defaults.set(currentDate, forKey: Self.lastAutomaticCheckKey)
