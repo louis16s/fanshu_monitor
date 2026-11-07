@@ -8,6 +8,7 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
     private var desiredRunning = false
     private var workerActive = false
     private var restartAttempt = 0
+    private var restartGeneration: UInt64 = 0
     private var workerRunLoop: CFRunLoop?
     private var gestureMapping = MouseButtonMapping(action: .passThrough, shortcut: nil)
     private var suspensionWaiters: [CheckedContinuation<Void, Never>] = []
@@ -38,7 +39,12 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
 
     func start() {
         let shouldStartWorker = stateLock.withLock {
+            guard deviceOperationSuspensionCount == 0 else {
+                shouldResumeAfterDeviceOperation = true
+                return false
+            }
             desiredRunning = true
+            restartGeneration &+= 1
             guard !workerActive else { return false }
             workerActive = true
             return true
@@ -63,6 +69,7 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
         let runLoop = stateLock.withLock {
             desiredRunning = false
             restartAttempt = 0
+            restartGeneration &+= 1
             shouldResumeAfterDeviceOperation = false
             return workerRunLoop
         }
@@ -72,18 +79,19 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
     }
 
     func suspendForDeviceOperation() async {
-        let runLoop = stateLock.withLock { () -> CFRunLoop? in
+        let state = stateLock.withLock { () -> (runLoop: CFRunLoop?, workerActive: Bool) in
             deviceOperationSuspensionCount += 1
-            guard deviceOperationSuspensionCount == 1, desiredRunning else {
-                return nil
+            guard deviceOperationSuspensionCount == 1 else {
+                return (workerRunLoop, workerActive)
             }
-            shouldResumeAfterDeviceOperation = true
+            shouldResumeAfterDeviceOperation = desiredRunning
             desiredRunning = false
             restartAttempt = 0
-            return workerRunLoop
+            restartGeneration &+= 1
+            return (workerRunLoop, workerActive)
         }
-        guard runLoop != nil || stateLock.withLock({ workerActive }) else { return }
-        if let runLoop {
+        guard state.workerActive else { return }
+        if let runLoop = state.runLoop {
             CFRunLoopStop(runLoop)
         }
 
@@ -161,30 +169,40 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
     }
 
     var hasPendingDeviceOperation: Bool {
-        stateLock.withLock { !suspensionWaiters.isEmpty }
+        stateLock.withLock { deviceOperationSuspensionCount > 0 }
     }
 
     private func workerDidExit() {
-        let result = stateLock.withLock { () -> (TimeInterval?, [CheckedContinuation<Void, Never>]) in
+        let result = stateLock.withLock {
+            () -> (retry: (delay: TimeInterval, generation: UInt64)?, waiters: [CheckedContinuation<Void, Never>]) in
             workerActive = false
             workerRunLoop = nil
             let waiters = suspensionWaiters
             suspensionWaiters.removeAll()
-            guard desiredRunning else { return (nil, waiters) }
+            guard desiredRunning, deviceOperationSuspensionCount == 0 else {
+                return (nil, waiters)
+            }
             let delay = min(30, pow(2, Double(restartAttempt)))
             restartAttempt = min(restartAttempt + 1, 5)
-            workerActive = true
-            return (delay, waiters)
+            restartGeneration &+= 1
+            return ((delay, restartGeneration), waiters)
         }
-        result.1.forEach { $0.resume() }
-        if let restartDelay = result.0 {
-            restartScheduler(restartDelay) { [weak self] in
+        result.waiters.forEach { $0.resume() }
+        if let retry = result.retry {
+            restartScheduler(retry.delay) { [weak self] in
                 guard let self else { return }
                 self.queue.async {
-                    guard self.shouldContinue else {
-                        self.workerDidExit()
-                        return
+                    let shouldLaunchWorker = self.stateLock.withLock {
+                        guard self.desiredRunning,
+                              self.deviceOperationSuspensionCount == 0,
+                              self.restartGeneration == retry.generation,
+                              !self.workerActive else {
+                            return false
+                        }
+                        self.workerActive = true
+                        return true
                     }
+                    guard shouldLaunchWorker else { return }
                     self.launchWorker()
                 }
             }

@@ -23,6 +23,17 @@ private final class MouseRestartScheduler: @unchecked Sendable {
     }
 }
 
+private final class MouseWorkerRunCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = 0
+
+    var value: Int { lock.withLock { storage } }
+
+    func increment() {
+        lock.withLock { storage += 1 }
+    }
+}
+
 struct MouseLifecycleRegressionTests {
     @Test @MainActor func repeatedMouseDownExecutesOnceUntilTheMatchingRelease() {
         let suite = "MouseLifecycleRegressionTests.buttonPairing"
@@ -93,28 +104,35 @@ struct MouseLifecycleRegressionTests {
         tap.stop()
     }
 
-    @Test @MainActor func suspensionDuringRestartBackoffCompletes() async {
+    @Test @MainActor func suspensionCancelsRestartBackoffAndResumeStartsImmediately() async throws {
         let scheduler = MouseRestartScheduler()
+        let runs = MouseWorkerRunCounter()
         let listener = LogitechHIDPPButtonListener(
-            workerOverride: {}, restartScheduler: { _, action in scheduler.schedule(action) }
+            workerOverride: { runs.increment() },
+            restartScheduler: { _, action in scheduler.schedule(action) }
         )
         listener.start()
-        for _ in 0..<100 where !scheduler.isScheduled { try? await Task.sleep(for: .milliseconds(2)) }
+        for _ in 0..<100 where !scheduler.isScheduled { try await Task.sleep(for: .milliseconds(2)) }
         #expect(scheduler.isScheduled)
-        var completed = false
-        let operation = Task { @MainActor in
-            await listener.suspendForDeviceOperation()
-            completed = true
-            listener.resumeAfterDeviceOperation()
-        }
-        for _ in 0..<100 where !listener.hasPendingDeviceOperation { try? await Task.sleep(for: .milliseconds(2)) }
+        #expect(runs.value == 1)
+
+        await listener.suspendForDeviceOperation()
         #expect(listener.hasPendingDeviceOperation)
         scheduler.fire()
-        for _ in 0..<100 where !completed { try? await Task.sleep(for: .milliseconds(2)) }
-        #expect(completed)
+
+        listener.start()
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(runs.value == 1)
+
+        listener.resumeAfterDeviceOperation()
+        for _ in 0..<100 where runs.value < 2 { try await Task.sleep(for: .milliseconds(2)) }
+        #expect(runs.value == 2)
+
         listener.stop()
         scheduler.fire()
-        operation.cancel()
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(runs.value == 2)
+        #expect(!listener.hasPendingDeviceOperation)
     }
 }
 
