@@ -1501,88 +1501,87 @@ struct DisplayControlWorkerTests {
         #expect(recorder.values == [65, 66])
     }
 
-    @Test func slowDiscoveryDoesNotBlockNativeBrightnessOnAnotherDisplay() {
+    @Test func slowDiscoveryDoesNotBlockNativeBrightnessOnAnotherDisplay() async {
         let worker = DisplayControlWorker()
-        let discoveryStarted = DispatchSemaphore(value: 0)
+        let discoveryStarted = ThreadSafeFlag()
         let allowDiscoveryToFinish = DispatchSemaphore(value: 0)
-        let discoveryFinished = DispatchSemaphore(value: 0)
-        let brightnessFinished = DispatchSemaphore(value: 0)
+        let discoveryFinished = ThreadSafeFlag()
+        let brightnessFinished = ThreadSafeFlag()
 
         worker.refresh(
             activeControls: [.brightness],
             performDiscovery: {
-                discoveryStarted.signal()
+                discoveryStarted.set()
                 _ = allowDiscoveryToFinish.wait(timeout: .now() + 2)
                 return []
             },
-            completion: { _ in discoveryFinished.signal() }
+            completion: { _ in discoveryFinished.set() }
         )
-        #expect(discoveryStarted.wait(timeout: .now() + 1) == .success)
+        #expect(await waitForFlag(discoveryStarted, timeout: .seconds(1)))
 
         worker.readNativeBrightness(
             displayID: 2,
             performRead: { 55 },
-            completion: { _ in brightnessFinished.signal() }
+            completion: { _ in brightnessFinished.set() }
         )
 
-        #expect(brightnessFinished.wait(timeout: .now() + 0.5) == .success)
+        #expect(await waitForFlag(brightnessFinished, timeout: .milliseconds(500)))
         allowDiscoveryToFinish.signal()
-        #expect(discoveryFinished.wait(timeout: .now() + 1) == .success)
+        #expect(await waitForFlag(discoveryFinished, timeout: .seconds(1)))
     }
 
-    @Test func displayDiscoveriesAreSerialized() {
+    @Test func displayDiscoveriesAreSerialized() async throws {
         let worker = DisplayControlWorker()
-        let firstStarted = DispatchSemaphore(value: 0)
+        let firstStarted = ThreadSafeFlag()
         let allowFirstToFinish = DispatchSemaphore(value: 0)
-        let secondStarted = DispatchSemaphore(value: 0)
-        let secondFinished = DispatchSemaphore(value: 0)
+        let secondStarted = ThreadSafeFlag()
+        let secondFinished = ThreadSafeFlag()
 
         worker.refresh(
             activeControls: [.brightness],
             performDiscovery: {
-                firstStarted.signal()
+                firstStarted.set()
                 _ = allowFirstToFinish.wait(timeout: .now() + 2)
                 return []
             },
             completion: { _ in }
         )
-        #expect(firstStarted.wait(timeout: .now() + 1) == .success)
+        #expect(await waitForFlag(firstStarted, timeout: .seconds(1)))
 
         worker.refresh(
             activeControls: [.brightness, .contrast],
             performDiscovery: {
-                secondStarted.signal()
+                secondStarted.set()
                 return []
             },
-            completion: { _ in secondFinished.signal() }
+            completion: { _ in secondFinished.set() }
         )
 
-        #expect(secondStarted.wait(timeout: .now() + 0.1) == .timedOut)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(!secondStarted.isSet)
         allowFirstToFinish.signal()
-        #expect(secondStarted.wait(timeout: .now() + 1) == .success)
-        #expect(secondFinished.wait(timeout: .now() + 1) == .success)
+        #expect(await waitForFlag(secondStarted, timeout: .seconds(1)))
+        #expect(await waitForFlag(secondFinished, timeout: .seconds(1)))
     }
 
-    @Test func matchingDiscoveryRequestsShareOneHardwareScan() {
+    @Test func matchingDiscoveryRequestsShareOneHardwareScan() async {
         let worker = DisplayControlWorker()
         let scans = ThreadSafeCount()
-        let firstStarted = DispatchSemaphore(value: 0)
+        let firstStarted = ThreadSafeFlag()
         let allowFirstToFinish = DispatchSemaphore(value: 0)
-        let completions = DispatchGroup()
-        completions.enter()
-        completions.enter()
+        let completions = ThreadSafeCount()
 
         worker.refresh(
             activeControls: [.brightness],
             performDiscovery: {
                 scans.increment()
-                firstStarted.signal()
+                firstStarted.set()
                 _ = allowFirstToFinish.wait(timeout: .now() + 2)
                 return []
             },
-            completion: { _ in completions.leave() }
+            completion: { _ in completions.increment() }
         )
-        #expect(firstStarted.wait(timeout: .now() + 1) == .success)
+        #expect(await waitForFlag(firstStarted, timeout: .seconds(1)))
 
         worker.refresh(
             activeControls: [.brightness],
@@ -1590,13 +1589,39 @@ struct DisplayControlWorkerTests {
                 scans.increment()
                 return []
             },
-            completion: { _ in completions.leave() }
+            completion: { _ in completions.increment() }
         )
 
         allowFirstToFinish.signal()
-        #expect(completions.wait(timeout: .now() + 1) == .success)
+        #expect(await waitForCondition(timeout: .seconds(1)) { completions.value == 2 })
         #expect(scans.value == 1)
     }
+}
+
+private final class ThreadSafeFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = false
+
+    var isSet: Bool { lock.withLock { storage } }
+
+    func set() {
+        lock.withLock { storage = true }
+    }
+}
+
+private func waitForFlag(_ flag: ThreadSafeFlag, timeout: Duration) async -> Bool {
+    await waitForCondition(timeout: timeout) { flag.isSet }
+}
+
+private func waitForCondition(
+    timeout: Duration,
+    condition: @escaping @Sendable () -> Bool
+) async -> Bool {
+    let deadline = ContinuousClock.now + timeout
+    while !condition(), ContinuousClock.now < deadline {
+        try? await Task.sleep(for: .milliseconds(5))
+    }
+    return condition()
 }
 
 private final class ThreadSafeValues: @unchecked Sendable {
