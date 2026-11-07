@@ -335,10 +335,13 @@ struct UpdateCheckerTests {
     }
 
     @Test func checkForUpdatesReportsAvailableRelease() async throws {
+        let defaults = isolatedDefaults("availableRelease")
+        defer { defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.availableRelease") }
         let releaseURL = URL(string: "https://github.com/louis16s/fanshu_monitor/releases/tag/v1.1.0")!
         let assetURL = URL(string: "https://github.com/louis16s/fanshu_monitor/releases/download/v1.1.0/番薯Monitor.dmg")!
         let checker = UpdateChecker(
             currentVersionProvider: { "1.0.0" },
+            defaults: defaults,
             dataLoader: { request in
                 #expect(request.value(forHTTPHeaderField: "User-Agent") == "FanshuMonitor")
                 let json = """
@@ -377,8 +380,11 @@ struct UpdateCheckerTests {
     }
 
     @Test func checkForUpdatesReportsUpToDate() async {
+        let defaults = isolatedDefaults("upToDate")
+        defer { defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.upToDate") }
         let checker = UpdateChecker(
             currentVersionProvider: { "1.1.0" },
+            defaults: defaults,
             dataLoader: { request in
                 let json = """
                 {
@@ -404,8 +410,11 @@ struct UpdateCheckerTests {
     }
 
     @Test func checkForUpdatesDoesNotReportSameVersionWithPrefix() async {
+        let defaults = isolatedDefaults("sameVersionPrefix")
+        defer { defaults.removePersistentDomain(forName: "FanshuMonitorTests.UpdateChecker.sameVersionPrefix") }
         let checker = UpdateChecker(
             currentVersionProvider: { "0.2.6" },
+            defaults: defaults,
             dataLoader: { request in
                 let json = """
                 {
