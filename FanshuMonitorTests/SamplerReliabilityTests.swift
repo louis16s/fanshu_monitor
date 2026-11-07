@@ -48,6 +48,64 @@ struct SamplerReliabilityTests {
         #expect(recreated.metrics.first { $0.name == "render" }?.value == "0%")
     }
 
+    @Test func gpuNonFiniteDetailsRetainLastValidValuesWithoutFormattingCrashes() {
+        let context = MonitorSamplingContext(enabledMetricIDs: ["temperature", "tiler"], panelVisible: true)
+        var reading = GPUReading(
+            utilization: 50,
+            renderUtilization: 24,
+            tilerUtilization: 12,
+            usedMemory: 1_024,
+            allocatedMemory: 4_096
+        )
+        let sampler = GPUSampler(readGPU: { reading }, readTemperature: { nil })
+        let valid = sampler.sample(previous: nil, context: context)
+        let validMemory = valid.metrics.first { $0.name == "gpu-memory" }?.value
+        let validAllocated = valid.metrics.first { $0.name == "allocated" }?.value
+        reading = GPUReading(
+            utilization: 55,
+            renderUtilization: .nan,
+            tilerUtilization: .infinity,
+            usedMemory: .nan,
+            allocatedMemory: -.infinity
+        )
+
+        let afterInvalidDetails = sampler.sample(previous: valid, context: context)
+        #expect(afterInvalidDetails.summary == "55%")
+        #expect(afterInvalidDetails.metrics.first { $0.name == "render" }?.value == "24%")
+        #expect(afterInvalidDetails.metrics.first { $0.name == "tiler" }?.value == "12%")
+        #expect(afterInvalidDetails.metrics.first { $0.name == "gpu-memory" }?.value == validMemory)
+        #expect(afterInvalidDetails.metrics.first { $0.name == "allocated" }?.value == validAllocated)
+        #expect(GPUSampler.percentText(140) == "100%")
+        #expect(GPUSampler.percentText(-10) == "0%")
+        #expect(GPUSampler.bytesText(Double.nan) == nil)
+        #expect(GPUSampler.bytesText(Double(Int64.max)) == nil)
+    }
+
+    @Test func gpuRejectsNonFinitePrimaryUtilizationAndKeepsPreviousModule() {
+        let context = MonitorSamplingContext(enabledMetricIDs: [], panelVisible: true)
+        let previous = MonitorModule(
+            kind: .gpu,
+            value: 37,
+            summary: "37%",
+            metrics: [],
+            samples: [37]
+        )
+        let sampler = GPUSampler(
+            readGPU: {
+                GPUReading(
+                    utilization: .nan,
+                    renderUtilization: 0,
+                    tilerUtilization: 0,
+                    usedMemory: 0,
+                    allocatedMemory: 0
+                )
+            },
+            readTemperature: { nil }
+        )
+
+        #expect(sampler.sample(previous: previous, context: context) == previous)
+    }
+
     @Test func smcRetriesFailedConnectionButKeepsUnsupportedKeys() {
         var date = Date(timeIntervalSince1970: 1000)
         var attempts = 0

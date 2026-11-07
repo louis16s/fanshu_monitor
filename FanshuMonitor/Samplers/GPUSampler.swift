@@ -17,8 +17,9 @@ nonisolated final class GPUSampler: MonitorSampler {
     private var lastUnavailableLogDate: Date?
 
     func sample(previous: MonitorModule?, context: MonitorSamplingContext) -> MonitorModule {
-        guard let reading = (readGPU != nil ? readGPU?() : gpuReading()) else {
-            logUnavailable("gpuReading() returned nil, GPU data unavailable")
+        guard let reading = (readGPU != nil ? readGPU?() : gpuReading()),
+              reading.utilization.isFinite else {
+            logUnavailable("gpuReading() returned invalid or unavailable GPU data")
             return previous ?? MonitorModule.placeholder(kind: .gpu)
         }
 
@@ -28,7 +29,7 @@ nonisolated final class GPUSampler: MonitorSampler {
                 name: "gpu-memory",
                 value: retainedMetric(
                     "gpu-memory",
-                    freshValue: reading.usedMemory.map(bytes),
+                    freshValue: Self.bytesText(reading.usedMemory),
                     previous: previous,
                     initialValue: "--"
                 )
@@ -37,7 +38,7 @@ nonisolated final class GPUSampler: MonitorSampler {
                 name: "allocated",
                 value: retainedMetric(
                     "allocated",
-                    freshValue: reading.allocatedMemory.map(bytes),
+                    freshValue: Self.bytesText(reading.allocatedMemory),
                     previous: previous,
                     initialValue: "--"
                 )
@@ -48,7 +49,7 @@ nonisolated final class GPUSampler: MonitorSampler {
             name: "render",
             value: retainedMetric(
                 "render",
-                freshValue: reading.renderUtilization.map(percent),
+                freshValue: Self.percentText(reading.renderUtilization),
                 previous: previous,
                 initialValue: "--"
             )
@@ -66,7 +67,7 @@ nonisolated final class GPUSampler: MonitorSampler {
                 name: "tiler",
                 value: retainedMetric(
                     "tiler",
-                    freshValue: reading.tilerUtilization.map(percent),
+                    freshValue: Self.percentText(reading.tilerUtilization),
                     previous: previous,
                     initialValue: "--"
                 )
@@ -167,6 +168,18 @@ nonisolated final class GPUSampler: MonitorSampler {
             return prior
         }
         return initialValue
+    }
+
+    static func percentText(_ value: Double?) -> String? {
+        guard let value, value.isFinite else { return nil }
+        return percent(min(100, max(0, value)))
+    }
+
+    static func bytesText(_ value: Double?) -> String? {
+        guard let value, value.isFinite, value >= 0, value < Double(Int64.max) else {
+            return nil
+        }
+        return bytes(value)
     }
 }
 
