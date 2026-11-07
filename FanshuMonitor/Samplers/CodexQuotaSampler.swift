@@ -349,7 +349,7 @@ actor CodexQuotaSampler {
                 MonitorMetric(name: "weekly-reset", value: weeklyResetText),
                 MonitorMetric(name: "reset-credits", value: resetCreditsText(report.resetCredits)),
                 MonitorMetric(name: "status", value: report.fetchedAt.map {
-                    String(localized: "codex.updated-at") + " " + quotaTimeFormatter.string(from: $0)
+                    String(localized: "codex.updated-at") + " " + makeQuotaTimeFormatter().string(from: $0)
                 } ?? String(localized: "codex.cached-quota"))
             ],
             samples: seedSamples(fiveHourRemainingValue)
@@ -362,7 +362,7 @@ actor CodexQuotaSampler {
     }
 
     private static func formattedFiveHourReset(_ date: Date?) -> String {
-        date.map { quotaTimeFormatter.string(from: $0) } ?? "--"
+        date.map { makeQuotaTimeFormatter().string(from: $0) } ?? "--"
     }
 
     private static func formattedWeeklyReset(_ date: Date?) -> String {
@@ -391,13 +391,13 @@ actor CodexQuotaSampler {
     }
 }
 
-nonisolated private let quotaTimeFormatter: DateFormatter = {
+nonisolated private func makeQuotaTimeFormatter() -> DateFormatter {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "zh_CN")
     formatter.timeZone = .autoupdatingCurrent
     formatter.dateFormat = "MM/dd HH:mm"
     return formatter
-}()
+}
 
 nonisolated private func makeQuotaDateFormatter() -> DateFormatter {
     let formatter = DateFormatter()
@@ -672,11 +672,15 @@ nonisolated enum CodexQuotaCache {
            cachedReport.planType == report.planType,
            cachedReport.periods == report.periods,
            cachedReport.resetCredits == report.resetCredits,
-           cachedReport.fetchedAt.map({ quotaTimeFormatter.string(from: $0) })
-            == report.fetchedAt.map({ quotaTimeFormatter.string(from: $0) }) {
+           cachedReport.fetchedAt.map(Self.minuteBucket)
+            == report.fetchedAt.map(Self.minuteBucket) {
             return
         }
         defaults.set(data, forKey: key)
+    }
+
+    private static func minuteBucket(_ date: Date) -> Int64 {
+        Int64(floor(date.timeIntervalSince1970 / 60))
     }
 }
 

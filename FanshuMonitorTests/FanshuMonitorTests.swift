@@ -917,6 +917,32 @@ struct FanshuMonitorTests {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
+    @Test func codexQuotaCacheWritesFetchTimeAtMostOncePerMinute() throws {
+        let suiteName = "FanshuMonitorTests.codexQuotaCacheWriteThrottle"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let firstFetch = Date(timeIntervalSince1970: 1_800_000_000)
+        let report = CodexQuotaReport(planType: "plus", periods: [], resetCredits: 1, fetchedAt: firstFetch)
+        CodexQuotaCache.save(report, defaults: defaults)
+        let sameMinute = CodexQuotaReport(
+            planType: "plus", periods: [], resetCredits: 1,
+            fetchedAt: firstFetch.addingTimeInterval(59)
+        )
+        CodexQuotaCache.save(sameMinute, defaults: defaults)
+        let afterSameMinute = try #require(defaults.data(forKey: "codex.quota.lastSuccessfulReport"))
+        #expect(try JSONDecoder().decode(CodexQuotaReport.self, from: afterSameMinute).fetchedAt == firstFetch)
+
+        let nextMinute = CodexQuotaReport(
+            planType: "plus", periods: [], resetCredits: 1,
+            fetchedAt: firstFetch.addingTimeInterval(60)
+        )
+        CodexQuotaCache.save(nextMinute, defaults: defaults)
+        let afterNextMinute = try #require(defaults.data(forKey: "codex.quota.lastSuccessfulReport"))
+        #expect(try JSONDecoder().decode(CodexQuotaReport.self, from: afterNextMinute).fetchedAt == nextMinute.fetchedAt)
+    }
+
     @Test func codexRefreshFailureKeepsTheCachedPlanAndQuota() {
         let cachedModule = MonitorModule(
             kind: .codex,
