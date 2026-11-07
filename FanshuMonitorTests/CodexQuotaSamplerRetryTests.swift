@@ -1,8 +1,42 @@
 import Foundation
+import CFNetwork
 import Testing
 @testable import FanshuMonitor
 
 struct CodexQuotaSamplerRetryTests {
+    @Test func proxyConfigurationMapsDisabledSocksAndHTTPModes() {
+        let disabled = CodexUsageProxySettings(
+            enabled: false,
+            host: "127.0.0.1",
+            port: 10808,
+            type: "socks5"
+        )
+        #expect(disabled.connectionProxyDictionary == nil)
+
+        let socks = CodexUsageProxySettings(
+            enabled: true,
+            host: "  127.0.0.1  ",
+            port: 10808,
+            type: "socks5"
+        ).connectionProxyDictionary
+        #expect(socks?[kCFNetworkProxiesSOCKSEnable as String] as? Int == 1)
+        #expect(socks?[kCFNetworkProxiesSOCKSProxy as String] as? String == "127.0.0.1")
+        #expect(socks?[kCFNetworkProxiesSOCKSPort as String] as? Int == 10808)
+
+        let http = CodexUsageProxySettings(
+            enabled: true,
+            host: "proxy.local",
+            port: 8080,
+            type: "http"
+        ).connectionProxyDictionary
+        #expect(http?[kCFNetworkProxiesHTTPEnable as String] as? Int == 1)
+        #expect(http?[kCFNetworkProxiesHTTPProxy as String] as? String == "proxy.local")
+        #expect(http?[kCFNetworkProxiesHTTPPort as String] as? Int == 8080)
+        #expect(http?[kCFNetworkProxiesHTTPSEnable as String] as? Int == 1)
+        #expect(http?[kCFNetworkProxiesHTTPSProxy as String] as? String == "proxy.local")
+        #expect(http?[kCFNetworkProxiesHTTPSPort as String] as? Int == 8080)
+    }
+
     @Test func coordinatorReturnsIndependentRetryDeadline() async throws {
         let auth = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try Data(#"{"tokens":{"access_token":"fake"}}"#.utf8).write(to: auth)
