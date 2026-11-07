@@ -163,8 +163,9 @@ nonisolated final class LogitechHIDPPService: @unchecked Sendable {
             lock.unlock()
 
             transmit(featureIndex: featureIndex, function: function, params: params)
-            let deadline = Date().addingTimeInterval(1.2)
-            while Date() < deadline {
+            let clock = ContinuousClock()
+            let deadline = clock.now + .milliseconds(1_200)
+            while clock.now < deadline {
                 if let response = nextMatchingResponse(featureIndex: featureIndex, function: function) {
                     return response
                 }

@@ -313,8 +313,9 @@ nonisolated final class LogitechHIDPPButtonListener: @unchecked Sendable {
                 }
             }
             transmit(featureIndex: featureIndex, function: function, params: params)
-            let deadline = Date().addingTimeInterval(timeout)
-            while Date() < deadline {
+            let clock = ContinuousClock()
+            let deadline = clock.now + .milliseconds(Int64(max(0, timeout) * 1_000))
+            while clock.now < deadline {
                 for report in takeReports() {
                     guard let parsed = HIDPPResponse(report: report) else { continue }
                     if parsed.featureIndex == 0xFF { return nil }
