@@ -1,6 +1,29 @@
 import Foundation
 import IOKit
 
+nonisolated enum BatteryPowerConnectionState: String, Equatable, Sendable {
+    case charging
+    case connected = "ac-power"
+    case battery = "on-battery"
+    case unknown
+
+    static func resolve(
+        sourceState: String?,
+        isCharging: Bool,
+        acPowerValue: String,
+        batteryPowerValue: String
+    ) -> Self {
+        if isCharging { return .charging }
+        if sourceState == acPowerValue { return .connected }
+        if sourceState == batteryPowerValue { return .battery }
+        return .unknown
+    }
+
+    static func isConnected(status: String?) -> Bool {
+        status == charging.rawValue || status == connected.rawValue
+    }
+}
+
 nonisolated struct BatteryPowerTelemetry: Equatable, Sendable {
     let adapterInputWatts: Double?
     let systemLoadWatts: Double?

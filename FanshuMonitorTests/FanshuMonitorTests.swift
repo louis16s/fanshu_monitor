@@ -558,6 +558,37 @@ struct FanshuMonitorTests {
         #expect(BatterySampler.adapterMetricValue(isConnected: true, watts: nil) == "--")
     }
 
+    @Test func batteryPowerStateDoesNotTreatUnknownAsConnectedOrOnBattery() {
+        #expect(BatteryPowerConnectionState.resolve(
+            sourceState: "AC Power",
+            isCharging: false,
+            acPowerValue: "AC Power",
+            batteryPowerValue: "Battery Power"
+        ) == .connected)
+        #expect(BatteryPowerConnectionState.resolve(
+            sourceState: "Battery Power",
+            isCharging: false,
+            acPowerValue: "AC Power",
+            batteryPowerValue: "Battery Power"
+        ) == .battery)
+        #expect(BatteryPowerConnectionState.resolve(
+            sourceState: nil,
+            isCharging: false,
+            acPowerValue: "AC Power",
+            batteryPowerValue: "Battery Power"
+        ) == .unknown)
+        #expect(BatteryPowerConnectionState.resolve(
+            sourceState: nil,
+            isCharging: true,
+            acPowerValue: "AC Power",
+            batteryPowerValue: "Battery Power"
+        ) == .charging)
+        #expect(BatteryPowerConnectionState.isConnected(status: "unknown") == false)
+        #expect(BatteryPowerConnectionState.isConnected(status: nil) == false)
+        #expect(BatteryPowerConnectionState.isConnected(status: "ac-power"))
+        #expect(BatteryPowerConnectionState.isConnected(status: "charging"))
+    }
+
     @Test func batteryPowerTelemetryUsesTheCorrectDirectionAndUnits() {
         #expect(BatterySampler.chargingPowerWatts(batteryPowerMilliwatts: 8_100) == 8.1)
         #expect(BatterySampler.chargingPowerWatts(batteryPowerMilliwatts: -8_100) == nil)

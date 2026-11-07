@@ -193,7 +193,7 @@ struct BatteryGlassRow: View {
     }
 
     private var isConnectedToPower: Bool {
-        rawValue("status") != "on-battery"
+        BatteryPowerConnectionState.isConnected(status: rawValue("status"))
     }
 
     private func positiveWattValue(_ value: String) -> Double? {

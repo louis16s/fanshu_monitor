@@ -57,7 +57,13 @@ nonisolated final class BatterySampler: MonitorSampler {
         let percentage = min(100, current / maxCapacity * 100)
         let isCharging = (description[kIOPSIsChargingKey] as? Bool) ?? false
         let sourceState = description[kIOPSPowerSourceStateKey] as? String
-        let connected = sourceState == kIOPSACPowerValue
+        let connectionState = BatteryPowerConnectionState.resolve(
+            sourceState: sourceState,
+            isCharging: isCharging,
+            acPowerValue: kIOPSACPowerValue,
+            batteryPowerValue: kIOPSBatteryPowerValue
+        )
+        let connected = connectionState != .battery && connectionState != .unknown
 
         let shouldCollectTelemetry = BatterySamplingPolicy.shouldCollectTelemetry(context: context)
         let shouldCollectSmartDetails = BatterySamplingPolicy.shouldCollectSmartDetails(context: context)
@@ -79,7 +85,7 @@ nonisolated final class BatterySampler: MonitorSampler {
             summary: percent(percentage),
             metrics: [
                 MonitorMetric(name: "type", value: "battery"),
-                MonitorMetric(name: "status", value: isCharging ? "charging" : (connected ? "ac-power" : "on-battery")),
+                MonitorMetric(name: "status", value: connectionState.rawValue),
                 MonitorMetric(name: "adapter", value: connected
                     ? telemetryValue(
                         "adapter",
