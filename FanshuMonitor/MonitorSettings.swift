@@ -217,9 +217,21 @@ final class MonitorSettings: ObservableObject {
         displayCapabilitiesEnabled = defaults.object(forKey: Keys.displayCapabilitiesEnabled) as? Bool ?? true
         displayNativeOSDEnabled = defaults.object(forKey: Keys.displayNativeOSDEnabled) as? Bool ?? true
         displaySoftwareDimmingEnabled = defaults.object(forKey: Keys.displaySoftwareDimmingEnabled) as? Bool ?? true
-        brightnessKeyStepPercent = defaults.object(forKey: Keys.brightnessKeyStepPercent) as? Double ?? 5
-        codexRefreshIntervalMinutes = defaults.object(forKey: Keys.codexRefreshIntervalMinutes) as? Double ?? 5
-        codexAdaptiveRefreshIntervalMinutes = defaults.object(forKey: Keys.codexAdaptiveRefreshIntervalMinutes) as? Double ?? 1
+        brightnessKeyStepPercent = Self.boundedStoredDouble(
+            defaults.object(forKey: Keys.brightnessKeyStepPercent),
+            fallback: 5,
+            range: 1...20
+        )
+        codexRefreshIntervalMinutes = Self.boundedStoredDouble(
+            defaults.object(forKey: Keys.codexRefreshIntervalMinutes),
+            fallback: 5,
+            range: 1...60
+        )
+        codexAdaptiveRefreshIntervalMinutes = Self.boundedStoredDouble(
+            defaults.object(forKey: Keys.codexAdaptiveRefreshIntervalMinutes),
+            fallback: 1,
+            range: 1...60
+        )
         codexHeaderDetailPreference = CodexHeaderDetailPreference(
             rawValue: defaults.string(forKey: Keys.codexHeaderDetailPreference) ?? ""
         ) ?? .plan
@@ -234,7 +246,11 @@ final class MonitorSettings: ObservableObject {
         brightnessKeyInterceptionEnabled = defaults.object(forKey: Keys.brightnessKeyInterceptionEnabled) as? Bool ?? true
         mouseControlEnabled = defaults.object(forKey: Keys.mouseControlEnabled) as? Bool ?? false
         mouseDPIOnDemandEnabled = defaults.object(forKey: Keys.mouseDPIOnDemandEnabled) as? Bool ?? true
-        mouseDPI = defaults.object(forKey: Keys.mouseDPI) as? Double ?? 1600
+        mouseDPI = Self.boundedStoredDouble(
+            defaults.object(forKey: Keys.mouseDPI),
+            fallback: 1600,
+            range: 200...8000
+        )
         mouseMiddleAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseMiddleAction) ?? "") ?? .passThrough
         mouseBackAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseBackAction) ?? "") ?? .paste
         mouseForwardAction = MouseButtonAction(rawValue: defaults.string(forKey: Keys.mouseForwardAction) ?? "") ?? .launchpad
@@ -310,6 +326,17 @@ final class MonitorSettings: ObservableObject {
         if launchAtLoginDesired == true, !launchAtLogin {
             updateLaunchAtLogin(true)
         }
+    }
+
+    private static func boundedStoredDouble(
+        _ value: Any?,
+        fallback: Double,
+        range: ClosedRange<Double>
+    ) -> Double {
+        guard let number = value as? NSNumber else { return fallback }
+        let value = number.doubleValue
+        guard value.isFinite else { return fallback }
+        return min(range.upperBound, max(range.lowerBound, value))
     }
 
     func isVisible(_ kind: MonitorKind) -> Bool {

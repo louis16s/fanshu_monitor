@@ -159,6 +159,26 @@ struct SettingsTests {
         #expect(reloaded.codexAdaptiveRefreshIntervalMinutes == 3)
     }
 
+    @Test func numericPreferencesAreValidatedWhenLoaded() {
+        let suite = "numericPreferencesAreValidatedWhenLoaded"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(0.1, forKey: "settings.codexRefreshIntervalMinutes")
+        defaults.set(120.0, forKey: "settings.codexAdaptiveRefreshIntervalMinutes")
+        defaults.set(Double.nan, forKey: "settings.display.brightnessKeyStepPercent")
+        defaults.set(0.0, forKey: "settings.mouse.dpi")
+
+        let settings = MonitorSettings(defaults: defaults)
+
+        #expect(settings.codexRefreshIntervalMinutes == 1)
+        #expect(settings.codexAdaptiveRefreshIntervalMinutes == 60)
+        #expect(settings.brightnessKeyStepPercent == 5)
+        #expect(settings.mouseDPI == 200)
+        #expect(settings.codexRefreshIntervalMinutes.isFinite)
+        #expect(settings.codexAdaptiveRefreshIntervalMinutes.isFinite)
+    }
+
     @Test func displayModuleIsVisibleByDefault() {
         let defaults = UserDefaults(suiteName: "displayModuleIsVisibleByDefault")!
         defaults.removePersistentDomain(forName: "displayModuleIsVisibleByDefault")
