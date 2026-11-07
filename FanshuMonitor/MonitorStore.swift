@@ -38,6 +38,7 @@ final class MonitorStore: ObservableObject {
     private var codexRetryRefreshTask: Task<Void, Never>?
     private var codexTaskProgressTask: Task<Void, Never>?
     private var codexTaskProgressTimerCancellable: AnyCancellable?
+    private var codexTaskProgressGeneration = 0
     private lazy var codexTaskProgressReader = CodexTaskProgressReader()
     private var samplingGeneration = 0
     private var cancellables: Set<AnyCancellable> = []
@@ -639,6 +640,7 @@ final class MonitorStore: ObservableObject {
     }
 
     private func configureCodexTaskProgressMonitoring() {
+        codexTaskProgressGeneration &+= 1
         codexTaskProgressTimerCancellable?.cancel()
         codexTaskProgressTimerCancellable = nil
         codexTaskProgressTask?.cancel()
@@ -669,10 +671,12 @@ final class MonitorStore: ObservableObject {
               codexTaskProgressTask == nil else {
             return
         }
+        let generation = codexTaskProgressGeneration
         codexTaskProgressTask = Task { [weak self] in
             guard let reader = self?.codexTaskProgressReader else { return }
             let tasks = await reader.load()
             guard let self else { return }
+            guard generation == self.codexTaskProgressGeneration else { return }
             self.codexTaskProgressTask = nil
             guard !Task.isCancelled else { return }
             self.applyCodexTaskProgress(tasks)
