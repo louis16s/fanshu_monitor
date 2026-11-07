@@ -281,6 +281,25 @@ struct FanshuMonitorTests {
         #expect(!BatterySamplingPolicy.shouldCollectSmartDetails(context: hidden))
     }
 
+    @Test func smartBatteryCacheExpiresAtItsAgeBoundaryAndAfterClockRollback() {
+        let refreshedAt = Date(timeIntervalSince1970: 10_000)
+        #expect(BatterySamplingPolicy.shouldReuseSmartDetailsCache(
+            refreshedAt: refreshedAt,
+            now: refreshedAt.addingTimeInterval(4.9),
+            interval: 5
+        ))
+        #expect(!BatterySamplingPolicy.shouldReuseSmartDetailsCache(
+            refreshedAt: refreshedAt,
+            now: refreshedAt.addingTimeInterval(5),
+            interval: 5
+        ))
+        #expect(!BatterySamplingPolicy.shouldReuseSmartDetailsCache(
+            refreshedAt: refreshedAt,
+            now: refreshedAt.addingTimeInterval(-3_600),
+            interval: 5
+        ))
+    }
+
     @Test func codexRefreshScheduleUsesConfiguredInterval() {
         let schedule = MonitorRefreshSchedule()
         let start = Date(timeIntervalSinceReferenceDate: 1_000)

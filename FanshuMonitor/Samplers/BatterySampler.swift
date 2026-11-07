@@ -19,6 +19,11 @@ nonisolated enum BatterySamplingPolicy {
         shouldCollectTelemetry(context: context)
             && !context.enabledMetricIDs.isDisjoint(with: smartDetailMetricIDs)
     }
+
+    static func shouldReuseSmartDetailsCache(refreshedAt: Date, now: Date, interval: TimeInterval) -> Bool {
+        let age = now.timeIntervalSince(refreshedAt)
+        return age >= 0 && age < interval
+    }
 }
 
 nonisolated final class BatterySampler: MonitorSampler {
@@ -215,7 +220,11 @@ nonisolated final class BatterySampler: MonitorSampler {
 
     private func smartBatteryInfo(at date: Date) -> SmartBatteryInfo {
         if let cachedSmartBatteryInfo,
-           date.timeIntervalSince(cachedSmartBatteryInfo.refreshedAt) < smartBatteryRefreshInterval {
+           BatterySamplingPolicy.shouldReuseSmartDetailsCache(
+               refreshedAt: cachedSmartBatteryInfo.refreshedAt,
+               now: date,
+               interval: smartBatteryRefreshInterval
+           ) {
             return cachedSmartBatteryInfo.value
         }
 
