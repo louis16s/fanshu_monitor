@@ -155,6 +155,44 @@ struct CodexTaskProgressReaderTests {
         #expect(await reader.load(now: Date(timeIntervalSince1970: 2)).isEmpty)
     }
 
+    @Test func atomicallyReplacedRolloutResetsIncrementalParserState() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = "21234567-89ab-cdef-0123-456789abcdef"
+        let rollout = root.appendingPathComponent("rollout-\(id).jsonl")
+        let start = #"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"# + "\n"
+        let terminal = #"{"type":"event_msg","payload":{"type":"task_aborted","turn_id":"turn"}}"# + "\n"
+        #expect(terminal.utf8.count >= start.utf8.count)
+        try Data(start.utf8).write(to: rollout)
+
+        let reader = CodexTaskProgressReader(sessionsRoot: root, sessionIndexURL: root.appendingPathComponent("index"))
+        #expect(await reader.load().count == 1)
+        try atomicallyReplace(rollout, with: Data(terminal.utf8))
+        #expect(await reader.load().isEmpty)
+    }
+
+    @Test func atomicallyReplacedSessionIndexReloadsSameLengthTitles() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let sessions = root.appendingPathComponent("sessions")
+        let index = root.appendingPathComponent("session_index.jsonl")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = "31234567-89ab-cdef-0123-456789abcdef"
+        let original = "{\"id\":\"\(id)\",\"thread_name\":\"旧标题\"}\n"
+        let replacement = "{\"id\":\"\(id)\",\"thread_name\":\"新标题\"}\n"
+        #expect(original.utf8.count == replacement.utf8.count)
+        try Data(original.utf8).write(to: index)
+        let rollout = sessions.appendingPathComponent("rollout-\(id).jsonl")
+        try Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"# + "\n").utf8)
+            .write(to: rollout)
+
+        let reader = CodexTaskProgressReader(sessionsRoot: sessions, sessionIndexURL: index)
+        #expect(await reader.load(now: Date(timeIntervalSince1970: 0)).first?.title == "旧标题")
+        try atomicallyReplace(index, with: Data(replacement.utf8))
+        #expect(await reader.load(now: Date(timeIntervalSince1970: 31)).first?.title == "新标题")
+    }
+
     @Test func interruptedTerminalEventClearsTask() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -386,5 +424,13 @@ struct CodexTaskProgressReaderTests {
         defer { try? handle.close() }
         try handle.seekToEnd()
         try handle.write(contentsOf: data)
+    }
+
+    private func atomicallyReplace(_ destination: URL, with data: Data) throws {
+        let replacement = destination.deletingLastPathComponent()
+            .appendingPathComponent("replacement-\(UUID().uuidString)")
+        try data.write(to: replacement)
+        try FileManager.default.removeItem(at: destination)
+        try FileManager.default.moveItem(at: replacement, to: destination)
     }
 }

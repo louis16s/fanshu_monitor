@@ -31,6 +31,20 @@ actor CodexTaskProgressReader {
     private static let maximumCandidates = 12
     private static let maximumCachedTitles = 256
 
+    private struct FileIdentity: Equatable {
+        let volume: UInt64
+        let file: UInt64
+
+        init?(attributes: [FileAttributeKey: Any]) {
+            guard let volume = (attributes[.systemNumber] as? NSNumber)?.uint64Value,
+                  let file = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value else {
+                return nil
+            }
+            self.volume = volume
+            self.file = file
+        }
+    }
+
     private struct JSONLineBuffer {
         var remainder = Data()
         var isDroppingPartialLine = false
@@ -66,6 +80,7 @@ actor CodexTaskProgressReader {
 
     private struct RolloutState {
         var offset: UInt64 = 0
+        var fileIdentity: FileIdentity?
         var lines = JSONLineBuffer()
         var currentTurnID: String?
         var isTaskActive = false
@@ -100,6 +115,7 @@ actor CodexTaskProgressReader {
     private var missingTitleIDs: Set<String> = []
     private var lastDiscovery = Date.distantPast
     private var sessionIndexOffset: UInt64 = 0
+    private var sessionIndexIdentity: FileIdentity?
     private var sessionIndexLines = JSONLineBuffer()
 
     init(
@@ -214,6 +230,14 @@ actor CodexTaskProgressReader {
             expireIfStale(state: &state, now: now)
             return
         }
+
+        let fileIdentity = FileIdentity(attributes: attributes)
+        if let previousIdentity = state.fileIdentity,
+           let fileIdentity,
+           previousIdentity != fileIdentity {
+            state = RolloutState()
+        }
+        state.fileIdentity = fileIdentity
 
         if let modifiedAt = attributes[.modificationDate] as? Date,
            state.isTaskActive,
@@ -428,14 +452,27 @@ actor CodexTaskProgressReader {
 
     private func updateSessionTitles() -> Bool {
         let fileSize: UInt64
+        let fileIdentity: FileIdentity?
         do {
             let attributes = try FileManager.default.attributesOfItem(atPath: sessionIndexURL.path)
             guard let size = (attributes[.size] as? NSNumber)?.uint64Value else { return false }
             fileSize = size
+            fileIdentity = FileIdentity(attributes: attributes)
         } catch {
             AppLogger.codex.debug("Session index unavailable: \(error.localizedDescription, privacy: .private(mask: .hash))")
             return false
         }
+
+        if let previousIdentity = sessionIndexIdentity,
+           let fileIdentity,
+           previousIdentity != fileIdentity {
+            sessionIndexOffset = 0
+            sessionIndexLines = JSONLineBuffer()
+            titleByThreadID.removeAll(keepingCapacity: true)
+            titleOrderByThreadID.removeAll(keepingCapacity: true)
+            missingTitleIDs.removeAll()
+        }
+        sessionIndexIdentity = fileIdentity
 
         if fileSize < sessionIndexOffset {
             sessionIndexOffset = 0
