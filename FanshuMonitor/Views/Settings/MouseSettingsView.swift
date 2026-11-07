@@ -8,16 +8,19 @@ struct MouseSettingsView: View {
 
     var body: some View {
         SettingsPage {
-            SettingsGroup("鼠标增强") {
-                SettingsRow(title: "启用鼠标增强", subtitle: "接管可编程按键，关闭时不启动鼠标监听") {
+            SettingsGroup(localized("mouse.group.enhancement")) {
+                SettingsRow(title: localized("mouse.enhancement.enabled"), subtitle: localized("mouse.enhancement.subtitle")) {
                     Toggle("", isOn: $settings.mouseControlEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
                 }
             }
 
-            SettingsGroup("设备") {
-                SettingsRow(title: "当前鼠标", subtitle: controller.combinedStatusLine) {
+            SettingsGroup(localized("mouse.group.device")) {
+                SettingsRow(
+                    title: localized("mouse.device.current"),
+                    subtitle: controller.combinedStatusLine(locale: settings.languagePreference.locale ?? .current)
+                ) {
                     Button {
                         controller.refresh()
                     } label: {
@@ -26,12 +29,12 @@ struct MouseSettingsView: View {
                     }
                     .buttonStyle(.bordered)
                     .disabled(!settings.mouseControlEnabled)
-                    .help("重新检测鼠标")
+                    .help(localized("mouse.device.refresh"))
                 }
 
                 SettingsDivider()
 
-                SettingsRow(title: "DPI 省电模式", subtitle: "仅在打开鼠标设置或点击应用时读取 DPI，平时不访问 HID++") {
+                SettingsRow(title: localized("mouse.dpi.on-demand"), subtitle: localized("mouse.dpi.on-demand.subtitle")) {
                     Toggle("", isOn: $settings.mouseDPIOnDemandEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
@@ -39,9 +42,10 @@ struct MouseSettingsView: View {
 
                 SettingsDivider()
 
-                SettingsRow(title: "DPI", subtitle: "MX Anywhere 3S 支持最高 8000") {
+                SettingsRow(title: "DPI", subtitle: localized("mouse.dpi.subtitle")) {
                     MouseDPIControl(
                         dpi: $settings.mouseDPI,
+                        locale: settings.languagePreference.locale ?? .current,
                         isEnabled: settings.mouseControlEnabled,
                         isApplying: controller.isApplyingDPI
                     ) { dpi in
@@ -50,7 +54,7 @@ struct MouseSettingsView: View {
                 }
             }
 
-            SettingsGroup("按钮映射") {
+            SettingsGroup(localized("mouse.group.mapping")) {
                 ForEach(Array(MouseButtonSlot.settingsOrder.enumerated()), id: \.element.id) { index, slot in
                     MouseActionRow(settings: settings, slot: slot)
                     if index < MouseButtonSlot.settingsOrder.count - 1 {
@@ -68,10 +72,15 @@ struct MouseSettingsView: View {
             controller.refreshButtonTapIfPossible()
         }
     }
+
+    private func localized(_ key: String) -> String {
+        MouseLocalization.string(key, locale: settings.languagePreference.locale ?? .current)
+    }
 }
 
 private struct MouseDPIControl: View {
     @Binding var dpi: Double
+    let locale: Locale
     let isEnabled: Bool
     let isApplying: Bool
     let apply: (Int) -> Void
@@ -87,6 +96,7 @@ private struct MouseDPIControl: View {
             HStack(spacing: 10) {
                 MouseDPITrackSlider(
                     value: $dpi,
+                    locale: locale,
                     range: range,
                     step: 50,
                     isEnabled: isEnabled && !isApplying
@@ -105,7 +115,7 @@ private struct MouseDPIControl: View {
                         commitDPIText()
                     }
 
-                Button(isApplying ? "设定中" : "设定") {
+                Button(MouseLocalization.string(isApplying ? "mouse.dpi.applying" : "mouse.dpi.apply", locale: locale)) {
                     commitDPIText()
                 }
                 .buttonStyle(.borderedProminent)
@@ -176,6 +186,7 @@ private struct MouseDPIControl: View {
 
 private struct MouseDPITrackSlider: View {
     @Binding var value: Double
+    let locale: Locale
     let range: ClosedRange<Double>
     let step: Double
     let isEnabled: Bool
@@ -225,7 +236,7 @@ private struct MouseDPITrackSlider: View {
                     }
             )
             .accessibilityElement()
-            .accessibilityLabel("鼠标 DPI")
+            .accessibilityLabel(MouseLocalization.string("mouse.dpi.accessibility", locale: locale))
             .accessibilityValue("\(Int(clamped.rounded()))")
             .accessibilityAdjustableAction { direction in
                 guard isEnabled else { return }
@@ -243,18 +254,18 @@ private struct MouseActionRow: View {
     let slot: MouseButtonSlot
 
     var body: some View {
-        SettingsRow(title: slot.title, subtitle: nil) {
+        SettingsRow(title: slot.title(locale: settings.languagePreference.locale ?? .current), subtitle: nil) {
             HStack(spacing: 8) {
                 if settings.mouseAction(for: slot) == .customShortcut {
                     MouseShortcutRecorderButton(
                         shortcut: shortcutBinding,
-                        slotTitle: slot.title
+                        locale: settings.languagePreference.locale ?? .current
                     )
                 }
 
-                Picker(slot.title, selection: binding) {
+                Picker(slot.title(locale: settings.languagePreference.locale ?? .current), selection: binding) {
                     ForEach(MouseButtonAction.allCases) { action in
-                        Text(action.title).tag(action)
+                        Text(action.title(locale: settings.languagePreference.locale ?? .current)).tag(action)
                     }
                 }
                 .labelsHidden()

@@ -35,6 +35,13 @@ private final class MouseWorkerRunCounter: @unchecked Sendable {
 }
 
 struct MouseLifecycleRegressionTests {
+    @Test func mouseActionLabelsFollowSelectedLanguage() {
+        #expect(MouseButtonAction.copy.title(locale: Locale(identifier: "en")) == "Copy")
+        #expect(MouseButtonAction.copy.title(locale: Locale(identifier: "zh-Hans")) == "复制")
+        #expect(MouseButtonSlot.forward.title(locale: Locale(identifier: "en")) == "Forward Button")
+        #expect(MouseButtonSlot.forward.title(locale: Locale(identifier: "zh-Hans")) == "前进键")
+    }
+
     @Test @MainActor func repeatedMouseDownExecutesOnceUntilTheMatchingRelease() {
         let suite = "MouseLifecycleRegressionTests.buttonPairing"
         let defaults = UserDefaults(suiteName: suite)!

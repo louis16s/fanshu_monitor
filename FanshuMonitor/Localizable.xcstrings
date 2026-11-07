@@ -1116,6 +1116,282 @@
         }
       }
     },
+    "mouse.action.app-expose": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "应用窗口" } },
+        "en": { "stringUnit": { "state": "translated", "value": "App Windows" } }
+      }
+    },
+    "mouse.action.browser-back": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "浏览器后退" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Browser Back" } }
+      }
+    },
+    "mouse.action.browser-forward": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "浏览器前进" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Browser Forward" } }
+      }
+    },
+    "mouse.action.command-tab": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "切换应用" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Switch App" } }
+      }
+    },
+    "mouse.action.copy": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "复制" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Copy" } }
+      }
+    },
+    "mouse.action.custom-shortcut": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "自定义快捷键" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Custom Shortcut" } }
+      }
+    },
+    "mouse.action.function-f13": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功能键 F13" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Function Key F13" } }
+      }
+    },
+    "mouse.action.function-f14": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功能键 F14" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Function Key F14" } }
+      }
+    },
+    "mouse.action.function-f15": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功能键 F15" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Function Key F15" } }
+      }
+    },
+    "mouse.action.launchpad": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启动台" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Launchpad" } }
+      }
+    },
+    "mouse.action.mission-control": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "调度中心" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Mission Control" } }
+      }
+    },
+    "mouse.action.pass-through": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "透传" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Pass Through" } }
+      }
+    },
+    "mouse.action.paste": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "粘贴" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Paste" } }
+      }
+    },
+    "mouse.action.show-desktop": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示桌面" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show Desktop" } }
+      }
+    },
+    "mouse.dpi.accessibility": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "鼠标 DPI" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Mouse DPI" } }
+      }
+    },
+    "mouse.dpi.applying": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "设定中" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Applying" } }
+      }
+    },
+    "mouse.dpi.apply": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "设定" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Apply" } }
+      }
+    },
+    "mouse.dpi.on-demand": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "DPI 省电模式" } },
+        "en": { "stringUnit": { "state": "translated", "value": "On-Demand DPI" } }
+      }
+    },
+    "mouse.dpi.on-demand.subtitle": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仅在打开鼠标设置或点击应用时读取 DPI，平时不访问 HID++" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Reads DPI only when this page opens or you apply a change" } }
+      }
+    },
+    "mouse.dpi.subtitle": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "MX Anywhere 3S 支持最高 8000" } },
+        "en": { "stringUnit": { "state": "translated", "value": "MX Anywhere 3S supports up to 8000" } }
+      }
+    },
+    "mouse.enhancement.enabled": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用鼠标增强" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Enable Mouse Enhancements" } }
+      }
+    },
+    "mouse.enhancement.subtitle": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "接管可编程按键，关闭时不启动鼠标监听" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Remaps programmable buttons; listeners stay off when disabled" } }
+      }
+    },
+    "mouse.group.device": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "设备" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Device" } }
+      }
+    },
+    "mouse.group.enhancement": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "鼠标增强" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Mouse Enhancements" } }
+      }
+    },
+    "mouse.group.mapping": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "按钮映射" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Button Mapping" } }
+      }
+    },
+    "mouse.device.current": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前鼠标" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Current Mouse" } }
+      }
+    },
+    "mouse.device.refresh": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重新检测鼠标" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Detect Mouse Again" } }
+      }
+    },
+    "mouse.shortcut.clear": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "清除" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Clear" } }
+      }
+    },
+    "mouse.shortcut.prompt": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "按下要使用的快捷键" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Press the shortcut to use" } }
+      }
+    },
+    "mouse.shortcut.record": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "录制" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Record" } }
+      }
+    },
+    "mouse.shortcut.record-help": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "录制键盘快捷键" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Record a keyboard shortcut" } }
+      }
+    },
+    "mouse.shortcut.recording": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在录制…" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Recording…" } }
+      }
+    },
+    "mouse.slot.back": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "后退键" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Back Button" } }
+      }
+    },
+    "mouse.slot.forward": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "前进键" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Forward Button" } }
+      }
+    },
+    "mouse.slot.gesture": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "手势键" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Gesture Button" } }
+      }
+    },
+    "mouse.slot.middle": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "中键" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Middle Button" } }
+      }
+    },
+    "mouse.device.logitech": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Logitech 鼠标" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Logitech Mouse" } }
+      }
+    },
+    "mouse.status.applying-dpi": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在设置 DPI" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Applying DPI" } }
+      }
+    },
+    "mouse.status.battery": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "电量" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Battery" } }
+      }
+    },
+    "mouse.status.detecting": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在检测鼠标" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Detecting mouse" } }
+      }
+    },
+    "mouse.status.disabled": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未启用" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Disabled" } }
+      }
+    },
+    "mouse.status.dpi-failed": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "DPI 未应用" } },
+        "en": { "stringUnit": { "state": "translated", "value": "DPI Not Applied" } }
+      }
+    },
+    "mouse.status.listener-enabled": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "按钮监听已启用" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Button Listener Enabled" } }
+      }
+    },
+    "mouse.status.ready": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已连接" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Connected" } }
+      }
+    },
+    "mouse.status.waiting-accessibility": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "等待辅助功能授权" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Waiting for Accessibility Permission" } }
+      }
+    },
+    "mouse.status.waiting-device": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "等待鼠标连接" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Waiting for Mouse" } }
+      }
+    },
     "settings.sidebar.general": {
       "localizations": {
         "zh-Hans": {

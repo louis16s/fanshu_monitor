@@ -1,5 +1,16 @@
 import Foundation
 
+enum MouseLocalization {
+    static func string(_ key: String, locale: Locale) -> String {
+        let language = locale.language.languageCode?.identifier
+        let localizedBundle = Bundle.main.path(forResource: locale.identifier, ofType: "lproj")
+            ?? language.flatMap { Bundle.main.path(forResource: $0, ofType: "lproj") }
+        let bundle = localizedBundle
+            .flatMap(Bundle.init(path:)) ?? .main
+        return bundle.localizedString(forKey: key, value: key, table: nil)
+    }
+}
+
 nonisolated enum MouseButtonSlot: String, CaseIterable, Codable, Identifiable, Sendable {
     case middle
     case back
@@ -8,12 +19,12 @@ nonisolated enum MouseButtonSlot: String, CaseIterable, Codable, Identifiable, S
 
     var id: String { rawValue }
 
-    var title: String {
+    func title(locale: Locale = .current) -> String {
         switch self {
-        case .middle: "中键"
-        case .back: "后退键"
-        case .forward: "前进键"
-        case .gesture: "手势键"
+        case .middle: MouseLocalization.string("mouse.slot.middle", locale: locale)
+        case .back: MouseLocalization.string("mouse.slot.back", locale: locale)
+        case .forward: MouseLocalization.string("mouse.slot.forward", locale: locale)
+        case .gesture: MouseLocalization.string("mouse.slot.gesture", locale: locale)
         }
     }
 
@@ -38,22 +49,22 @@ nonisolated enum MouseButtonAction: String, CaseIterable, Identifiable, Sendable
 
     var id: String { rawValue }
 
-    var title: String {
+    func title(locale: Locale = .current) -> String {
         switch self {
-        case .passThrough: "透传"
-        case .browserBack: "浏览器后退"
-        case .browserForward: "浏览器前进"
-        case .missionControl: "调度中心"
-        case .appExpose: "应用窗口"
-        case .showDesktop: "显示桌面"
-        case .launchpad: "启动台"
-        case .commandTab: "切换应用"
-        case .copy: "复制"
-        case .paste: "粘贴"
-        case .functionF13: "功能键 F13"
-        case .functionF14: "功能键 F14"
-        case .functionF15: "功能键 F15"
-        case .customShortcut: "自定义快捷键"
+        case .passThrough: MouseLocalization.string("mouse.action.pass-through", locale: locale)
+        case .browserBack: MouseLocalization.string("mouse.action.browser-back", locale: locale)
+        case .browserForward: MouseLocalization.string("mouse.action.browser-forward", locale: locale)
+        case .missionControl: MouseLocalization.string("mouse.action.mission-control", locale: locale)
+        case .appExpose: MouseLocalization.string("mouse.action.app-expose", locale: locale)
+        case .showDesktop: MouseLocalization.string("mouse.action.show-desktop", locale: locale)
+        case .launchpad: MouseLocalization.string("mouse.action.launchpad", locale: locale)
+        case .commandTab: MouseLocalization.string("mouse.action.command-tab", locale: locale)
+        case .copy: MouseLocalization.string("mouse.action.copy", locale: locale)
+        case .paste: MouseLocalization.string("mouse.action.paste", locale: locale)
+        case .functionF13: MouseLocalization.string("mouse.action.function-f13", locale: locale)
+        case .functionF14: MouseLocalization.string("mouse.action.function-f14", locale: locale)
+        case .functionF15: MouseLocalization.string("mouse.action.function-f15", locale: locale)
+        case .customShortcut: MouseLocalization.string("mouse.action.custom-shortcut", locale: locale)
         }
     }
 }
@@ -105,11 +116,13 @@ struct LogitechMouseDevice: Identifiable, Equatable {
         "\(productID)-\(productName)-\(transport)"
     }
 
-    var displayName: String {
+    func displayName(locale: Locale) -> String {
         if productID == 0xB037 || productName.localizedCaseInsensitiveContains("Anywhere 3S") {
             return "MX Anywhere 3S"
         }
-        return productName.isEmpty ? "Logitech 鼠标" : productName
+        return productName.isEmpty
+            ? MouseLocalization.string("mouse.device.logitech", locale: locale)
+            : productName
     }
 }
 

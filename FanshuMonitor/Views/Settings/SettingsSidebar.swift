@@ -19,10 +19,10 @@ struct SettingsSidebar: View {
                 Label(String(localized: "settings.sidebar.general"), systemImage: "gearshape")
                     .tag(SettingsRoute.general)
 
-                Label(String(localized: "settings.sidebar.lock-screen"), systemImage: "lock")
+                Label("settings.sidebar.lock-screen", systemImage: "lock")
                     .tag(SettingsRoute.lockScreen)
 
-                Label(String(localized: "settings.sidebar.mouse"), systemImage: "computermouse")
+                Label("settings.sidebar.mouse", systemImage: "computermouse")
                     .tag(SettingsRoute.mouse)
             }
 

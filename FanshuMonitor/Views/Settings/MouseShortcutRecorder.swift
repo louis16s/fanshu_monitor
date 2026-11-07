@@ -3,24 +3,24 @@ import SwiftUI
 
 struct MouseShortcutRecorderButton: View {
     @Binding var shortcut: MouseKeyboardShortcut?
-    let slotTitle: String
+    let locale: Locale
     @State private var isRecording = false
 
     var body: some View {
         Button {
             isRecording = true
         } label: {
-            Text(shortcut?.displayText ?? "录制")
+            Text(shortcut?.displayText ?? MouseLocalization.string("mouse.shortcut.record", locale: locale))
                 .font(.system(size: 11, weight: .medium, design: .rounded))
                 .monospaced()
                 .frame(minWidth: 44)
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .help("录制\(slotTitle)快捷键")
+        .help(MouseLocalization.string("mouse.shortcut.record-help", locale: locale))
         .popover(isPresented: $isRecording, arrowEdge: .trailing) {
             VStack(spacing: 12) {
-                Text("按下要使用的快捷键")
+                Text(MouseLocalization.string("mouse.shortcut.prompt", locale: locale))
                     .font(.headline)
 
                 ZStack {
@@ -28,7 +28,7 @@ struct MouseShortcutRecorderButton: View {
                         .fill(.quaternary.opacity(0.45))
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(Color.accentColor.opacity(0.65), lineWidth: 1)
-                    Text("正在录制…")
+                    Text(MouseLocalization.string("mouse.shortcut.recording", locale: locale))
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
 
@@ -43,13 +43,13 @@ struct MouseShortcutRecorderButton: View {
 
                 HStack {
                     if shortcut != nil {
-                        Button("清除") {
+                        Button(MouseLocalization.string("mouse.shortcut.clear", locale: locale)) {
                             shortcut = nil
                             isRecording = false
                         }
                     }
                     Spacer()
-                    Button("取消") {
+                    Button(MouseLocalization.string("settings.cancel", locale: locale)) {
                         isRecording = false
                     }
                     .keyboardShortcut(.cancelAction)
@@ -144,11 +144,11 @@ private final class ShortcutCaptureNSView: NSView {
         if let characters, !characters.isEmpty {
             return characters
         }
-        return "键\(event.keyCode)"
+        return "Key \(event.keyCode)"
     }
 
     private static let specialKeyNames: [UInt16: String] = [
-        36: "↩", 48: "⇥", 49: "空格", 51: "⌫", 53: "Esc",
+        36: "↩", 48: "⇥", 49: "Space", 51: "⌫", 53: "Esc",
         76: "⌤", 96: "F5", 97: "F6", 98: "F7", 99: "F3",
         100: "F8", 101: "F9", 103: "F11", 105: "F13", 107: "F14",
         109: "F10", 111: "F12", 113: "F15",

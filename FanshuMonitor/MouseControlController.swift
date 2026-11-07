@@ -5,15 +5,24 @@ import Foundation
 @MainActor
 final class MouseControlController: ObservableObject {
     @Published private(set) var device: LogitechMouseDevice?
-    @Published private(set) var statusText = "未启用"
-    @Published private(set) var buttonStatusText = "未启用"
+    @Published private var deviceStatus: MouseDeviceStatus = .disabled
+    @Published private var buttonStatus: MouseButtonListenerStatus = .disabled
     @Published private(set) var isApplyingDPI = false
-    var combinedStatusLine: String {
-        let battery = device?.batteryPercent.map { " · 电量 \($0)%" } ?? ""
+    func combinedStatusLine(locale: Locale) -> String {
         guard settings?.mouseControlEnabled == true else {
-            return "未启用"
+            return deviceStatus.localized(locale: locale)
         }
-        return "\(buttonStatusText) · \(statusText)\(battery)"
+        let summary: String
+        if case .deviceReady = deviceStatus, let device {
+            let dpi = device.currentDPI.map { " · \($0) DPI" } ?? ""
+            summary = device.displayName(locale: locale) + dpi
+        } else {
+            summary = deviceStatus.localized(locale: locale)
+        }
+        let battery = device?.batteryPercent.map {
+            " · \(MouseLocalization.string("mouse.status.battery", locale: locale)) \($0)%"
+        } ?? ""
+        return "\(buttonStatus.localized(locale: locale)) · \(summary)\(battery)"
     }
 
     private weak var settings: MonitorSettings?
@@ -75,6 +84,8 @@ final class MouseControlController: ObservableObject {
         isMousePresent = false
         device = nil
         isApplyingDPI = false
+        deviceStatus = .disabled
+        buttonStatus = .disabled
     }
 
     func refreshIfNeeded() {
@@ -94,7 +105,7 @@ final class MouseControlController: ObservableObject {
 
     func refresh() {
         guard settings?.mouseControlEnabled == true else { return }
-        statusText = "正在检测鼠标"
+        deviceStatus = .detecting
         if isMousePresent {
             refresh(readDPI: true)
         } else {
@@ -105,15 +116,15 @@ final class MouseControlController: ObservableObject {
 
     private func refresh(readDPI: Bool) {
         guard settings?.mouseControlEnabled == true else {
-            suspendDeviceWork(status: "未启用")
+            suspendDeviceWork(status: .disabled)
             return
         }
         guard isMousePresent else {
-            suspendDeviceWork(status: "等待鼠标连接")
+            suspendDeviceWork(status: .waitingForDevice)
             return
         }
 
-        statusText = "正在检测鼠标"
+        deviceStatus = .detecting
         deviceRequestGeneration &+= 1
         isApplyingDPI = false
         let requestGeneration = deviceRequestGeneration
@@ -128,11 +139,10 @@ final class MouseControlController: ObservableObject {
                 if let currentDPI = result.currentDPI {
                     self.settings?.mouseDPI = Double(currentDPI)
                 }
-                let dpi = result.currentDPI.map { " · \($0) DPI" } ?? ""
-                self.statusText = "\(result.displayName)\(dpi)"
+                self.deviceStatus = .deviceReady
                 self.syncInputListeners()
             } else {
-                self.suspendDeviceWork(status: "等待鼠标连接")
+                self.suspendDeviceWork(status: .waitingForDevice)
             }
         }
     }
@@ -143,7 +153,7 @@ final class MouseControlController: ObservableObject {
         deviceRequestGeneration &+= 1
         let requestGeneration = deviceRequestGeneration
         isApplyingDPI = true
-        statusText = "正在设置 DPI"
+        deviceStatus = .applyingDPI
         let listener = hidButtonListener
 
         Task { [weak self, mouseWorker] in
@@ -157,9 +167,9 @@ final class MouseControlController: ObservableObject {
                 updated?.currentDPI = clamped
                 self.device = updated
                 self.settings?.mouseDPI = Double(clamped)
-                self.statusText = "\(updated?.displayName ?? "Logitech 鼠标") · \(clamped) DPI"
+                self.deviceStatus = .deviceReady
             } else {
-                self.statusText = "DPI 未应用"
+                self.deviceStatus = .dpiApplyFailed
             }
         }
     }
@@ -168,8 +178,8 @@ final class MouseControlController: ObservableObject {
         if enabled {
             presenceSessionGeneration &+= 1
             let sessionGeneration = presenceSessionGeneration
-            statusText = "正在检测鼠标"
-            buttonStatusText = "等待鼠标连接"
+            deviceStatus = .detecting
+            buttonStatus = .waitingForDevice
             syncInputListeners()
             presenceMonitor.start { [weak self] isPresent in
                 Task { @MainActor [weak self] in
@@ -184,7 +194,7 @@ final class MouseControlController: ObservableObject {
             presenceSessionGeneration &+= 1
             presenceMonitor.stop()
             isMousePresent = false
-            suspendDeviceWork(status: "未启用")
+            suspendDeviceWork(status: .disabled)
         }
     }
 
@@ -194,7 +204,7 @@ final class MouseControlController: ObservableObject {
         if isPresent {
             refresh(readDPI: !(settings?.mouseDPIOnDemandEnabled ?? true))
         } else {
-            suspendDeviceWork(status: "等待鼠标连接")
+            suspendDeviceWork(status: .waitingForDevice)
             probeDevicePresence()
         }
     }
@@ -225,14 +235,14 @@ final class MouseControlController: ObservableObject {
         ) else {
             eventTap?.stop()
             hidButtonListener?.stop()
-            buttonStatusText = mouseControlEnabled ? "等待鼠标连接" : "未启用"
+            buttonStatus = mouseControlEnabled ? .waitingForDevice : .disabled
             return
         }
 
         if eventTap?.start() == true {
-            buttonStatusText = "按钮监听已启用"
+            buttonStatus = .enabled
         } else {
-            buttonStatusText = "等待辅助功能授权"
+            buttonStatus = .waitingForAccessibility
         }
 
         let mapping = settings?.mouseMapping(for: .gesture)
@@ -249,11 +259,43 @@ final class MouseControlController: ObservableObject {
         }
     }
 
-    private func suspendDeviceWork(status: String) {
+    private func suspendDeviceWork(status: MouseDeviceStatus) {
         deviceRequestGeneration &+= 1
         isApplyingDPI = false
         device = nil
-        statusText = status
+        deviceStatus = status
         syncInputListeners()
+    }
+}
+
+private enum MouseDeviceStatus {
+    case disabled, detecting, waitingForDevice, deviceReady, applyingDPI, dpiApplyFailed
+
+    func localized(locale: Locale) -> String {
+        let key: String
+        switch self {
+        case .disabled: key = "mouse.status.disabled"
+        case .detecting: key = "mouse.status.detecting"
+        case .waitingForDevice: key = "mouse.status.waiting-device"
+        case .deviceReady: key = "mouse.status.ready"
+        case .applyingDPI: key = "mouse.status.applying-dpi"
+        case .dpiApplyFailed: key = "mouse.status.dpi-failed"
+        }
+        return MouseLocalization.string(key, locale: locale)
+    }
+}
+
+private enum MouseButtonListenerStatus {
+    case disabled, waitingForDevice, enabled, waitingForAccessibility
+
+    func localized(locale: Locale) -> String {
+        let key: String
+        switch self {
+        case .disabled: key = "mouse.status.disabled"
+        case .waitingForDevice: key = "mouse.status.waiting-device"
+        case .enabled: key = "mouse.status.listener-enabled"
+        case .waitingForAccessibility: key = "mouse.status.waiting-accessibility"
+        }
+        return MouseLocalization.string(key, locale: locale)
     }
 }
