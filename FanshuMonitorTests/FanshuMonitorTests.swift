@@ -795,6 +795,11 @@ struct FanshuMonitorTests {
         ) == visibleKinds)
     }
 
+    @Test func enabledCodexIsCheckedAtStartupIndependentlyOfRingSource() {
+        #expect(MonitorSamplingPolicy.shouldCheckCodexAtStartup(visibleKinds: [.cpu, .codex]))
+        #expect(!MonitorSamplingPolicy.shouldCheckCodexAtStartup(visibleKinds: [.cpu, .gpu]))
+    }
+
     @Test func logitechDeviceMatchingRejectsNonMouseProducts() {
         #expect(LogitechMouseDeviceMatcher.isSupported(LogitechMouseDescriptor(
             productID: 0xB037,

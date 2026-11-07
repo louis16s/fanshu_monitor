@@ -1,6 +1,10 @@
 import Foundation
 
 nonisolated enum MonitorSamplingPolicy {
+    static func shouldCheckCodexAtStartup(visibleKinds: Set<MonitorKind>) -> Bool {
+        visibleKinds.contains(.codex)
+    }
+
     static func activeKinds(
         visibleKinds: Set<MonitorKind>,
         panelVisible: Bool,

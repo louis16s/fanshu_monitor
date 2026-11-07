@@ -83,7 +83,10 @@ final class MonitorStore: ObservableObject {
                 requestID: initialResidencyRequestID
             )
         }
-        advance(kinds: initialSamplingKinds)
+        advance(kinds: initialSamplingKinds.subtracting([.codex]))
+        if MonitorSamplingPolicy.shouldCheckCodexAtStartup(visibleKinds: settings.visibleKinds) {
+            refreshCodexUsage(force: true)
+        }
         updateMenuBarTargetComputeLoadIfNeeded(force: true)
         updateMenuBarIcon(force: true)
         refreshSchedule.markRefreshed(settings.visibleKinds, at: Date())
@@ -538,6 +541,8 @@ final class MonitorStore: ObservableObject {
     private func syncSamplerResidency() {
         let activeKinds = activeSamplingKinds
         if !activeKinds.contains(.codex) {
+            codexResetRefreshTask?.cancel()
+            codexResetRefreshTask = nil
             codexRetryRefreshTask?.cancel()
             codexRetryRefreshTask = nil
         }
@@ -594,6 +599,9 @@ final class MonitorStore: ObservableObject {
             self.scheduleCodexResetRefresh(at: result.scheduledResetRefreshDate)
             self.scheduleCodexRetryRefresh(at: result.scheduledRetryRefreshDate)
             self.refreshCodexTaskProgress()
+            if !self.activeSamplingKinds.contains(.codex) {
+                self.syncSamplerResidency()
+            }
         }
     }
 
@@ -616,7 +624,7 @@ final class MonitorStore: ObservableObject {
     private func scheduleCodexResetRefresh(at date: Date?) {
         codexResetRefreshTask?.cancel()
         codexResetRefreshTask = nil
-        guard settings.isVisible(.codex), let date else { return }
+        guard activeSamplingKinds.contains(.codex), let date else { return }
 
         codexResetRefreshTask = Task { [weak self] in
             let delay = max(0, date.timeIntervalSinceNow)
