@@ -56,10 +56,17 @@ nonisolated final class GPUSampler: MonitorSampler {
         ))
 
         if context.includes("temperature") {
-            let temperature = context.shouldCollectExpensiveMetric("temperature")
-                ? CPUSampler.temperatureText(readTemperature != nil ? readTemperature?() : temperatures.temperature(gpu: true), previous: previous)
-                : previous?.metrics.first { $0.name == "temperature" }?.value
-            metrics.append(MonitorMetric(name: "temperature", value: temperature ?? "--"))
+            let temperature = CPUSampler.retainedTemperatureText(
+                context.shouldCollectExpensiveMetric("temperature")
+                    ? (readTemperature != nil ? readTemperature?() : temperatures.temperature(gpu: true))
+                    : nil,
+                previous: previous,
+                lastKnown: lastKnownDetails["temperature"]
+            )
+            if temperature != "--" {
+                lastKnownDetails["temperature"] = temperature
+            }
+            metrics.append(MonitorMetric(name: "temperature", value: temperature))
         }
 
         if context.includes("tiler") {

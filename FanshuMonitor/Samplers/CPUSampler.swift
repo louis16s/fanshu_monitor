@@ -8,6 +8,7 @@ nonisolated final class CPUSampler: MonitorSampler {
 
     private var previousCPUInfo: host_cpu_load_info?
     private var failureLogThrottle = SamplerFailureLogThrottle()
+    private var lastKnownTemperature: String?
     private let hostPort = mach_host_self()
     private let temperatures = SMCTemperatureCache()
 
@@ -19,9 +20,14 @@ nonisolated final class CPUSampler: MonitorSampler {
         let info = hostCPULoadInfo()
         let metrics: [MonitorMetric]
         let total: Double
-        let temperature = context.shouldCollectExpensiveMetric("temperature")
-            ? Self.temperatureText(temperatures.temperature(gpu: false), previous: previous)
-            : previous?.metrics.first { $0.name == "temperature" }?.value ?? "--"
+        let temperature = Self.retainedTemperatureText(
+            context.shouldCollectExpensiveMetric("temperature") ? temperatures.temperature(gpu: false) : nil,
+            previous: previous,
+            lastKnown: lastKnownTemperature
+        )
+        if temperature != "--" {
+            lastKnownTemperature = temperature
+        }
 
         if let info, let previousCPUInfo {
             let userDiff = Double(info.cpu_ticks.0 &- previousCPUInfo.cpu_ticks.0)
@@ -86,10 +92,26 @@ nonisolated final class CPUSampler: MonitorSampler {
         if let value, value.isFinite, value > 0 {
             return "\(String(format: "%.0f", value))°C"
         }
-        guard let text = previous?.metrics.first(where: { $0.name == "temperature" })?.value,
-              text.hasSuffix("°C"),
-              let oldValue = Double(text.dropLast(2)), oldValue.isFinite, oldValue > 0 else {
-            return "--"
+        return validTemperatureText(previous?.metrics.first(where: { $0.name == "temperature" })?.value) ?? "--"
+    }
+
+    static func retainedTemperatureText(
+        _ value: Double?,
+        previous: MonitorModule?,
+        lastKnown: String?
+    ) -> String {
+        if let value, value.isFinite, value > 0 {
+            return "\(String(format: "%.0f", value))°C"
+        }
+        return validTemperatureText(previous?.metrics.first(where: { $0.name == "temperature" })?.value)
+            ?? validTemperatureText(lastKnown)
+            ?? "--"
+    }
+
+    private static func validTemperatureText(_ text: String?) -> String? {
+        guard let text, text.hasSuffix("°C"),
+              let value = Double(text.dropLast(2)), value.isFinite, value > 0 else {
+            return nil
         }
         return text
     }

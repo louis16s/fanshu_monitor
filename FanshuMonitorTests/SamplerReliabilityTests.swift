@@ -30,6 +30,8 @@ struct SamplerReliabilityTests {
         #expect(CPUSampler.temperatureText(nil, previous: nil) == "--")
         previous.metrics = [MonitorMetric(name: "temperature", value: "0°C")]
         #expect(CPUSampler.temperatureText(nil, previous: previous) == "--")
+        #expect(CPUSampler.retainedTemperatureText(nil, previous: nil, lastKnown: "55°C") == "55°C")
+        #expect(CPUSampler.retainedTemperatureText(nil, previous: nil, lastKnown: "NaN°C") == "--")
     }
 
     @Test func gpuMissingDetailsAreUnknownAndZeroRemainsReal() {
@@ -121,6 +123,26 @@ struct SamplerReliabilityTests {
         )
 
         #expect(sampler.sample(previous: previous, context: context) == previous)
+    }
+
+    @Test func gpuTemperatureSurvivesTemporaryMetricDisableAndSensorFailure() {
+        var temperature: Double? = 55
+        let sampler = GPUSampler(
+            readGPU: {
+                GPUReading(utilization: 15, renderUtilization: 10, tilerUtilization: nil,
+                           usedMemory: 1_024, allocatedMemory: 2_048)
+            },
+            readTemperature: { temperature }
+        )
+        let enabled = MonitorSamplingContext(enabledMetricIDs: ["temperature"], panelVisible: true)
+        let disabled = MonitorSamplingContext(enabledMetricIDs: [], panelVisible: true)
+        let original = sampler.sample(previous: nil, context: enabled)
+        #expect(original.metrics.first { $0.name == "temperature" }?.value == "55°C")
+        temperature = nil
+        let withoutMetric = sampler.sample(previous: original, context: disabled)
+        #expect(withoutMetric.metrics.first { $0.name == "temperature" } == nil)
+        let reenabled = sampler.sample(previous: withoutMetric, context: enabled)
+        #expect(reenabled.metrics.first { $0.name == "temperature" }?.value == "55°C")
     }
 
     @Test func smcRetriesFailedConnectionButKeepsUnsupportedKeys() {
