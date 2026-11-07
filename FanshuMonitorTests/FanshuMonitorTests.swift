@@ -588,6 +588,10 @@ struct FanshuMonitorTests {
         #expect(BatterySampler.adapterMetricValue(isConnected: false, watts: 60) == "not-connected")
         #expect(BatterySampler.adapterMetricValue(isConnected: true, watts: 60) == "60 W")
         #expect(BatterySampler.adapterMetricValue(isConnected: true, watts: nil) == "--")
+        #expect(BatterySampler.adapterMetricValue(isConnected: true, watts: .nan) == "--")
+        #expect(BatterySampler.adapterMetricValue(isConnected: true, watts: .infinity) == "--")
+        #expect(wattString(Double.greatestFiniteMagnitude, rounded: true).hasSuffix(" W"))
+        #expect(wattStringAllowZero(-.infinity) == "--")
     }
 
     @Test func batteryPowerStateDoesNotTreatUnknownAsConnectedOrOnBattery() {
@@ -624,6 +628,14 @@ struct FanshuMonitorTests {
     @Test func batteryPowerTelemetryUsesTheCorrectDirectionAndUnits() {
         #expect(BatterySampler.chargingPowerWatts(batteryPowerMilliwatts: 8_100) == 8.1)
         #expect(BatterySampler.chargingPowerWatts(batteryPowerMilliwatts: -8_100) == nil)
+        #expect(BatterySampler.chargingPowerWatts(currentMilliamps: 2_000, voltageMillivolts: 20_000) == 40)
+        #expect(BatterySampler.chargingPowerWatts(currentMilliamps: .infinity, voltageMillivolts: 20_000) == nil)
+        #expect(BatterySampler.chargingPowerWatts(currentMilliamps: 2_000, voltageMillivolts: .nan) == nil)
+        #expect(BatterySampler.chargingPowerWatts(currentMilliamps: 2_000, voltageMillivolts: .infinity) == nil)
+        #expect(BatterySampler.chargingPowerWatts(
+            currentMilliamps: .greatestFiniteMagnitude,
+            voltageMillivolts: .greatestFiniteMagnitude
+        ) == nil)
         #expect(BatterySampler.systemPowerWatts(
             systemLoadMilliwatts: 7_300,
             systemPowerInMilliwatts: 60_000,

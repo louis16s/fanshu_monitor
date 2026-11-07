@@ -292,11 +292,10 @@ nonisolated final class BatterySampler: MonitorSampler {
         }
         guard let voltage = doubleRegistryValue(service, "AppleRawBatteryVoltage")
             ?? doubleRegistryValue(service, "Voltage")
-            ?? doubleValue(value["ChargingVoltage"]),
-              voltage > 0 else {
+            ?? doubleValue(value["ChargingVoltage"]) else {
             return nil
         }
-        return max(0, current * voltage / 1_000_000)
+        return Self.chargingPowerWatts(currentMilliamps: current, voltageMillivolts: voltage)
     }
 
     private func powerTelemetry() -> BatteryPowerTelemetry? {
@@ -325,6 +324,17 @@ nonisolated final class BatterySampler: MonitorSampler {
             systemLoadMilliwatts: nil,
             batteryMilliwatts: batteryPowerMilliwatts
         ).chargingWatts
+    }
+
+    static func chargingPowerWatts(currentMilliamps: Double, voltageMillivolts: Double) -> Double? {
+        guard currentMilliamps.isFinite,
+              voltageMillivolts.isFinite,
+              currentMilliamps >= 0,
+              voltageMillivolts > 0 else {
+            return nil
+        }
+        let watts = currentMilliamps * voltageMillivolts / 1_000_000
+        return watts.isFinite ? watts : nil
     }
 
     static func systemPowerWatts(

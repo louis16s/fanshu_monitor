@@ -30,17 +30,14 @@ nonisolated func memoryBytes(_ value: Double) -> String {
 }
 
 nonisolated func wattString(_ value: Double?, rounded: Bool = false) -> String {
-    guard let value else {
+    guard let value, value.isFinite else {
         return "--"
     }
-    if rounded {
-        return "\(Int(value.rounded())) W"
-    }
-    return "\(String(format: "%.1f", value)) W"
+    return "\(String(format: rounded ? "%.0f" : "%.1f", value)) W"
 }
 
 nonisolated func wattStringAllowZero(_ value: Double?) -> String {
-    guard let value else {
+    guard let value, value.isFinite else {
         return "--"
     }
     return value == 0 ? "0 W" : "\(String(format: "%.1f", value)) W"
