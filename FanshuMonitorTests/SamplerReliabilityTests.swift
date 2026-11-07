@@ -3,6 +3,23 @@ import Testing
 @testable import FanshuMonitor
 
 struct SamplerReliabilityTests {
+    @Test func samplerFailureLogsAreRateLimitedAndRecoverAfterTheInterval() {
+        var throttle = SamplerFailureLogThrottle(minimumInterval: 60)
+        let start = Date(timeIntervalSince1970: 1_000)
+
+        let first = throttle.shouldLog(at: start)
+        let early = throttle.shouldLog(at: start.addingTimeInterval(59.9))
+        let boundary = throttle.shouldLog(at: start.addingTimeInterval(60))
+        let clockMovedBack = throttle.shouldLog(at: start.addingTimeInterval(30))
+        let nextBoundary = throttle.shouldLog(at: start.addingTimeInterval(120))
+
+        #expect(first)
+        #expect(!early)
+        #expect(boundary)
+        #expect(!clockMovedBack)
+        #expect(nextBoundary)
+    }
+
     @Test func temperaturesRetainPreviousOnInvalidRead() {
         var previous = MonitorModule.placeholder(kind: .cpu)
         previous.metrics = [MonitorMetric(name: "temperature", value: "55°C")]

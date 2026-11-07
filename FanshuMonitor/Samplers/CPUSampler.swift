@@ -7,6 +7,7 @@ nonisolated final class CPUSampler: MonitorSampler {
     var kind: MonitorKind { .cpu }
 
     private var previousCPUInfo: host_cpu_load_info?
+    private var failureLogThrottle = SamplerFailureLogThrottle()
     private let hostPort = mach_host_self()
     private let temperatures = SMCTemperatureCache()
 
@@ -73,7 +74,9 @@ nonisolated final class CPUSampler: MonitorSampler {
             }
         }
         guard result == KERN_SUCCESS else {
-            AppLogger.sampler.error("host_statistics failed with result: \(result)")
+            if failureLogThrottle.shouldLog(at: Date()) {
+                AppLogger.sampler.error("host_statistics failed with result: \(result)")
+            }
             return nil
         }
         return info

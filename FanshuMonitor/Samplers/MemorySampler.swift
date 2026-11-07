@@ -8,6 +8,7 @@ nonisolated final class MemorySampler: MonitorSampler {
     private let hostPort: mach_port_t
     private let totalMemorySize: Double
     private let pageSize: Double
+    private var failureLogThrottle = SamplerFailureLogThrottle()
 
     init() {
         let hostPort = mach_host_self()
@@ -32,7 +33,9 @@ nonisolated final class MemorySampler: MonitorSampler {
         }
 
         guard result == KERN_SUCCESS else {
-            AppLogger.sampler.error("host_statistics64 failed with result: \(result)")
+            if failureLogThrottle.shouldLog(at: Date()) {
+                AppLogger.sampler.error("host_statistics64 failed with result: \(result)")
+            }
             return previous ?? MonitorModule.placeholder(kind: .memory)
         }
 

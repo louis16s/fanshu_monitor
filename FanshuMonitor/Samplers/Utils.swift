@@ -1,5 +1,22 @@
 import Foundation
 
+nonisolated struct SamplerFailureLogThrottle {
+    private(set) var lastLogDate: Date?
+    let minimumInterval: TimeInterval
+
+    init(minimumInterval: TimeInterval = 60) {
+        self.minimumInterval = max(0, minimumInterval)
+    }
+
+    mutating func shouldLog(at date: Date) -> Bool {
+        guard lastLogDate.map({ date.timeIntervalSince($0) >= minimumInterval }) ?? true else {
+            return false
+        }
+        lastLogDate = date
+        return true
+    }
+}
+
 nonisolated func percent(_ value: Double) -> String {
     "\(Int(value.rounded()))%"
 }
