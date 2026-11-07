@@ -39,7 +39,7 @@ final class MonitorStore: ObservableObject {
     private var codexTaskProgressTask: Task<Void, Never>?
     private var codexTaskProgressTimerCancellable: AnyCancellable?
     private var codexTaskProgressGeneration = 0
-    private lazy var codexTaskProgressReader = CodexTaskProgressReader()
+    private let codexTaskProgressLoader: @Sendable () async -> [CodexTaskProgress]
     private var samplingGeneration = 0
     private var cancellables: Set<AnyCancellable> = []
     private var menuBarTargetComputeLoad = 0.0
@@ -47,7 +47,14 @@ final class MonitorStore: ObservableObject {
     private var terminationSignalSource: DispatchSourceSignal?
     private var lastEnabledMetricsSnapshot: [MonitorKind: Set<MetricID>] = [:]
 
-    init(settings: MonitorSettings? = nil) {
+    init(
+        settings: MonitorSettings? = nil,
+        codexTaskProgressLoader: (@Sendable () async -> [CodexTaskProgress])? = nil
+    ) {
+        let taskProgressReader = CodexTaskProgressReader()
+        self.codexTaskProgressLoader = codexTaskProgressLoader ?? {
+            await taskProgressReader.load()
+        }
         let settings = settings ?? MonitorSettings()
         let initialModules = MonitorKind.allCases.map { kind in
             if kind == .codex,
@@ -639,11 +646,12 @@ final class MonitorStore: ObservableObject {
         }
     }
 
-    private func configureCodexTaskProgressMonitoring() {
+    func configureCodexTaskProgressMonitoring() {
         codexTaskProgressGeneration &+= 1
         codexTaskProgressTimerCancellable?.cancel()
         codexTaskProgressTimerCancellable = nil
         codexTaskProgressTask?.cancel()
+        codexTaskProgressTask = nil
 
         guard isPanelVisible,
               settings.isVisible(.codex),
@@ -664,7 +672,7 @@ final class MonitorStore: ObservableObject {
         }
     }
 
-    private func refreshCodexTaskProgress() {
+    func refreshCodexTaskProgress() {
         guard isPanelVisible,
               settings.isVisible(.codex),
               settings.isMetricEnabled(.activeTasks, for: .codex),
@@ -673,8 +681,8 @@ final class MonitorStore: ObservableObject {
         }
         let generation = codexTaskProgressGeneration
         codexTaskProgressTask = Task { [weak self] in
-            guard let reader = self?.codexTaskProgressReader else { return }
-            let tasks = await reader.load()
+            guard let loader = self?.codexTaskProgressLoader else { return }
+            let tasks = await loader()
             guard let self else { return }
             guard generation == self.codexTaskProgressGeneration else { return }
             self.codexTaskProgressTask = nil
