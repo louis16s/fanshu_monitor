@@ -10,12 +10,12 @@ final class MouseButtonEventTap {
     private let permissionProvider: () -> Bool
     private let startOverride: (() -> Bool)?
     private let stopOverride: (() -> Void)?
-    private let executeAction: (MouseButtonMapping) -> Void
+    private let executeAction: (MouseButtonMapping) -> Bool
     private var consumedButtons: Set<Int64> = []
 
     init(settings: MonitorSettings, permissionProvider: @escaping () -> Bool = { AXIsProcessTrusted() },
          startOverride: (() -> Bool)? = nil, stopOverride: (() -> Void)? = nil,
-         executeAction: @escaping (MouseButtonMapping) -> Void = { MouseActionExecutor.execute($0) }) {
+         executeAction: @escaping (MouseButtonMapping) -> Bool = { MouseActionExecutor.execute($0) }) {
         self.settings = settings
         self.permissionProvider = permissionProvider
         self.startOverride = startOverride
@@ -154,8 +154,10 @@ final class MouseButtonEventTap {
             return Unmanaged.passUnretained(event)
         }
 
+        guard executeAction(mapping) else {
+            return Unmanaged.passUnretained(event)
+        }
         consumedButtons.insert(buttonNumber)
-        executeAction(mapping)
         return nil
     }
 

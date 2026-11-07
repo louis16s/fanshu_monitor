@@ -22,8 +22,9 @@ nonisolated final class MouseActionExecutor: @unchecked Sendable {
         self.openLauncher = openLauncher
     }
 
-    static func execute(_ mapping: MouseButtonMapping) {
-        _ = shared.enqueue(mapping)
+    @discardableResult
+    static func execute(_ mapping: MouseButtonMapping) -> Bool {
+        shared.enqueue(mapping)
     }
 
     @discardableResult

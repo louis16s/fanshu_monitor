@@ -44,7 +44,10 @@ struct MouseLifecycleRegressionTests {
         settings.mouseControlEnabled = true
         settings.mouseBackAction = .paste
         var actions: [MouseButtonAction] = []
-        let tap = MouseButtonEventTap(settings: settings, executeAction: { actions.append($0.action) })
+        let tap = MouseButtonEventTap(settings: settings, executeAction: {
+            actions.append($0.action)
+            return true
+        })
         let event = CGEvent(mouseEventSource: nil, mouseType: .otherMouseDown,
                             mouseCursorPosition: .zero, mouseButton: .center)!
         event.setIntegerValueField(.mouseEventButtonNumber, value: 3)
@@ -69,7 +72,10 @@ struct MouseLifecycleRegressionTests {
         settings.mouseControlEnabled = true
         settings.mouseBackAction = .paste
         var executed = false
-        let tap = MouseButtonEventTap(settings: settings, executeAction: { _ in executed = true })
+        let tap = MouseButtonEventTap(settings: settings, executeAction: { _ in
+            executed = true
+            return true
+        })
         let event = CGEvent(mouseEventSource: nil, mouseType: .otherMouseDown,
                             mouseCursorPosition: .zero, mouseButton: .center)!
         event.setIntegerValueField(.mouseEventButtonNumber, value: 3)
@@ -191,5 +197,35 @@ struct MouseActionExecutorTests {
         #expect(executor.enqueue(mapping))
         queue.sync {}
         #expect(posted.entries.count == (MouseActionExecutor.maximumPendingActions + 1) * 2)
+    }
+
+    @Test @MainActor func fullActionQueuePassesOriginalMouseButtonThrough() {
+        let suite = "MouseActionExecutorTests.fullQueuePassThrough"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = MonitorSettings(defaults: defaults)
+        settings.mouseControlEnabled = true
+        settings.mouseBackAction = .copy
+
+        let queue = DispatchQueue(label: "MouseActionExecutorTests.fullQueuePassThrough")
+        let executor = MouseActionExecutor(queue: queue, postEvent: { _ in })
+        let mapping = MouseButtonMapping(action: .copy, shortcut: nil)
+        queue.suspend()
+        defer { queue.resume() }
+        for _ in 0..<MouseActionExecutor.maximumPendingActions {
+            #expect(executor.enqueue(mapping))
+        }
+
+        let tap = MouseButtonEventTap(settings: settings, executeAction: { executor.enqueue($0) })
+        let event = CGEvent(
+            mouseEventSource: nil,
+            mouseType: .otherMouseDown,
+            mouseCursorPosition: .zero,
+            mouseButton: .center
+        )!
+        event.setIntegerValueField(.mouseEventButtonNumber, value: 3)
+        #expect(tap.handle(type: .otherMouseDown, event: event) != nil)
+        #expect(tap.handle(type: .otherMouseUp, event: event) != nil)
     }
 }
